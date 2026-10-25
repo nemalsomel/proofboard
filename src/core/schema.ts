@@ -22,6 +22,11 @@ export interface PinSpec {
   role?: Role;
   /** Ismétlés: a mezőkben az `i` változó 0..n-1. */
   repeat?: Num;
+  /** Képességek, pl. 'adc' (analóg mérésre alkalmas GPIO). */
+  caps?: string[];
+  /** Tápbemenetnél (role 'vin') a megengedett feszültség a saját GND-lábhoz képest. */
+  vmin?: Num;
+  vmax?: Num;
 }
 
 export interface ParamOption {
@@ -87,20 +92,26 @@ export interface Prim extends PrimStyle {
   shape: Shape;
   xray?: PrimStyle & { pressed?: PrimStyle };
   pressed?: PrimStyle;
+  /** Felülírás, amíg az alkatrész fénykibocsátó eleme (light dióda) világít. */
+  lit?: PrimStyle;
 }
 
 export type ModelEl =
   | { el: 'resistor'; a: string; b: string; ohm: Num }
   | { el: 'diode'; a: string; k: string; vf: Num; ron?: Num; imax?: Num; light?: boolean }
-  | { el: 'source'; p: string; n: string; v: Num; rint?: Num }
+  /** kind: 'battery' (alap; töltésre figyel) vagy 'supply' (tápegység, pl. USB-bemenet). */
+  | { el: 'source'; p: string; n: string; v: Num; rint?: Num; kind?: 'battery' | 'supply' }
   | { el: 'nmos'; d: string; g: string; s: string; vth: Num; ron: Num; imax?: Num }
   | { el: 'pico'; gnd: string; vbus: string; vsys: string; v33: string };
 
-export interface Control {
-  /** press: lenyomva a megadott lábpárok egy hálózat. */
-  kind: 'press';
-  closes: ReadonlyArray<readonly [string, string]>;
-}
+/**
+ * Szimuláció közbeni vezérlők.
+ *  press   lenyomva a megadott lábpárok egy hálózat (kattintás az alkatrészre).
+ *  slider  csúszka a szimulációs panelen, egy számparamétert állít (pl. joystick-tengely).
+ */
+export type Control =
+  | { kind: 'press'; closes: ReadonlyArray<readonly [string, string]> }
+  | { kind: 'slider'; key: string; label?: string };
 
 export interface PinLabels {
   mode: 'role' | 'sign' | 'name';
@@ -131,7 +142,8 @@ export interface PartDef {
   prefix: string;
   cat?: string;
   params?: ParamDef[];
-  pinTable?: Record<string, readonly [string, Role]>;
+  /** Lábszám → [név, szerep, képességek?]. */
+  pinTable?: Record<string, readonly [string, Role] | readonly [string, Role, readonly string[]]>;
   pins: PinSpec[];
   /** Gyárilag összekötött lábak. */
   groups?: string[][];
@@ -152,6 +164,9 @@ export interface LocalPin {
   lc: number;
   role: Role;
   num?: number;
+  caps?: string[];
+  vmin?: number;
+  vmax?: number;
 }
 
 /** Alkatrész a tervben. */

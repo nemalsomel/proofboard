@@ -49,6 +49,10 @@ export function compilePart(type: string, def: PartDef): CompiledPart {
     const name = sp.name != null ? tpl(sp.name, env) : t ? t[0] : id;
     const o: LocalPin = { id, name, lr: num(sp.lr, env), lc: num(sp.lc, env), role: sp.role || (t ? t[1] : 'h') };
     if (/^\d+$/.test(id)) o.num = +id;
+    const caps = sp.caps || (t && t[2]);
+    if (caps && caps.length) o.caps = [...caps];
+    if (sp.vmin != null) o.vmin = num(sp.vmin, env);
+    if (sp.vmax != null) o.vmax = num(sp.vmax, env);
     return o;
   };
   const pins = (p: PartInstance): LocalPin[] => {

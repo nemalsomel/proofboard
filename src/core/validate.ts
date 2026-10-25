@@ -76,7 +76,12 @@ export function validatePartDef(def: unknown): Problem[] {
     const k = q.lr + ':' + q.lc;
     if (pos.has(k)) err(`pins[${i}]`, `${q.id} és ${pos.get(k)} ugyanabban a lyukban (${k}).`);
     pos.set(k, q.id);
+    for (const f of ['vmin', 'vmax'] as const) if (q[f] != null && !isFinite(q[f]!)) err(`pins[${i}].${f}`, `${q.id}: ${f} nem szám.`);
+    if (q.vmin != null && q.vmax != null && q.vmin >= q.vmax) err(`pins[${i}]`, `${q.id}: a minimális feszültség nem lehet nagyobb a maximálisnál.`);
+    if ((q.vmin != null || q.vmax != null) && q.role !== 'vin') warn(`pins[${i}]`, `${q.id}: feszültségtartomány csak tápbemenetnél (vin) számít.`);
   });
+  if (pins.some(q => q.role === 'vin') && !pins.some(q => q.role === 'gnd'))
+    warn('pins', 'Van tápbemenet, de nincs GND-láb: a tápfeszültség a panel földjéhez képest számít.');
 
   // csoportok
   const inGroup = new Map<string, number>();
@@ -110,6 +115,13 @@ export function validatePartDef(def: unknown): Problem[] {
 
   // vezérlők
   (d.controls || []).forEach((c, i) => {
+    if (isObj(c) && c.kind === 'slider') {
+      const pr = (d.params || []).find(x => x.key === c.key);
+      if (!pr) err(`controls[${i}]`, `A csúszkához nincs ilyen paraméter: ${String(c.key)}`);
+      else if (!['number', 'int', 'value'].includes(pr.type) || pr.min == null || pr.max == null)
+        err(`controls[${i}]`, `A csúszka paramétere (${pr.key}) szám legyen, min és max értékkel.`);
+      return;
+    }
     if (!isObj(c) || c.kind !== 'press') { err(`controls[${i}]`, 'Ismeretlen vezérlő.'); return; }
     if (!Array.isArray(c.closes) || !c.closes.length) err(`controls[${i}]`, 'Meg kell adni, mely lábak záródnak össze.');
     (c.closes || []).forEach(pair => { for (const id of pair) if (!ids.has(id)) err(`controls[${i}]`, `Nincs ilyen láb: ${id}`); });

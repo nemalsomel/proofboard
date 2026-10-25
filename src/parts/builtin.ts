@@ -14,8 +14,14 @@ export const LEDC: Record<string, { vf: number; c: string; l: string }> = {red:{
             lead (láb, drót – mindig), xray (csak röntgenben). Alakok: rect, circle, poly, line, text,
             axial (test két láb között), radial (LED-test), link (drótátkötés).
    model    villamos elemek: resistor, diode, source, nmos, pico. A lábak azonosítóival hivatkoznak.
-   controls szimuláció közbeni vezérlés: press = lenyomva a megadott lábpárok összeérnek. */
-const PICO_TABLE: Record<string, readonly [string, string]> = {};for(const k in PICO_NAMES)PICO_TABLE[k]=[PICO_NAMES[k],picoRole(PICO_NAMES[k])];
+   controls szimuláció közbeni vezérlés: press = lenyomva a megadott lábpárok összeérnek,
+            slider = csúszka a szimulációs panelen egy számparaméterhez.
+   Szerepek: gnd föld, vin tápbemenet (vmin/vmax: megengedett feszültség a saját GND-hez),
+            sig jel, adc analóg kimenet (csak ADC-képes GPIO-ra, caps:['adc']), chg/pout akku- és tápkimenet. */
+/** Analóg mérésre alkalmas GPIO-k (ADC0–ADC2). */
+export const PICO_ADC = new Set(['GP26', 'GP27', 'GP28']);
+const PICO_TABLE: Record<string, readonly [string, string] | readonly [string, string, readonly string[]]> = {};
+for(const k in PICO_NAMES){const n=PICO_NAMES[k];PICO_TABLE[k]=PICO_ADC.has(n)?[n,picoRole(n),['adc']]:[n,picoRole(n)];}
 const TO92: Array<[number, number]> =Array.from({length:13},(_,k)=>{const a=Math.PI*k/12;return[+(0.35-1.25*Math.sin(a)).toFixed(3),+(1+1.45*Math.cos(a)).toFixed(3)];});
 export const PARTS: Record<string, PartDef> = {
   pico:{name:'Raspberry Pi Pico W',fp:'2×20 láb, sortáv 6',prefix:'PICO',cat:'Vezérlő',
@@ -108,5 +114,55 @@ export const PARTS: Record<string, PartDef> = {
     graphics:[{shape:'rect',layer:'body',r:[-1.25,0.45],c:[-0.55,1.55],fill:'#f4f1e8',stroke:'#7d7563',width:1.2},
               {shape:'text',layer:'label',at:[-0.75,0.5],text:'{label} {volt|fix1}V',size:0.38}],
     pinLabels:{mode:'sign',off:0.72,plus:['bp']},
-    model:[{el:'source',p:'+',n:'-',v:'{volt}',rint:0.1}]}
+    model:[{el:'source',p:'+',n:'-',v:'{volt}',rint:0.1}]},
+  tp4056:{name:'TP4056 töltőmodul',fp:'IN 0:0, 0:6 · OUT/B 9:0…9:6 (közelítő)',prefix:'U',cat:'Modul',
+    params:[{key:'usb',label:'Saját USB',type:'select',default:'off',options:[{v:'off',label:'nincs bedugva',volt:0,rint:1e9},{v:'on',label:'5 V bedugva',volt:5,rint:0.1}],
+             help:'Egyszerűsített modell: a bemenetről (5 V) a B+ felé tölt, a B+ és az OUT+ közös. A lábak a modul forrpontjainak közelítő helyei, tüskesorral rakd fel.'}],
+    pins:[{id:'IN+',lr:0,lc:0,role:'vin',vmin:4,vmax:8},{id:'IN-',lr:0,lc:6,role:'gnd'},
+          {id:'OUT+',lr:9,lc:0,role:'pout'},{id:'B+',lr:9,lc:2,role:'chg'},{id:'B-',lr:9,lc:4,role:'bn'},{id:'OUT-',lr:9,lc:6,role:'gnd'}],
+    groups:[['B+','OUT+'],['IN-','OUT-']],
+    bounds:{r:[-1.5,9.6],c:[-0.7,6.7]},
+    graphics:[
+      {shape:'rect',layer:'body',r:[-0.6,9.6],c:[-0.7,6.7],fill:'#1f4f9c',stroke:'#12325f',width:1.2,xray:{stroke:'#1f4f9c'}},
+      {shape:'rect',layer:'detail',r:[-1.5,1.3],c:[1.9,4.1],fill:'#c3c8cd',stroke:'#868e96',xray:{fill:null,stroke:'#6b7a72',dash:true}},
+      {shape:'rect',layer:'detail',r:[3.3,5.3],c:[2.2,3.8],fill:'#1b1b1b'},
+      {shape:'rect',layer:'detail',r:[6.3,7.3],c:[4.4,5.4],fill:'#1b1b1b'},
+      {shape:'circle',layer:'detail',at:[2.6,5.5],rad:0.28,fill:'#a61e1e'},{shape:'circle',layer:'detail',at:[4,5.5],rad:0.28,fill:'#1c4fd1'},
+      {shape:'text',layer:'detail',at:[6.2,2.2],text:'TP4056',size:0.42,min:7,color:'#dbe7ff'},
+      {shape:'text',layer:'label',at:[10.4,3],text:'{label}',size:0.42},
+      {shape:'text',layer:'xray',at:[4.5,3],text:'{label} · TP4056',size:0.5,min:8,color:'#1f4f9c'}],
+    pinLabels:{mode:'name',off:0.7,colors:{vin:'#ffc9d6',gnd:'#e9ecef',pout:'#ffe3bf',chg:'#ffe3bf',bn:'#e9ecef'}},
+    model:[{el:'source',p:'IN+',n:'IN-',v:'{usb.volt}',rint:'{usb.rint}',kind:'supply'},
+           {el:'diode',a:'IN+',k:'B+',vf:0.8,ron:1},
+           {el:'resistor',a:'B-',b:'OUT-',ohm:0.05}]},
+  nokia5110:{name:'Nokia 5110 kijelző',fp:'8 láb egy sorban · VCC 2,7–3,3 V',prefix:'LCD',cat:'Modul',
+    pins:['RST','CE','DC','DIN','CLK','VCC','BL','GND'].map((n,i)=>(n==='VCC'?{id:n,lr:0,lc:i,role:'vin',vmin:2.7,vmax:3.6}:{id:n,lr:0,lc:i,role:n==='GND'?'gnd':'sig'})),
+    bounds:{r:[-1.3,15.9],c:[-4.6,11.6]},
+    graphics:[
+      {shape:'rect',layer:'body',r:[-1.3,15.9],c:[-4.6,11.6],fill:'#b8282d',stroke:'#7d1a1e',width:1.2,xray:{stroke:'#b8282d'}},
+      {shape:'rect',layer:'detail',r:[1.4,14.4],c:[-4,11],fill:'#d7dadd',stroke:'#9aa1a8'},
+      {shape:'rect',layer:'detail',r:[2.4,13.3],c:[-3.4,10.4],fill:'#8f9f86',lit:{fill:'#c6efa4'},xray:{fill:null,stroke:'#9aa1a8',dash:true}},
+      {shape:'text',layer:'detail',at:[7.9,3.5],text:'NOKIA 5110',size:0.8,min:8,color:'#2b3328'},
+      {shape:'text',layer:'label',at:[15.1,3.5],text:'{label}',size:0.45,color:'#ffe0e0',xray:{color:'#7d1a1e'}},
+      {shape:'text',layer:'xray',at:[7.9,3.5],text:'{label} · Nokia 5110',size:0.55,min:8,color:'#b8282d'}],
+    pinLabels:{mode:'name',off:-0.85,colors:{vin:'#ffd6e0',gnd:'#f1f3f5',sig:'#f8f9fa'}},
+    model:[{el:'resistor',a:'VCC',b:'GND',ohm:10000},
+           {el:'diode',a:'BL',k:'GND',vf:2.6,ron:60,light:true}]},
+  joystick:{name:'Joystick (KY-023)',fp:'GND · +5V · VRx · VRy · SW egy sorban',prefix:'JS',cat:'Bemenet',
+    params:[{key:'x',label:'X állás',type:'number',unit:'%',default:0,min:-100,max:100,step:5,help:'−100 % bal, +100 % jobb. Szimuláció közben csúszkával is állítható.'},
+            {key:'y',label:'Y állás',type:'number',unit:'%',default:0,min:-100,max:100,step:5,help:'−100 % le, +100 % fel.'}],
+    pins:[{id:'GND',lr:0,lc:0,role:'gnd'},{id:'5V',name:'+5V',lr:0,lc:1,role:'vin',vmin:3,vmax:5.5},
+          {id:'VRX',name:'VRx',lr:0,lc:2,role:'adc'},{id:'VRY',name:'VRy',lr:0,lc:3,role:'adc'},{id:'SW',lr:0,lc:4,role:'sig'}],
+    bounds:{r:[-0.8,12.6],c:[-2.6,6.6]},
+    controls:[{kind:'press',closes:[['SW','GND']]},{kind:'slider',key:'x',label:'X'},{kind:'slider',key:'y',label:'Y'}],
+    graphics:[
+      {shape:'rect',layer:'body',r:[-0.8,12.6],c:[-2.6,6.6],fill:'#23272e',stroke:'#0f1114',width:1.2,xray:{stroke:'#333'}},
+      {shape:'rect',layer:'detail',r:[3,11.4],c:[-1.9,5.9],fill:'#e9ecef',stroke:'#adb5bd'},
+      {shape:'circle',layer:'detail',at:[7.2,2],rad:3,fill:'#343a40'},
+      {shape:'circle',layer:'detail',at:['7.2-{y}/40','2+{x}/40'],rad:1.9,fill:'#495057',stroke:'#111',width:1.5,
+       pressed:{fill:'#6c757d',stroke:'accent',width:3},xray:{fill:null,stroke:'rgba(0,0,0,.45)',width:1.2,pressed:{stroke:'accent',width:3}}},
+      {shape:'text',layer:'detail',at:['7.2-{y}/40','2+{x}/40'],text:'{label}',size:0.55,min:8,color:'#f1f3f5',xray:{color:'#1d231f'}}],
+    pinLabels:{mode:'name',off:0.85,colors:{gnd:'#e9ecef',vin:'#ffc9d6',adc:'#b2f2bb',sig:'#a5d8ff'}},
+    model:[{el:'resistor',a:'5V',b:'VRX',ohm:'{5001-50*x}'},{el:'resistor',a:'VRX',b:'GND',ohm:'{5001+50*x}'},
+           {el:'resistor',a:'5V',b:'VRY',ohm:'{5001-50*y}'},{el:'resistor',a:'VRY',b:'GND',ohm:'{5001+50*y}'}]}
 };

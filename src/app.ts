@@ -20,7 +20,7 @@ const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 
 /* ---------- Alkatrész-definíciók ---------- */
 const rgba=(hex,a)=>{const n=parseInt(hex.slice(1),16);return`rgba(${n>>16},${(n>>8)&255},${n&255},${a})`;};
-const ROLEC={vin:'#d6336c',sig:'#2563eb',adc:'#0ca678',nc:'#adb5bd',j:'#aeb5bb',s:'#1f2328',g:'#2563eb',d:'#868e96',A:'#2563eb',B:'#d97706',an:'#e03131',ka:'#1f2328',gnd:'#1f2328',p33:'#e03131',pwr:'#be4bdb',gpio:'#2563eb',misc:'#868e96',r:'#868e96',h:'#868e96',bp:'#e03131',bn:'#1f2328'};
+const ROLEC={vin:'#d6336c',pout:'#e8590c',chg:'#e8590c',sig:'#2563eb',adc:'#0ca678',nc:'#adb5bd',j:'#aeb5bb',s:'#1f2328',g:'#2563eb',d:'#868e96',A:'#2563eb',B:'#d97706',an:'#e03131',ka:'#1f2328',gnd:'#1f2328',p33:'#e03131',pwr:'#be4bdb',gpio:'#2563eb',misc:'#868e96',r:'#868e96',h:'#868e96',bp:'#e03131',bn:'#1f2328'};
 const DEFS=compileAll(PARTS);
 /** A saját alkatrészek fordítása a beépítettek mellé (a terv `customParts` mezőjéből). */
 function syncDefs(custom){
@@ -29,6 +29,9 @@ function syncDefs(custom){
 }
 const penv=p=>penvD(DEFS[p.type].def,p);
 const hasPress=p=>(DEFS[p.type].def.controls||[]).some(c=>c.kind==='press');
+const hasCap=(q,c)=>!!(q&&q.caps&&q.caps.includes(c));
+/** Az ADC-képes GPIO-n analóg forrás (adc szerepű láb) is van → alapból analóg mód. */
+function gpioDefault(q,A){const qs=A&&A.netPins.get(q.net)||[];return hasCap(q,'adc')&&qs.some(x=>x.role==='adc')?'adc':'pullup';}
 const WCOL=[['#1c7ed6','kék'],['#e03131','piros'],['#212529','fekete'],['#f59f00','sárga'],['#2f9e44','zöld'],['#f1f3f5','fehér'],['#e8590c','narancs']];
 const TOOLS=[['select','Kijelölés','V'],['bridge','Forrasztóhíd','B'],['wire','Vezeték','W'],['link','Kapcsolat','C'],['erase','Törlés','E'],['pan','Mozgatás','H']];
 
@@ -119,7 +122,8 @@ function analyze(press){
 const pinLabel=q=>q.part.type==='pico'?`${q.part.label}.${q.name}`:`${q.part.label}.${q.id}`;
 
 /* ---------- Áramkör-szimuláció (csomóponti analízis, szakaszonként lineáris diódák) ---------- */
-function gpioMode(p,id){return D.gpio[p.id+'.'+id]||'pullup';}
+const GPIO_MODES=[['pullup','be, felhúzva'],['pulldown','be, lehúzva'],['float','be, lebegő'],['adc','analóg (ADC)'],['out_high','ki: 1'],['out_low','ki: 0']];
+function gpioMode(p,id,q,A){return D.gpio[p.id+'.'+id]||(q?gpioDefault(q,A):'pullup');}
 function simulate(A){
   const idx=new Map();const nd=net=>{if(!idx.has(net))idx.set(net,idx.size);return idx.get(net);};
   for(const q of A.pins) if(q.net>=0) nd(q.net);
@@ -127,10 +131,10 @@ function simulate(A){
   const picos=[],leds=[],ress=[],bats=[],fets=[];
   for(const p of D.parts){const bp=A.byPart.get(p.id);const m=bp.map,N=id=>idx.get(m[id].net);const model=DEFS[p.type].def.model;if(!model)continue;const E=penv(p);
     for(const el of model){
-      if(el.el==='pico')picos.push({p,gnd:N(el.gnd),vbus:N(el.vbus),vsys:N(el.vsys),v33:N(el.v33),gp:bp.pins.filter(q=>q.role==='gpio').map(q=>({q,node:idx.get(q.net),mode:gpioMode(p,q.id)})),reg:false,d:false});
+      if(el.el==='pico')picos.push({p,gnd:N(el.gnd),vbus:N(el.vbus),vsys:N(el.vsys),v33:N(el.v33),gp:bp.pins.filter(q=>q.role==='gpio').map(q=>({q,node:idx.get(q.net),mode:gpioMode(p,q.id,q,A)})),reg:false,d:false});
       else if(el.el==='diode')leds.push({p,a:N(el.a),k:N(el.k),vf:num(el.vf,E),ron:Math.max(1e-3,num(el.ron??15,E)),imax:el.imax!=null?num(el.imax,E):null,light:!!el.light,on:false});
       else if(el.el==='resistor')ress.push({p,a:N(el.a),b:N(el.b),g:1/Math.max(1e-3,num(el.ohm,E))});
-      else if(el.el==='source')bats.push({p,a:N(el.p),b:N(el.n),E:num(el.v,E),g:1/Math.max(1e-3,num(el.rint??0.1,E))});
+      else if(el.el==='source')bats.push({p,a:N(el.p),b:N(el.n),E:num(el.v,E),g:1/Math.max(1e-3,num(el.rint??0.1,E)),kind:el.kind||'battery'});
       else if(el.el==='nmos')fets.push({p,d:N(el.d),g:N(el.g),s:N(el.s),vth:num(el.vth,E),ron:Math.max(1e-3,num(el.ron,E)),imax:el.imax!=null?num(el.imax,E):null,on:false});
     }
   }
@@ -174,18 +178,18 @@ function simulate(A){
   for(const e of els){
     if(e.kind==='led')out.leds.push({p:e.ref.p,I:Math.max(0,cur(e)),on:e.ref.on,light:e.ref.light,imax:e.ref.imax});
     if(e.kind==='fet'){const f=e.ref;out.fets.push({p:f.p,on:f.on,vgs:V[f.g]-V[f.s],I:cur(e),imax:f.imax,floatGate:!reach[f.g]});}
-    if(e.kind==='bat')out.bats.push({p:e.ref.p,I:cur(e)});
+    if(e.kind==='bat')out.bats.push({p:e.ref.p,I:cur(e),kind:e.ref.kind,node:e.a});
     if(e.kind==='vbus')out.srcI.push({kind:'vbus',pc:e.ref,I:-cur(e)});
     if(e.kind==='v33')out.srcI.push({kind:'v33',pc:e.ref,I:-cur(e)});
   }
   for(const pc of picos){
-    out.picos.push({p:pc.p,powered:pc.reg,usb:D.settings.usb});
+    out.picos.push({p:pc.p,powered:pc.reg,usb:D.settings.usb,feeds:pc.d,vsys:pc.vsys});
     for(const g of pc.gp){const e=els.find(x=>x.kind==='gout'&&x.ref===g);
       out.gpios.push({p:pc.p,q:g.q,mode:g.mode,V:V[g.node]-V[pc.gnd],I:e?-cur(e):0,float:!reach[g.node],powered:pc.reg});}
   }
   return out;
 }
-const logic=g=>!g.powered?'–':g.float?'?':g.V>=2?'1':g.V<=0.8?'0':'?';
+const logic=g=>!g.powered?'–':g.float?'?':g.mode==='adc'?'A':g.V>=2?'1':g.V<=0.8?'0':'?';
 
 /* ---------- Ellenőrzés ---------- */
 function checkAll(){
@@ -216,7 +220,7 @@ function checkAll(){
       if(same){picoSec.push(dq);continue;}}
     const rails=new Set();
     for(const q of qs){if(q.part.type==='pico'){if(q.role==='gnd')rails.add('GND');else if(q.role==='p33')rails.add('3V3');else if(q.role==='pwr')rails.add(q.name);}
-      else if(q.role==='bp')rails.add('BAT+');}
+      else if(q.role==='bp'||q.role==='chg'||q.role==='pout')rails.add('BAT+');}
     const holes=qs.map(q=>[q.r,q.c]);
     if(rails.has('GND')&&rails.size>1)add('err',`Zárlat: GND – ${[...rails].filter(x=>x!=='GND').join(', ')}`,holes);
     else if(rails.has('3V3')&&rails.size>1)add('err',`Zárlat: 3V3 – ${[...rails].filter(x=>x!=='3V3').join(', ')}`,holes);
@@ -252,8 +256,27 @@ function checkAll(){
     for(const g of SIM.gpios){const mA=Math.abs(g.I)*1000;if(mA>50)add('err',`${g.q.name}: ${mA.toFixed(0)} mA, kimenet zárlatban`,[[g.q.r,g.q.c]]);else if(mA>12)add('warn',`${g.q.name}: ${mA.toFixed(1)} mA, sok (ajánlott max. ~12 mA)`,[[g.q.r,g.q.c]]);}
     for(const l of SIM.leds){if(l.light&&l.I>0.03)add('warn',`${l.p.label}: ${(l.I*1000).toFixed(0)} mA, előtét-ellenállás kell`,[]);else if(!l.light&&l.imax&&l.I>l.imax)add('warn',`${l.p.label}: ${fmtSI(l.I)}A, több a megengedett ${fmtSI(l.imax)}A-nél`,[]);}
     for(const f of SIM.fets){if(f.floatGate)add('warn',`${f.p.label}: a gate lebeg. Tegyél lehúzó ellenállást a G és az S közé (pl. 100 kΩ), vagy kösd kimenetre.`,[]);if(f.imax&&Math.abs(f.I)>f.imax)add('warn',`${f.p.label}: ${fmtSI(Math.abs(f.I))}A, több a megengedett ${fmtSI(f.imax)}A-nél`,[]);}
-    for(const b of SIM.bats){if(b.I>2)add('err',`${b.p.label}: zárlat (${b.I.toFixed(1)} A)`,[]);else if(b.I>0.1)add('err',`${b.p.label}: az USB közvetlenül tölti az akkut (${b.I.toFixed(1)} A). A VSYS elé Schottky-dióda kell.`,[]);else if(b.I<-2)add('err',`${b.p.label}: zárlat (${(-b.I).toFixed(1)} A)`,[]);}
+    for(const b of SIM.bats){if(b.kind==='supply'){if(b.I<-2)add('err',`${b.p.label}: zárlat a tápbemeneten (${(-b.I).toFixed(1)} A)`,[]);continue;}
+      // töltőmodulról (chg láb) tölt-e, vagy közvetlenül a Pico USB-jéről a VSYS-en át
+      const bq=AS.byPart.get(b.p.id).pins,direct=SIM.picos.some(pc=>pc.feeds&&pc.vsys===b.node);
+      const charger=!direct&&bq.some(q=>(AS.netPins.get(q.net)||[]).some(x=>x.role==='chg'&&x.part!==b.p));
+      if(direct&&b.I>0.1){add('err',`${b.p.label}: a Pico USB-je a VSYS-en át közvetlenül tölti az akkut (${b.I.toFixed(1)} A). Az akku és a VSYS közé Schottky-dióda kell.`,[]);continue;}
+      if(charger&&b.I>0){if(b.I>1.2)add('warn',`${b.p.label}: ${b.I.toFixed(1)} A töltőáram, sok`,[]);continue;}
+      if(b.I>2)add('err',`${b.p.label}: zárlat (${b.I.toFixed(1)} A)`,[]);else if(b.I>0.1)add('err',`${b.p.label}: az USB közvetlenül tölti az akkut (${b.I.toFixed(1)} A). A VSYS elé Schottky-dióda kell.`,[]);else if(b.I<-2)add('err',`${b.p.label}: zárlat (${(-b.I).toFixed(1)} A)`,[]);}
   }
+  // tápbemenetek: feszültség a saját GND-lábhoz képest
+  if(SIM)for(const p of D.parts){const bp=AS.byPart.get(p.id);const vins=bp.pins.filter(q=>q.role==='vin');if(!vins.length)continue;
+    const gq=bp.pins.find(q=>q.role==='gnd'),model=DEFS[p.type].def.model||[],V=q=>SIM.floating.has(q.net)?null:SIM.netV.get(q.net);
+    for(const q of vins){const own=model.some(el=>el.el==='source'&&el.p===q.id);
+      const v=V(q),g=gq?V(gq):0,U=v==null||g==null?null:v-g,at=[[q.r,q.c]];
+      if(U==null||U<0.5){if(!own)add('warn',`${p.label}.${q.name}: nincs tápfeszültség${v!=null&&gq&&g==null?` (a ${gq.name} nincs bekötve)`:''}`,at);}
+      else if(q.vmax!=null&&U>q.vmax+0.05)add('err',`${p.label}.${q.name}: ${U.toFixed(2)} V, több a megengedett ${q.vmax} V-nál`,at);
+      else if(q.vmin!=null&&U<q.vmin-0.05)add('warn',`${p.label}.${q.name}: csak ${U.toFixed(2)} V, legalább ${q.vmin} V kell`,at);}}
+  // analóg jelek: csak ADC-képes GPIO-ra
+  for(const [,qs] of A.netPins){const an=qs.filter(q=>q.role==='adc');if(!an.length)continue;
+    for(const g of qs.filter(q=>q.role==='gpio')){const at=[[g.r,g.c]],src=an.map(pinLabel).join(', ');
+      if(!hasCap(g,'adc')){const ok=[...new Set(gpins(g.part).filter(x=>hasCap(x,'adc')).map(x=>x.name))];add('warn',`${src}: analóg jel a ${g.name}-n, de azon nincs ADC. Erre alkalmas: ${ok.join(', ')||'–'}`,at);}
+      else{const m=gpioMode(g.part,g.id,g,A);if(m!=='adc'&&m!=='float')add('warn',`${g.name}: az analóg méréshez állítsd ADC módba (most: ${GPIO_MODES.find(x=>x[0]===m)[1]})`,at);}}}
   return iss;
 }
 function freeHoleNear(r,c,pinHole){const s=secStart(r);for(let i=s;i<s+D.board.sec;i++){if(i===r||!inb(i,c))continue;const k=i+':'+c;if(!pinHole.has(k)&&!D.wires.some(w=>(w.a[0]===i&&w.a[1]===c)||(w.b[0]===i&&w.b[1]===c)))return k;}return null;}
@@ -376,7 +399,7 @@ function text(p,lr,lc,str,size,color,dir,halo){ // dir: lokális irány, amerre 
 function stext(x,y,str,size,color,halo){ctx.save();ctx.translate(x,y);ctx.rotate(-VA());ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`600 ${size}px ${MONO}`;if(halo){ctx.lineWidth=3;ctx.lineJoin='round';ctx.strokeStyle=halo;ctx.strokeText(str,0,0);}ctx.fillStyle=color;ctx.fillText(str,0,0);ctx.restore();}
 function drawPart(p,alpha,selected,bad){
   const CD=DEFS[p.type],def=CD.def,b=CD.bounds(p),C=cu()&&!bad&&alpha<1,XR=!C&&(ui.xray||!!p.xray);
-  const o={mode:C?'cu':XR?'xr':'solid',env:penv(p),pressed:!!(ui.sim&&ui.pressed[p.id]),halo:XR?'rgba(255,252,240,.92)':null,alpha,pinAt:{}};
+  const o={mode:C?'cu':XR?'xr':'solid',env:penv(p),pressed:!!(ui.sim&&ui.pressed[p.id]),lit:!!(ui.sim&&SIM&&SIM.leds.some(l=>l.p===p&&l.light&&l.I>2e-4)),halo:XR?'rgba(255,252,240,.92)':null,alpha,pinAt:{}};
   for(const q of CD.pins(p))o.pinAt[q.id]=q;
   ctx.save();ctx.globalAlpha=alpha;
   for(const g of def.graphics||[])drawPrim(p,g,o);
@@ -393,7 +416,7 @@ function drawPart(p,alpha,selected,bad){
                 :(q.role==='gpio'?'#bfe0ff':q.role==='gnd'?'#9fb3a8':q.role==='p33'?'#ffb3b3':q.role==='pwr'?'#f3c4ff':'#c8d1cc');
       if(S&&q.role==='gpio'){const g=SIM.gpios.find(x=>x.q.part===p&&x.q.id===q.id);if(g){const l=logic(g);col=XR?(l==='1'?'#d9480f':l==='0'?'#1864ab':'#5c666e'):(l==='1'?'#ffb27a':l==='0'?'#8fc2ff':'#c8d1cc');}}
       text(p,q.lr+inward*0.5,q.lc,(PL.rename||{})[q.name]||q.name,Math.max(6,P*0.4),col,[inward,0],o.halo);}
-    else if(PL.mode==='name')text(p,q.lr+PL.off,q.lc,q.name,Math.max(7,P*0.42),(PL.colors||{})[q.role]||'#333',null,o.halo);
+    else if(PL.mode==='name')text(p,q.lr+PL.off,q.lc,q.name,Math.max(7,P*0.42),XR?(ROLEC[q.role]||'#333'):(PL.colors||{})[q.role]||'#333',null,o.halo);
   }
   if(selected||bad){poly(p,b.r0-0.2,b.r1+0.2,b.c0-0.2,b.c1+0.2);ctx.setLineDash([5,4]);ctx.strokeStyle=bad?'#e03131':css('--accent');ctx.lineWidth=2;ctx.globalAlpha=1;ctx.stroke();ctx.setLineDash([]);}
   ctx.restore();
@@ -406,6 +429,7 @@ function drawPrim(p,g,o){
   let st={...g};
   if(m==='xr'&&g.xray){st={...st,...g.xray};if(o.pressed&&g.xray.pressed)st={...st,...g.xray.pressed};}
   else if(o.pressed&&g.pressed)st={...st,...g.pressed};
+  if(o.lit&&g.lit&&m==='solid')st={...st,...g.lit};
   const E=o.env,N=x=>num(x,E),col=c=>c==null?null:c==='accent'?css('--accent'):String(c).includes('{')?tpl(c,E):c;
   const pt=v=>Array.isArray(v)?[N(v[0]),N(v[1])]:(o.pinAt[v]?[o.pinAt[v].lr,o.pinAt[v].lc]:[0,0]);
   const paint=()=>{
@@ -684,6 +708,7 @@ function renderRight0(){
   $('#usb').checked=!!D.settings.usb;
   $('#mHold').classList.toggle('on',D.settings.btnMode!=='toggle');$('#mToggle').classList.toggle('on',D.settings.btnMode==='toggle');
   let h='';
+  renderSliders();
   if(!SIM){$('#simOut').innerHTML='';return;}
   const pcs=SIM.picos;
   if(pcs.length)h+=pcs.map(pc=>`<div class="small">${esc(pc.p.label)}: ${pc.powered?'<span class="c-ok">táp van</span>':'<span class="c-err">nincs táp</span>'}${pc.usb?' (USB)':''}</div>`).join('');
@@ -700,24 +725,36 @@ function renderRight0(){
   const used=SIM.gpios.filter(g=>{const net=A.pins.find(q=>q.part===g.q.part&&q.id===g.q.id).net;return (A0.netPins.get(A0.pins.find(q=>q.part===g.q.part&&q.id===g.q.id).net)||[]).length>1||(A0.netSecs.get(A0.pins.find(q=>q.part===g.q.part&&q.id===g.q.id).net)||0)>1;});
   if(used.length){h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>GPIO</th><th>Mód</th><th>U</th><th>Szint</th></tr></thead><tbody>`;
     for(const g of used){const key=g.p.id+'.'+g.q.id,l=logic(g);
-      h+=`<tr><td>${g.q.name}</td><td><select data-gpio="${key}" aria-label="${g.q.name} mód">${[['pullup','be, felhúzva'],['pulldown','be, lehúzva'],['float','be, lebegő'],['out_high','ki: 1'],['out_low','ki: 0']].map(([v,t])=>`<option value="${v}" ${g.mode===v?'selected':''}>${t}</option>`).join('')}</select></td><td>${g.powered&&!g.float?g.V.toFixed(2):'–'}</td><td><span class="lv ${l==='1'?'lv1':l==='0'?'lv0':'lvq'}">${l}</span>${Math.abs(g.I)>1e-4?` <span class="muted">${(Math.abs(g.I)*1000).toFixed(1)} mA</span>`:''}</td></tr>`;}
+      h+=`<tr><td>${g.q.name}</td><td><select data-gpio="${key}" aria-label="${g.q.name} mód">${GPIO_MODES.filter(x=>x[0]!=='adc'||hasCap(g.q,'adc')).map(([v,t])=>`<option value="${v}" ${g.mode===v?'selected':''}>${t}</option>`).join('')}</select></td><td>${g.powered&&!g.float?g.V.toFixed(2):'–'}</td><td><span class="lv ${l==='1'?'lv1':l==='0'?'lv0':'lvq'}">${l}</span>${Math.abs(g.I)>1e-4?` <span class="muted">${(Math.abs(g.I)*1000).toFixed(1)} mA</span>`:''}</td></tr>`;}
     h+='</tbody></table>';}
   const lights=SIM.leds.filter(l=>l.light);
   if(SIM.fets.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>FET</th><th>U<sub>GS</sub></th><th>I<sub>D</sub></th><th>Állapot</th></tr></thead><tbody>`+SIM.fets.map(f=>`<tr><td>${esc(f.p.label)}</td><td>${f.floatGate?'lebeg':f.vgs.toFixed(2)+' V'}</td><td>${fmtSI(Math.abs(f.I))}A</td><td>${f.on?'<span class="c-ok">nyitva</span>':'<span class="muted">zárva</span>'}</td></tr>`).join('')+'</tbody></table>';
   if(lights.length){h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>LED</th><th>Áram</th><th>Állapot</th></tr></thead><tbody>`+lights.map(l=>`<tr><td>${esc(l.p.label)}</td><td>${(l.I*1000).toFixed(2)} mA</td><td>${l.I>2e-4?'<span class="c-ok">világít</span>':'<span class="muted">sötét</span>'}</td></tr>`).join('')+'</tbody></table>';}
-  if(SIM.bats.length)h+=SIM.bats.map(b=>`<div class="small" style="margin-top:6px">${esc(b.p.label)}: ${b.I>1e-4?'töltődik':b.I<-1e-4?'merül':'nincs terhelés'} ${Math.abs(b.I)>1e-4?`(${(Math.abs(b.I)*1000).toFixed(1)} mA)`:''}</div>`).join('');
+  const batt=SIM.bats.filter(b=>b.kind!=='supply');
+  if(batt.length)h+=batt.map(b=>`<div class="small" style="margin-top:6px">${esc(b.p.label)}: ${b.I>1e-4?'töltődik':b.I<-1e-4?'merül':'nincs terhelés'} ${Math.abs(b.I)>1e-4?`(${(Math.abs(b.I)*1000).toFixed(1)} mA)`:''}</div>`).join('');
   $('#simOut').innerHTML=h;
 }
 $('#issues').addEventListener('click',e=>{const li=e.target.closest('[data-i]');if(!li)return;const x=ISSUES[+li.dataset.i];if(!x.holes.length)return;ui.flash={holes:x.holes,until:performance.now()+2200};
   const [r,c]=x.holes[0],sc=$('#scroll'),[vx,vy]=toScreen(hx(c),hy(r));sc.scrollTo({left:vx-sc.clientWidth/2,top:vy-sc.clientHeight/2,behavior:'smooth'});
   const tick=()=>{draw();if(performance.now()<ui.flash.until)requestAnimationFrame(tick);else draw();};tick();});
+/* csúszka-vezérlők (pl. joystick-tengely): külön tárolóban, hogy húzás közben ne épüljön újra */
+const sliders=()=>D.parts.flatMap(p=>(DEFS[p.type].def.controls||[]).filter(c=>c.kind==='slider').map(c=>({p,c,pr:(DEFS[p.type].def.params||[]).find(x=>x.key===c.key)})).filter(x=>x.pr));
+function renderSliders(){const ss=sliders(),el=$('#simCtl');
+  const sig=ss.map(({p,c})=>p.id+':'+p.label+':'+c.key).join('|');
+  if(el.dataset.sig===sig){for(const {p,c,pr} of ss){const k=p.id+'|'+c.key,v=penv(p)[c.key],i=el.querySelector(`[data-sl="${k}"]`),o=el.querySelector(`[data-slv="${k}"]`);if(i&&i!==document.activeElement)i.value=v;if(o)o.textContent=v+(pr.unit?' '+pr.unit:'');}return;}
+  el.dataset.sig=sig;
+  el.innerHTML=ss.length?`<p class="small muted" style="margin:8px 0 2px">Vezérlők</p>`+ss.map(({p,c,pr})=>{const v=penv(p)[c.key],k=p.id+'|'+c.key;
+    return `<div class="row slider"><label for="sl_${p.id}_${c.key}">${esc(p.label)} ${esc(c.label||pr.label)}</label><input type="range" id="sl_${p.id}_${c.key}" data-sl="${k}" min="${pr.min}" max="${pr.max}" step="${pr.step||1}" value="${v}"><output data-slv="${k}">${v}${pr.unit?' '+esc(pr.unit):''}</output></div>`;}).join(''):'';}
+function setSlider(p,key,v){const pr=(DEFS[p.type].def.params||[]).find(x=>x.key===key);if(!pr)return false;v=Math.max(pr.min,Math.min(pr.max,+v||0));p.props={...p.props,[key]:v};
+  SIM=simulate(AS);ISSUES=checkAll();renderRight();draw();save();return true;}
+$('#simCtl').addEventListener('input',e=>{const t=e.target.closest('[data-sl]');if(!t)return;const [pid,key]=t.dataset.sl.split('|');const p=D.parts.find(x=>x.id===pid);if(p)setSlider(p,key,t.value);});
 $('#simOut').addEventListener('change',e=>{const s=e.target.closest('[data-gpio]');if(!s)return;pushUndo();D.gpio[s.dataset.gpio]=s.value;commit();});
 $('#usb').addEventListener('change',e=>{pushUndo();D.settings.usb=e.target.checked;commit();});
 $('#mHold').onclick=()=>{D.settings.btnMode='hold';ui.pressed={};save();recompute();};
 $('#mToggle').onclick=()=>{D.settings.btnMode='toggle';save();recompute();};
 
 function status(){
-  const s=$('#status'),h=ui.hover;if(ui.selLink&&(!h||!inb(h.r,h.c))){const t=linkStatusText();if(t){s.textContent=t;return;}}if(!h||!inb(h.r,h.c)){s.textContent=`${D.parts.length} alkatrész · ${D.bridges.length} híd · ${D.wires.length} vezeték`;return;}
+  const s=$('#status'),h=ui.hover;if(ui.selLink&&(!h||!inb(h.r,h.c))){const t=linkStatusText();if(t){s.textContent=t;return;}}if(!h||!inb(h.r,h.c)){const ab=D.auto.bridges.length,aw=D.auto.wires.length;s.textContent=`${D.parts.length} alkatrész · ${D.bridges.length+ab} híd · ${D.wires.length+aw} vezeték`;return;}
   const A=ui.sim?AS:A0,root=A.find(A.sid(h.r,h.c)),qs=A.netPins.get(root)||[],s0=secStart(h.r);
   let t=`${h.r}:${h.c} · szekció ${s0}–${Math.min(s0+D.board.sec-1,D.board.rows-1)}:${h.c}`;
   if(qs.length)t+=` · net: ${qs.slice(0,7).map(pinLabel).join(', ')}${qs.length>7?` +${qs.length-7}`:''}`;
@@ -781,7 +818,7 @@ function linkStates(){
   for(const l of D.links){const na=pinNet(l.a);let ok=false,gp=null;
     if(na>=0){const qs=A.netPins.get(na)||[];
       if(l.b==='GND')ok=qs.some(q=>q.part.type==='pico'&&q.role==='gnd');
-      else if(l.b==='GPIO'){gp=qs.find(q=>q.part.type==='pico'&&q.role==='gpio');ok=!!gp;}
+      else if(l.b==='GPIO'){const an=(findPin(l.a)||{}).role==='adc';gp=qs.find(q=>q.part.type==='pico'&&q.role==='gpio'&&(!an||hasCap(q,'adc')));ok=!!gp;}
       else ok=pinNet(l.b)===na;}
     const nb=D.auto.bridges.filter(b=>(b[4]||[]).includes(l.id)).length,wire=D.auto.wires.some(w=>(w.links||[]).includes(l.id));
     ui.linkState.set(l.id,{ok,gpio:gp?gp.name:null,gpioRef:gp?gp.part.id+'.'+gp.id:null,nb,wire});}
@@ -844,7 +881,7 @@ function ratTarget(l,A,st,a){
   if(l.b!=='GND'&&l.b!=='GPIO'){const ts=equivPins(findPin(l.b));let bt=null,bd=1e9;for(const t of ts){const d=Math.hypot(t.r-a.r,t.c-a.c);if(d<bd){bd=d;bt=t;}}return bt;}
   const na=inb(a.r,a.c)?A.find(A.sid(a.r,a.c)):-1;
   if(l.b==='GPIO'){const ref=(st&&st.gpioRef)||l.gpio;const t=ref&&findPin(ref);if(t)return t;
-    let bt=null,bd=1e9;for(const q of A.pins){if(q.part.type!=='pico'||q.role!=='gpio'||!q.on)continue;if((A.netPins.get(q.net)||[]).length>1||(A.netSecs.get(q.net)||0)>1)continue;const d=Math.abs(q.r-a.r)/3+Math.abs(q.c-a.c);if(d<bd){bd=d;bt=q;}}return bt;}
+    const an=a.role==='adc';let bt=null,bd=1e9;for(const q of A.pins){if(q.part.type!=='pico'||q.role!=='gpio'||!q.on||(an&&!hasCap(q,'adc')))continue;if((A.netPins.get(q.net)||[]).length>1||(A.netSecs.get(q.net)||0)>1)continue;const d=Math.abs(q.r-a.r)/3+Math.abs(q.c-a.c);if(d<bd){bd=d;bt=q;}}return bt;}
   // GND: a legközelebbi GND-hálózati láb (bekötött kapcsolatnál a saját hálózatán belül a Pico GND)
   let bt=null,bd=1e9;
   for(const [net,qs] of A.netPins){if(!qs.some(q=>q.part.type==='pico'&&q.role==='gnd'))continue;
@@ -890,13 +927,18 @@ function route(opts){
   const info=S=>{const m=new Map();for(const q of allPins){const r=S.find(cellOf(q.r,q.c));if(!m.has(r))m.set(r,[]);m.get(r).push(q);}return m;};
   const isGnd=qs=>!!qs&&qs.some(q=>q.part.type==='pico'&&q.role==='gnd');
   const freeGpio=(qs,r,S)=>!!qs&&qs.length===1&&qs[0].part.type==='pico'&&qs[0].role==='gpio'&&S.sz[r]===1;
+  const needAdc=l=>(pinByRef.get(l.a)||{}).role==='adc';
   function predFor(S,l,I){
     if(l.b==='GND')return r=>isGnd(I.get(r));
-    if(l.b==='GPIO')return r=>freeGpio(I.get(r),r,S);
+    if(l.b==='GPIO'){const an=needAdc(l);
+      // annyi ADC-képes GPIO-t hagy szabadon, ahány analóg kapcsolat még bekötetlen
+      let useAdc=an;if(!an){let free=0;const seen=new Set();for(const q of allPins){if(!hasCap(q,'adc')||q.role!=='gpio')continue;const r=S.find(cellOf(q.r,q.c));if(!seen.has(r)&&freeGpio(I.get(r),r,S)){seen.add(r);free++;}}
+        const pend=links.filter(x=>x.b==='GPIO'&&needAdc(x)&&!sat(S,x,I)).length;useAdc=free>pend;}
+      return r=>{const qs=I.get(r);if(!freeGpio(qs,r,S))return false;return hasCap(qs[0],'adc')?useAdc:!an;};}
     const qb=pinByRef.get(l.b),t=S.find(cellOf(qb.r,qb.c));return r=>r===t;
   }
   const srcOf=(S,l)=>{const qa=pinByRef.get(l.a);return S.find(cellOf(qa.r,qa.c));};
-  const sat=(S,l,I)=>{const src=srcOf(S,l);if(l.b==='GPIO')return(I.get(src)||[]).some(q=>q.part.type==='pico'&&q.role==='gpio');return predFor(S,l,I)(src);};
+  const sat=(S,l,I)=>{const src=srcOf(S,l);if(l.b==='GPIO'){const an=needAdc(l);return(I.get(src)||[]).some(q=>q.part.type==='pico'&&q.role==='gpio'&&(!an||hasCap(q,'adc')));}return predFor(S,l,I)(src);};
   const srcSig=new Map();for(const l of links){const q=pinByRef.get(l.a);const k=q.part.id+':'+PG.get(q.part.id)[q.id];const sg=l.b==='GND'?'GND':l.b==='GPIO'?'G'+l.id:null;if(sg&&!srcSig.has(k))srcSig.set(k,sg);}
   const badNet=qs=>{const pico=qs.filter(q=>q.part.type==='pico');const gnd=pico.some(q=>q.role==='gnd');
     const sigs=new Set(gnd?['GND']:[]);for(const q of qs){const sg=srcSig.get(q.part.id+':'+PG.get(q.part.id)[q.id]);if(sg)sigs.add(sg);}if(sigs.size>1)return true;
@@ -910,6 +952,7 @@ function route(opts){
     const I=info(S),src=srcOf(S,l);
     if(sat(S,l,I))return{ok:true,n:0};
     const pred=predFor(S,l,I);
+    const spare=l.b==='GPIO'&&!needAdc(l); // az ADC-képes GPIO-kat az analóg jeleknek tartogatja
     let prefRoot=-1;if(l.b==='GPIO'&&l.gpio&&pinByRef.has(l.gpio)){const g=pinByRef.get(l.gpio);prefRoot=S.find(cellOf(g.r,g.c));}
     const dist=new Float64Array(NC*5).fill(1e9),prev=new Int32Array(NC*5).fill(-1);
     const hp=[];const push=(d,s)=>{hp.push([d,s]);let i=hp.length-1;while(i>0){const p=(i-1)>>1;if(hp[p][0]<=hp[i][0])break;[hp[p],hp[i]]=[hp[i],hp[p]];i=p;}};
@@ -921,7 +964,7 @@ function route(opts){
       for(let k=0;k<4;k++){const nc=col+DIRS[k][0],nb=band+DIRS[k][1];if(nc<0||nc>=B.cols||nb<0||nb>=SR||B.sec*nb>=B.rows)continue;
         const n=nc*SR+nb,rn=S.find(n);if(rn===src)continue;
         const step=1+(dir!==4&&dir!==k?0.6:0);
-        if(S.used[n]||S.sz[rn]>1){if(pred(rn)){const tc=d+step+(prefRoot>=0&&rn!==prefRoot?14:0);if(tc<bc){bc=tc;best={s,n};}}continue;}
+        if(S.used[n]||S.sz[rn]>1){if(pred(rn)){const tc=d+step+(prefRoot>=0&&rn!==prefRoot?14:0)+(spare&&hasCap((I.get(rn)||[])[0],'adc')?12:0);if(tc<bc){bc=tc;best={s,n};}}continue;}
         const ns=n*5+k,nd=d+step;if(nd<dist[ns]){dist[ns]=nd;prev[ns]=s;push(nd,ns);}}}
     if(!best)return{ok:false};
     const cells=[best.n];let s=best.s;while(s>=0){cells.push((s/5)|0);s=prev[s];}
@@ -930,8 +973,8 @@ function route(opts){
     return{ok:true,n:cells.length-1};
   }
   const est=l=>{const a=pinByRef.get(l.a);if(l.b!=='GND'&&l.b!=='GPIO'){const b=pinByRef.get(l.b);return Math.abs(a.r-b.r)/3+Math.abs(a.c-b.c);}
-    let bd=1e9;for(const q of allPins)if(q.part.type==='pico'&&q.role===(l.b==='GND'?'gnd':'gpio'))bd=Math.min(bd,Math.abs(a.r-q.r)/3+Math.abs(a.c-q.c));return bd;};
-  const prio=l=>l.b==='GND'?2:l.b==='GPIO'?1:0;
+    const an=l.b==='GPIO'&&needAdc(l);let bd=1e9;for(const q of allPins)if(q.part.type==='pico'&&q.role===(l.b==='GND'?'gnd':'gpio')&&(!an||hasCap(q,'adc')))bd=Math.min(bd,Math.abs(a.r-q.r)/3+Math.abs(a.c-q.c));return bd;};
+  const prio=l=>l.b==='GND'?2:l.b==='GPIO'?(needAdc(l)?0.5:1):0;
   const cmp=(x,y)=>prio(x)-prio(y)||est(y)-est(x);
   function full(){
     let order=[...links].sort(cmp);let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
@@ -982,7 +1025,7 @@ function route(opts){
     if(bp){S.wires.push({a:bp[0],b:bp[1],color:'#7048e8',links:[l.id]});S.wireEnds.add(bp[0].join(':'));S.wireEnds.add(bp[1].join(':'));S.uni(src,bp[2]);}
   }
   D.auto={bridges:S.bridges,wires:S.wires};
-  const I=info(S);for(const l of links){if(l.b!=='GPIO')continue;const g=(I.get(srcOf(S,l))||[]).find(q=>q.part.type==='pico'&&q.role==='gpio');if(g)l.gpio=g.part.id+'.'+g.id;}
+  const I=info(S);for(const l of links){if(l.b!=='GPIO')continue;const an=needAdc(l);const g=(I.get(srcOf(S,l))||[]).find(q=>q.part.type==='pico'&&q.role==='gpio'&&(!an||hasCap(q,'adc')));if(g)l.gpio=g.part.id+'.'+g.id;}
 }
 function manualToAuto(pid){
   const want=pid?(pid instanceof Set?pid:new Set([pid])):null;
@@ -1129,7 +1172,7 @@ window.pcb={
   // --- tesztekhez és szkripteléshez ---
   select(labels){const ids=D.parts.filter(p=>labels.includes(p.label)).map(p=>p.id);ui.sel=ids.length?grp(ids):null;renderLeft();draw();return ids.length;},
   rotate(){rotate();},mirror(){mirror();},undo(){undo();},redo(){redo();},
-  simInfo(){return SIM?{leds:SIM.leds.map(l=>({label:l.p.label,I:l.I,light:!!l.light})),fets:SIM.fets.map(f=>({label:f.p.label,on:f.on,vgs:f.vgs,I:f.I,floatGate:f.floatGate})),bats:SIM.bats.map(b=>({label:b.p.label,I:b.I})),picos:SIM.picos.map(x=>({label:x.p.label,powered:x.powered}))}:null;},
+  simInfo(){return SIM?{leds:SIM.leds.map(l=>({label:l.p.label,I:l.I,light:!!l.light})),fets:SIM.fets.map(f=>({label:f.p.label,on:f.on,vgs:f.vgs,I:f.I,floatGate:f.floatGate})),bats:SIM.bats.map(b=>({label:b.p.label,I:b.I,kind:b.kind})),picos:SIM.picos.map(x=>({label:x.p.label,powered:x.powered}))}:null;},
   pins(label){const p=D.parts.find(x=>x.label===label);if(!p)return null;const A=A0;return gpins(p).map(q=>{const on=inb(q.r,q.c);return{id:q.id,name:q.name,r:q.r,c:q.c,net:on?A.find(A.sid(q.r,q.c)):null};});},
   netV(label,pin){const p=D.parts.find(x=>x.label===label);const q=p&&A0.pins.find(x=>x.part===p&&x.id===pin);return q&&SIM?SIM.netV.get(q.net):null;},
   linkInfo(){return D.links.map(l=>{const g=linkGeom(l);return{text:linkText(l),start:g&&g.start,end:g&&g.end,endPin:g&&g.endPin?pinLabel(g.endPin):null,bridges:g?g.bridges.length:0};});},
@@ -1138,6 +1181,7 @@ window.pcb={
   customParts(){return JSON.parse(JSON.stringify(D.customParts||{}));},
   addPart(def){const problems=validatePartDef(def);if(hasErrors(problems))return{type:null,problems};return{type:editorHost.save(null,def),problems};},
   openEditor(type){openEditor(editorHost,type?{type}:{});},
+  slider(label,key,v){const p=D.parts.find(x=>x.label===label);return !!p&&setSlider(p,key,v);},
   version:__APP_VERSION__
 };
 function statusText(){return $('#status').textContent;}

@@ -69,7 +69,7 @@ test('Schottky-dióda: az USB nem tölti az akkut, USB nélkül az akku táplál
   expect(Math.abs(r.withDiode.batI)).toBeLessThan(1e-4);
   expect(r.batOnly.powered).toBe(true);
   expect(r.batOnly.vsys).toBeCloseTo(3.4, 1);
-  expect(r.noDiode.join(' ')).toContain('zárlat');
+  expect(r.noDiode).toContainEqual(expect.stringContaining('BAT: a Pico USB-je a VSYS-en át közvetlenül tölti az akkut'));
 });
 
 test('N-MOSFET kapcsolja a LED-et, lebegő gate-re figyelmeztet', async ({ page }) => {

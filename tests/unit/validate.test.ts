@@ -49,3 +49,23 @@ describe('alkatrészkönyvtár', () => {
   });
   it('idegen fájlt elutasít', () => expect(() => importLibrary({ parts: {} }, () => false)).toThrow(/proofboard-parts/));
 });
+
+describe('vezérlők és tápbemenetek ellenőrzése', () => {
+  it('csúszka csak létező, korlátos számparaméterre', () => {
+    const base = { ...nokia, params: [{ key: 'x', label: 'X', type: 'number' as const, default: 0, min: -1, max: 1 }] };
+    expect(hasErrors(validatePartDef({ ...base, controls: [{ kind: 'slider', key: 'x' }] }))).toBe(false);
+    expect(validatePartDef({ ...base, controls: [{ kind: 'slider', key: 'y' }] }).map(p => p.msg)).toContain('A csúszkához nincs ilyen paraméter: y');
+    const nomax = { ...base, params: [{ key: 'x', label: 'X', type: 'number' as const, default: 0 }], controls: [{ kind: 'slider' as const, key: 'x' }] };
+    expect(hasErrors(validatePartDef(nomax))).toBe(true);
+  });
+  it('feszültségtartomány: min < max, csak tápbemenetnél számít', () => {
+    const pins = nokia.pins.map(p => (p.name === 'VCC' ? { ...p, vmin: 3.6, vmax: 2.7 } : p.name === 'DIN' ? { ...p, vmax: 3.6 } : p));
+    const ps = validatePartDef({ ...nokia, pins });
+    expect(ps.find(p => p.level === 'error')?.msg).toBe('6: a minimális feszültség nem lehet nagyobb a maximálisnál.');
+    expect(ps.some(p => p.level === 'warn' && p.msg.startsWith('4: feszültségtartomány'))).toBe(true);
+  });
+  it('tápbemenet GND-láb nélkül: figyelmeztetés', () => {
+    const ps = validatePartDef({ ...nokia, pins: nokia.pins.filter(p => p.name !== 'GND'), model: [] });
+    expect(ps.map(p => p.msg)).toContain('Van tápbemenet, de nincs GND-láb: a tápfeszültség a panel földjéhez képest számít.');
+  });
+});

@@ -34,7 +34,7 @@ const MODEL_UI: Record<ModelKind, { label: string; pins: Array<[string, string]>
   nmos: { label: 'N-MOSFET', pins: [['d', 'drain'], ['g', 'gate'], ['s', 'source']], vals: [['vth', 'Küszöb', 'V', 2], ['ron', 'Nyitott ell.', 'Ω', 1]] },
 };
 
-interface PinRow { id: string; name: string; lr: number; lc: number; role: string; group: string }
+interface PinRow { id: string; name: string; lr: number; lc: number; role: string; group: string; volt?: string }
 interface ModelRow { el: ModelKind; pins: string[]; vals: string[] }
 interface Form {
   name: string; prefix: string; cat: string; bodyText: string;
@@ -68,6 +68,17 @@ function lightText(hex: string): boolean {
 }
 
 /** A test téglalapja a lábak és a beállítások alapján (felirat esetén legalább 2,4 lyuk magas). */
+/** Feszültségtartomány szövegből: "2.7-3.6", "–5.5" (csak max), "4.5-" (csak min). */
+export function parseRange(t: string | undefined): { vmin?: number; vmax?: number } {
+  const m = /^\s*([\d.,]*)\s*[-–]\s*([\d.,]*)\s*$/.exec(t || '');
+  if (!m) return {};
+  const n = (x: string) => (x ? parseFloat(x.replace(',', '.')) : NaN);
+  const o: { vmin?: number; vmax?: number } = {};
+  if (isFinite(n(m[1]))) o.vmin = n(m[1]);
+  if (isFinite(n(m[2]))) o.vmax = n(m[2]);
+  return o;
+}
+
 export function bodyRect(f: Pick<Form, 'pad' | 'ext' | 'bodyText'>, pins: ReadonlyArray<{ lr: number; lc: number }>) {
   const rs = pins.map(p => p.lr), cs = pins.map(p => p.lc);
   const pr0 = Math.min(...rs, Infinity) === Infinity ? 0 : Math.min(...rs), pr1 = pins.length ? Math.max(...rs) : 0;
@@ -110,7 +121,7 @@ export function formToDef(f: Form): PartDef {
   const def: PartDef = {
     name: f.name.trim(), prefix: f.prefix.trim(), cat: f.cat.trim() || 'Saját',
     fp: `${pins.length} láb${oneRow && pins.length > 1 ? ' egy sorban' : ''}`,
-    pins: pins.map(p => ({ id: p.id, name: p.name || p.id, lr: p.lr, lc: p.lc, role: p.role })),
+    pins: pins.map(p => Object.assign({ id: p.id, name: p.name || p.id, lr: p.lr, lc: p.lc, role: p.role }, p.role === 'vin' ? parseRange(p.volt) : {})),
     bounds: { r: [B.r0, B.r1], c: [B.c0, B.c1] },
     graphics,
     meta: { editor: 1, form: JSON.parse(JSON.stringify(f)) },
@@ -238,7 +249,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
           <span class="help" style="flex:1 1 100%;margin:0">A szerepet a névből tippeli (GND, VCC, VIN…), utána a táblázatban állítható.</span>
         </div>
         <div class="tablewrap"><table class="tbl pe-pins">
-          <thead><tr><th>Azon.</th><th>Név</th><th>Sor</th><th>Oszl.</th><th>Szerep</th><th title="Az azonos csoportú lábak gyárilag össze vannak kötve">Csoport</th><th></th></tr></thead>
+          <thead><tr><th>Azon.</th><th>Név</th><th>Sor</th><th>Oszl.</th><th>Szerep</th><th title="Az azonos csoportú lábak gyárilag össze vannak kötve">Csoport</th><th title="Tápbemenetnél a megengedett feszültség, pl. 2.7-3.6">Táp (V)</th><th></th></tr></thead>
           <tbody>${f.pins.map((p, i) => `<tr class="${i === sel ? 'on' : ''}" data-row="${i}">
             <td><input type="text" data-pin="${i}" data-k="id" value="${esc(p.id)}" style="width:48px" aria-label="azonosító"></td>
             <td><input type="text" data-pin="${i}" data-k="name" value="${esc(p.name)}" style="width:84px" aria-label="név"></td>
@@ -246,6 +257,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
             <td><input type="number" data-pin="${i}" data-k="lc" value="${p.lc}" style="width:52px" aria-label="oszlop"></td>
             <td><select data-pin="${i}" data-k="role" aria-label="szerep">${ROLES.map(([v, l]) => opt(v, l, p.role)).join('')}</select></td>
             <td><input type="text" data-pin="${i}" data-k="group" value="${esc(p.group)}" style="width:52px" aria-label="csoport"></td>
+            <td><input type="text" data-pin="${i}" data-k="volt" value="${esc(p.volt || '')}" placeholder="${p.role === 'vin' ? 'pl. 3-5.5' : ''}" ${p.role === 'vin' ? '' : 'disabled'} style="width:64px" aria-label="tápfeszültség-tartomány"></td>
             <td><button class="btn" data-act="delpin" data-i="${i}" aria-label="Láb törlése" title="Láb törlése">×</button></td></tr>`).join('')}</tbody>
         </table></div>
         ${f.pins.length ? '<p class="help">Az első láb lesz a lerakási pont (0:0); mentéskor a többi ehhez igazodik.</p>' : ''}
@@ -404,7 +416,12 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       jsonDef = d; jsonText = ''; jsonErr = ''; form = null; tab = 'json'; render(); return;
     }
     if (!form || tab !== 'form') return;
-    if (t.dataset.pin != null && t.dataset.k === 'role') { form.pins[+t.dataset.pin].role = t.value; refresh(); return; }
+    if (t.dataset.pin != null && t.dataset.k === 'role') {
+      form.pins[+t.dataset.pin].role = t.value;
+      const v = back.querySelector<HTMLInputElement>(`[data-pin="${t.dataset.pin}"][data-k="volt"]`);
+      if (v) { v.disabled = t.value !== 'vin'; v.placeholder = t.value === 'vin' ? 'pl. 3-5.5' : ''; }
+      refresh(); return;
+    }
     if (t.dataset.model != null) {
       const m = form.model[+t.dataset.model], k = t.dataset.k || '';
       if (k === 'el') { m.el = t.value as ModelKind; m.pins = MODEL_UI[m.el].pins.map((_, j) => m.pins[j] || ''); m.vals = MODEL_UI[m.el].vals.map(v => fmtSI(v[3])); render(); return; }

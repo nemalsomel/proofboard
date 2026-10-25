@@ -9,6 +9,6 @@ Próbanyák-tervező és -szimulátor (Vite + TypeScript, keretrendszer nélkül
 ## Szerkezet és szabályok
 - `src/core/` (séma, kifejezések, fordító), `src/parts/` (beépített alkatrészek), `src/engine/solve.ts` – szigorúan típusos, DOM-mentes, unit tesztelt.
 - `src/app.ts` még `// @ts-nocheck`. Folyamatosan bontjuk `src/engine/` (netlista, szimuláció, ellenőrzés, útvonalkereső) és `src/ui/` (rajzolás, panelek, állapot) modulokra; kiemeléskor a kód típust kap, a viselkedés nem változik.
-- Alkatrész = adat (`src/core/schema.ts`). Új alkatrészhez a `src/parts/builtin.ts`-be kerül leírás; típusnévre (`p.type==='…'`) új kódot ne írj, ha a séma kifejezi.
+- Alkatrész = adat (`src/core/schema.ts`). Új alkatrészhez a `src/parts/builtin.ts`-be kerül leírás; típusnévre (`p.type==='…'`) új kódot ne írj, ha a séma kifejezi: ellenőrzés és útvonalkereső a lábszerepekből (`role`), képességekből (`caps`, pl. `adc`) és a `vmin`/`vmax` tartományból dolgozik.
 - Az e2e tesztek csak a `window.pcb` API-t és a DOM-ot használják. Ha egy tesztnek új belső állapot kell, az API bővüljön.
 - Viselkedésváltozásnál az érintett e2e/unit teszt is frissüljön; a meglévő forgatókönyvek (kézi minta 157 híd, gombtérkép, kézi→automatikus, útvonalkereső 29/29 vezeték nélkül) regressziós alapok.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compileAll, penvD } from '../../src/core/compile';
+import { num } from '../../src/core/expr';
 import { PARTS } from '../../src/parts/builtin';
 import type { PartInstance } from '../../src/core/schema';
 
@@ -50,5 +51,30 @@ describe('beépített alkatrészek', () => {
 
   it('a gomb lenyomva A–B oldalt zár', () => {
     expect(PARTS.button.controls?.[0]).toEqual({ kind: 'press', closes: [['A1', 'B1']] });
+  });
+});
+
+describe('modulok és lábképességek', () => {
+  it('a Picón csak a GP26–GP28 ADC-képes', () => {
+    const adc = DEFS.pico.pins(inst('pico')).filter(q => q.caps?.includes('adc')).map(q => q.name).sort();
+    expect(adc).toEqual(['GP26', 'GP27', 'GP28']);
+  });
+  it('tápbemenetek feszültségtartománnyal', () => {
+    const vin = (t: string) => DEFS[t].pins(inst(t)).filter(q => q.role === 'vin').map(q => [q.id, q.vmin, q.vmax]);
+    expect(vin('nokia5110')).toEqual([['VCC', 2.7, 3.6]]);
+    expect(vin('joystick')).toEqual([['5V', 3, 5.5]]);
+    expect(vin('tp4056')).toEqual([['IN+', 4, 8]]);
+  });
+  it('a modulok lábai nem esnek közös 3 lyukas szekcióba alapállásban', () => {
+    for (const t of ['nokia5110', 'joystick', 'tp4056']) {
+      const ps = DEFS[t].pins(inst(t)), seen = new Set<string>();
+      for (const q of ps) { const k = Math.floor(q.lr / 3) + ':' + q.lc; expect(seen.has(k), `${t} ${q.id}`).toBe(false); seen.add(k); }
+    }
+  });
+  it('a joystick-tengely a paraméterből osztja a feszültséget', () => {
+    const r = (x: number) => (DEFS.joystick.def.model || []).filter(e => e.el === 'resistor').slice(0, 2).map(e => num((e as any).ohm, penvD(DEFS.joystick.def, inst('joystick', { x }))));
+    expect(r(0)).toEqual([5001, 5001]);
+    expect(r(100)).toEqual([1, 10001]);
+    expect(r(-100)).toEqual([10001, 1]);
   });
 });

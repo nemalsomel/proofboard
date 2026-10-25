@@ -42,7 +42,7 @@ test('saját modul: lábsor-generátorral felvéve, mentve, lerakva, visszavonha
   await page.mouse.click(pt.x, pt.y);
   const r = await pcb<any>(page, `const ps = pcb.pins('LCD1'); const def = Object.values(pcb.customParts())[0];
     return { n: ps.length, first: ps[0].name + '@' + ps[0].r + ':' + ps[0].c, iss: pcb.issues().map(i => i.msg), body: def.bounds };`);
-  expect(r).toMatchObject({ n: 8, first: 'RST@60:6', iss: [] });
+  expect(r).toMatchObject({ n: 8, first: 'RST@60:6', iss: ['LCD1.VCC: nincs tápfeszültség'] }); // még nincs bekötve
   expect(r.body.r[0]).toBeLessThan(-4); // a 4 lyukas kiterjesztés benne van
   await pcb(page, `pcb.undo();`);
   expect(await pcb(page, `return pcb.pins('LCD1');`)).toBeNull();
