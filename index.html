@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Próbanyák-tervező és -szimulátor: szekciós, pontraszteres és csíkos panelek, hidak, vezetékek, útvonalkereső, egyenáramú szimuláció.">
+<title>Proofboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23ead6a8'/%3E%3Cg fill='%234a3c24'%3E%3Ccircle cx='4' cy='4' r='1.3'/%3E%3Ccircle cx='8' cy='4' r='1.3'/%3E%3Ccircle cx='12' cy='4' r='1.3'/%3E%3Ccircle cx='4' cy='8' r='1.3'/%3E%3Ccircle cx='12' cy='8' r='1.3'/%3E%3Ccircle cx='4' cy='12' r='1.3'/%3E%3Ccircle cx='8' cy='12' r='1.3'/%3E%3Ccircle cx='12' cy='12' r='1.3'/%3E%3C/g%3E%3Ccircle cx='8' cy='8' r='2' fill='%23a8571f'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">Proofboard<small id="boardInfo"></small></div>
+    <div class="grp" role="group" aria-label="Nézet">
+      <button class="btn" id="vComp" title="Alkatrészoldal (F)">Alkatrészoldal</button>
+      <button class="btn" id="vCu" title="Rézoldal, tükrözve (F)">Rézoldal</button>
+      <button class="btn" id="vRats" title="Kapcsolati vonalak mutatása (N)">Kapcsolati nézet</button>
+      <button class="btn" id="vXray" title="Minden alkatrész röntgen nézetben: csak körvonal, lábak és lábnevek (X)">Röntgen</button>
+      <button class="btn" id="vRot" title="A panel nézetének elforgatása 90°-kal (T)">⟳ Panel 90°</button>
+    </div>
+    <div class="grp">
+      <button class="btn" id="zOut" aria-label="Kicsinyítés">−</button>
+      <span class="mono small" id="zLbl">100%</span>
+      <button class="btn" id="zIn" aria-label="Nagyítás">+</button>
+    </div>
+    <div class="grp">
+      <button class="btn" id="bUndo" title="Visszavonás (Ctrl+Z)">↶</button>
+      <button class="btn" id="bRedo" title="Újra (Ctrl+Y)">↷</button>
+    </div>
+    <div class="grp" style="margin-left:auto">
+      <button class="btn sim" id="bSim" title="Szimuláció (S)">▶ Szimuláció</button>
+    </div>
+  </header>
+
+  <aside class="left">
+    <section>
+      <p class="h">Eszközök</p>
+      <div class="tools" id="tools"></div>
+    </section>
+    <section>
+      <p class="h">Alkatrészek</p>
+      <div class="lib" id="lib"></div>
+      <p class="help" style="margin-top:8px">Lerakás közben: <kbd>R</kbd> forgatás, <kbd>M</kbd> tükrözés, <kbd>Esc</kbd> mégse.</p>
+    </section>
+    <section>
+      <p class="h">Vezeték színe</p>
+      <div class="swatches" id="swatches"></div>
+    </section>
+    <section>
+      <p class="h">Kijelölés</p>
+      <div id="props" class="props"><span class="muted small">Kattints egy alkatrészre vagy vezetékre a Kijelölés eszközzel.</span></div>
+    </section>
+    <section>
+      <p class="h">Jelmagyarázat</p>
+      <div class="legend">
+        <span><i style="background:#2563eb"></i>gomb A / GPIO</span>
+        <span><i style="background:#d97706"></i>gomb B</span>
+        <span><i style="background:#1f2328"></i>GND / katód</span>
+        <span><i style="background:#e03131"></i>3V3 / anód / +</span>
+        <span><i style="background:#be4bdb"></i>VBUS / VSYS</span>
+        <span><i style="background:#c8cdd3"></i>kézi híd</span>
+        <span><i style="background:#5b9bd5"></i>automatikus híd</span>
+        <span><i style="background:#00e676"></i>kapcsolat → GPIO</span>
+        <span><i style="background:#00b8ff"></i>kapcsolat → GND</span>
+        <span><i style="background:#ffab00"></i>kapcsolat láb–láb</span>
+        <span><i style="background:#ff1744"></i>bekötetlen kapcsolat</span>
+      </div>
+    </section>
+  </aside>
+
+  <div class="gutter" id="gL" role="separator" aria-orientation="vertical" aria-label="Bal oldalsáv szélessége" tabindex="0" title="Húzd a szélesség állításához, dupla kattintás: alapméret"></div>
+  <main class="stage">
+    <div class="scroll" id="scroll"><canvas id="cv"></canvas></div>
+    <div class="status" id="status">—</div>
+  </main>
+  <div class="gutter" id="gR" role="separator" aria-orientation="vertical" aria-label="Jobb oldalsáv szélessége" tabindex="0" title="Húzd a szélesség állításához, dupla kattintás: alapméret"></div>
+
+  <aside class="right">
+    <section>
+      <div class="simbar" style="justify-content:space-between;margin-bottom:8px"><p class="h" style="margin:0">Ellenőrzés</p><span id="issueSum"></span></div>
+      <ul class="issues" id="issues"></ul>
+    </section>
+    <section>
+      <div class="simbar" style="justify-content:space-between;margin-bottom:8px"><p class="h" style="margin:0">Kapcsolatok</p><span id="linkSum"></span></div>
+      <label class="check" style="margin-bottom:8px"><input type="checkbox" id="autoR"> Automatikus útvonaltervezés</label>
+      <div class="grp" style="margin-bottom:8px">
+        <button class="btn" id="bRoute" title="Az automatikus hidak újratervezése">Útvonalak keresése</button>
+        <button class="btn" id="bFreeze" title="Az automatikus hidakat kézi hidakká alakítja">Rögzítés kézire</button>
+        <button class="btn" id="bToAuto" title="A kézi bekötésből kapcsolatokat készít, és automatikusan újrahúzza">Kézi → automatikus</button>
+        <button class="btn" id="bUnroute">Auto hidak törlése</button>
+      </div>
+      <ul class="issues" id="links"></ul>
+      <div class="lk" id="linkTotal" style="border-top:1px solid var(--line);margin-top:4px;padding-top:8px;justify-content:space-between;flex-wrap:wrap;gap:4px 10px"></div>
+      <p class="help" style="margin-top:6px">Kapcsolat: <kbd>C</kbd> eszköz, vagy gomb kijelölésekor „A → GPIO, B → GND”. A kézi hidakat az útvonalkereső nem módosítja; a „Kézi → automatikus” kapcsolatokká alakítja őket, a „Rögzítés kézire” visszafelé.</p>
+    </section>
+    <section id="simSec">
+      <p class="h">Szimuláció</p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <label class="check"><input type="checkbox" id="usb"> USB táp a Picón</label>
+        <div class="radio" role="group" aria-label="Gomb mód">
+          <button class="btn" id="mHold">Nyomva tartás</button>
+          <button class="btn" id="mToggle">Kapcsoló</button>
+        </div>
+        <div id="simOut"></div>
+      </div>
+    </section>
+    <section>
+      <p class="h">Panel</p>
+      <div class="props" style="margin-bottom:14px">
+        <div class="row"><label for="bdPreset">Típus</label><select id="bdPreset" style="flex:1"></select></div>
+        <div class="row nowrap"><label for="bdCols">Méret</label><input type="number" id="bdCols" min="4" max="120" aria-label="oszlopok"><span class="muted small">×</span><input type="number" id="bdRows" min="4" max="200" aria-label="sorok"><span class="muted small">lyuk</span></div>
+        <div class="row"><label for="bdSec">Szekció</label><select id="bdSec" style="flex:1"><option value="1">nincs (pontraszter)</option><option value="2">1×2</option><option value="3">1×3</option><option value="4">1×4</option><option value="5">1×5</option><option value="0">teljes csík (stripboard)</option></select></div>
+        <div class="row"><button class="btn" id="bdApply">Alkalmaz</button><span class="muted small" id="bdMm"></span></div>
+      </div>
+      <p class="h">Terv</p>
+      <div class="grp" style="margin-bottom:8px">
+        <button class="btn" id="bPreset">Macropad (kézi hidak)</button>
+        <button class="btn" id="bPreset2">Macropad (útvonalkereső)</button>
+        <button class="btn danger" id="bClear">Üres panel</button>
+      </div>
+      <details id="jsonBox">
+        <summary>JSON export / import</summary>
+        <div class="grp" style="margin-top:8px">
+          <button class="btn" id="bExport">Export</button>
+          <button class="btn" id="bCopy">Másolás</button>
+          <button class="btn" id="bImport">Import</button>
+        </div>
+        <textarea id="json" spellcheck="false" aria-label="Terv JSON"></textarea>
+        <p class="help" id="jsonMsg">Formátum: parts[{type,label,r,c,rot,mir,props}], bridges[[r1,c1,r2,c2]], wires[{a:[r,c],b:[r,c],color}], gpio{"partId.lábszám":"pullup|pulldown|float|out_high|out_low"}. Koordináta: sor:oszlop.</p>
+      </details>
+    </section>
+  </aside>
+</div>
+<script type="module" src="/src/app.ts"></script>
+</body>
+</html>
