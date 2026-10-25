@@ -140,6 +140,8 @@ export interface PartDef {
   pinLabels?: PinLabels;
   model?: ModelEl[];
   controls?: Control[];
+  /** Szerkesztői adatok (a futás figyelmen kívül hagyja), pl. az űrlap állapota. */
+  meta?: Record<string, unknown>;
 }
 
 /** Kiértékelt, lokális koordinátájú láb. */

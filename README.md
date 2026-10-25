@@ -13,6 +13,7 @@ Próbanyák-tervező és -szimulátor a böngészőben: 1×3-as szekciós (tripa
   - kapcsolatok (pl. „gomb A → szabad GPIO”, „B → GND”) automatikus útvonalkereséssel, amely mozgatáskor csak az érintett útvonalakat tervezi újra;
   - átalakítás oda-vissza a kézi és az automatikus bekötés között.
 - **Ellenőrzés:** zárlat, összeérő jelek, rövidre zárt alkatrész, ütközés, átfedés, túláram, lebegő gate.
+- **Saját alkatrészek:** alkatrész-szerkesztő űrlappal (lábsor-generátor, szerepek, test, villamos modell, nyomógomb-vezérlő) és JSON nézettel, élő előnézettel és ellenőrzéssel. A saját alkatrészek a tervvel együtt mentődnek, és könyvtárfájlként exportálhatók/importálhatók; beépített alkatrészből másolat is készíthető.
 - **Szimuláció:** egyenáramú csomóponti analízis (diódák, MOSFET, Pico táp és GPIO-módok), gombnyomás, LED-fény, GPIO-szintek.
 
 ## Fejlesztés
@@ -29,9 +30,10 @@ npm run build:single # egyetlen önálló HTML-fájl (dist-single/index.html)
 ## Felépítés
 
 ```
-src/core/     séma (típusok), kifejezés-értelmező, alkatrész-fordító — tiszta, típusos
+src/core/     séma (típusok), kifejezés-értelmező, alkatrész-fordító, leírás-ellenőrző, könyvtárformátum — tiszta, típusos
 src/parts/    beépített alkatrészleírások (adat)
 src/engine/   egyenletmegoldó (csomóponti analízis)
+src/ui/       alkatrész-szerkesztő
 src/app.ts    felület, netlista, szimuláció, ellenőrzés, útvonalkereső — folyamatosan bomlik modulokra
 tests/unit/   Vitest
 tests/e2e/    Playwright, a window.pcb API-n keresztül
@@ -39,7 +41,7 @@ tests/e2e/    Playwright, a window.pcb API-n keresztül
 
 ### Alkatrész hozzáadása
 
-Az alkatrészek adatként vannak leírva (`src/core/schema.ts`): lábak, összekötött lábcsoportok, paraméterek, rajzelemek rétegekben, villamos modell és vezérlők. Új alkatrészhez egy új bejegyzés kell a `src/parts/builtin.ts`-ben; a rajzolás, a tulajdonságpanel, az ellenőrzés és a szimuláció ebből dolgozik. A `tests/unit/parts.test.ts` minden beépített leírást automatikusan ellenőriz.
+Az alkatrészek adatként vannak leírva (`src/core/schema.ts`): lábak, összekötött lábcsoportok, paraméterek, rajzelemek rétegekben, villamos modell és vezérlők. Új alkatrészhez egy új bejegyzés kell a `src/parts/builtin.ts`-ben; a rajzolás, a tulajdonságpanel, az ellenőrzés és a szimuláció ebből dolgozik. A `tests/unit/parts.test.ts` minden beépített leírást automatikusan ellenőriz. Kísérletezni a felületen is lehet („+ Saját alkatrész”): a szerkesztő ugyanezt a leírást állítja elő, a JSON fül pedig bemásolható a `builtin.ts`-be.
 
 ## Kitelepítés
 

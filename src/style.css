@@ -102,3 +102,33 @@ textarea{width:100%;height:150px;resize:vertical;font-size:11px;margin-top:8px;b
   .top{order:0}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* Saját alkatrészek a listában */
+.libitem{display:flex;gap:4px}
+.libitem>.btn:first-child{flex:1;min-width:0}
+.libitem>.btn:last-child{flex:none;padding:6px 9px}
+
+/* Alkatrész-szerkesztő */
+.pe-back{position:fixed;inset:0;z-index:50;background:rgba(10,14,12,.42);display:flex;align-items:center;justify-content:center;padding:16px}
+.pe{width:min(1120px,100%);height:min(820px,100%);background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden}
+.pe-head,.pe-foot{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.pe-foot{border-bottom:0;border-top:1px solid var(--line)}
+.pe-head b{font-size:16px}
+.pe-tabs{display:flex;gap:4px;margin-left:auto}
+.pe-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,420px);min-height:0}
+.pe-left,.pe-right{overflow:auto;padding:14px 16px;min-width:0}
+.pe-right{border-left:1px solid var(--line);background:var(--panel2)}
+.pe-sec{margin-bottom:18px}
+.pe-grid{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 10px;align-items:center}
+.pe-grid label{font-size:12px;color:var(--muted)}
+.pe-gen{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border:1px dashed var(--line);border-radius:8px;margin-bottom:8px}
+.tablewrap{overflow-x:auto}
+.pe-pins input,.pe-pins select{font-size:12px;padding:2px 4px}
+.pe-pins tr.on td{background:var(--accent-soft)}
+.pe-ext{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.pe-ext label{display:flex;gap:4px;align-items:center;color:var(--muted)}
+.pe-model{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.pe-cv{width:100%;display:block;border-radius:8px;border:1px solid var(--line);cursor:crosshair}
+.pe-json{width:100%;height:420px;font:12px var(--mono);resize:vertical}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+@media (max-width:820px){.pe-body{grid-template-columns:minmax(0,1fr)}.pe-right{border-left:0;border-top:1px solid var(--line)}}

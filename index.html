@@ -42,6 +42,13 @@
     <section>
       <p class="h">Alkatrészek</p>
       <div class="lib" id="lib"></div>
+      <div class="grp" style="margin-top:8px">
+        <button class="btn" id="bNewPart">+ Saját alkatrész</button>
+        <button class="btn" id="bLibExp" title="Saját alkatrészek mentése fájlba">Export</button>
+        <button class="btn" id="bLibImp" title="Alkatrészkönyvtár betöltése fájlból">Import</button>
+        <input type="file" id="libFile" accept=".json,application/json" hidden>
+      </div>
+      <p class="help" id="libMsg" aria-live="polite" style="margin-top:6px"></p>
       <p class="help" style="margin-top:8px">Lerakás közben: <kbd>R</kbd> forgatás, <kbd>M</kbd> tükrözés, <kbd>Esc</kbd> mégse.</p>
     </section>
     <section>

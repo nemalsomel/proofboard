@@ -7,7 +7,10 @@
  */
 import './style.css';
 import { evx, fmtSI, num, parseSI, stepE12, tpl } from './core/expr';
-import { compileAll, penvD } from './core/compile';
+import { compileAll, compilePart, penvD } from './core/compile';
+import { hasErrors, validatePartDef } from './core/validate';
+import { exportLibrary, importLibrary, typeKeyFor } from './core/library';
+import { openEditor } from './ui/editor';
 import { LEDC, PARTS, PICO_NAMES, picoRole } from './parts/builtin';
 import { solve } from './engine/solve';
 
@@ -17,15 +20,20 @@ const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 
 /* ---------- Alkatrész-definíciók ---------- */
 const rgba=(hex,a)=>{const n=parseInt(hex.slice(1),16);return`rgba(${n>>16},${(n>>8)&255},${n&255},${a})`;};
-const ROLEC={j:'#aeb5bb',s:'#1f2328',g:'#2563eb',d:'#868e96',A:'#2563eb',B:'#d97706',an:'#e03131',ka:'#1f2328',gnd:'#1f2328',p33:'#e03131',pwr:'#be4bdb',gpio:'#2563eb',misc:'#868e96',r:'#868e96',h:'#868e96',bp:'#e03131',bn:'#1f2328'};
+const ROLEC={vin:'#d6336c',sig:'#2563eb',adc:'#0ca678',nc:'#adb5bd',j:'#aeb5bb',s:'#1f2328',g:'#2563eb',d:'#868e96',A:'#2563eb',B:'#d97706',an:'#e03131',ka:'#1f2328',gnd:'#1f2328',p33:'#e03131',pwr:'#be4bdb',gpio:'#2563eb',misc:'#868e96',r:'#868e96',h:'#868e96',bp:'#e03131',bn:'#1f2328'};
 const DEFS=compileAll(PARTS);
+/** A saját alkatrészek fordítása a beépítettek mellé (a terv `customParts` mezőjéből). */
+function syncDefs(custom){
+  for(const k of Object.keys(DEFS))if(!(k in PARTS))delete DEFS[k];
+  for(const [k,d] of Object.entries(custom||{})){try{DEFS[k]=compilePart(k,{cat:'Saját',...d});}catch(e){console.warn('Saját alkatrész kihagyva:',k,e);}}
+}
 const penv=p=>penvD(DEFS[p.type].def,p);
 const hasPress=p=>(DEFS[p.type].def.controls||[]).some(c=>c.kind==='press');
 const WCOL=[['#1c7ed6','kék'],['#e03131','piros'],['#212529','fekete'],['#f59f00','sárga'],['#2f9e44','zöld'],['#f1f3f5','fehér'],['#e8590c','narancs']];
 const TOOLS=[['select','Kijelölés','V'],['bridge','Forrasztóhíd','B'],['wire','Vezeték','W'],['link','Kapcsolat','C'],['erase','Törlés','E'],['pan','Mozgatás','H']];
 
 /* ---------- Állapot ---------- */
-const emptyDesign=()=>({v:1,board:{rows:78,cols:39,sec:3},parts:[],bridges:[],wires:[],links:[],auto:{bridges:[],wires:[]},gpio:{},settings:{usb:true,btnMode:'hold',autoRoute:true},seq:1});
+const emptyDesign=()=>({v:1,board:{rows:78,cols:39,sec:3},parts:[],bridges:[],wires:[],links:[],auto:{bridges:[],wires:[]},customParts:{},gpio:{},settings:{usb:true,btnMode:'hold',autoRoute:true},seq:1});
 let D, A0, AS, SIM, ISSUES=[];
 const ui={tool:'select',view:'comp',zoom:1,sim:false,hover:null,sel:null,placing:null,ghost:{rot:0,mir:false},wireStart:null,drag:null,pressed:{},holdPtr:new Map(),flash:null,undo:[],redo:[],wireColor:'#1c7ed6',confirmClear:0,linkStart:null,hideAuto:null,rats:false,xray:false,selLink:null,linkState:new Map()};
 
@@ -448,7 +456,7 @@ function segDist(pr,pc,r1,c1,r2,c2){const dr=r2-r1,dc=c2-c1,l=dr*dr+dc*dc;let t=
 function hitWire(rf,cf){let best=-1,bd=0.32;D.wires.forEach((w,i)=>{const d=segDist(rf,cf,w.a[0],w.a[1],w.b[0],w.b[1]);if(d<bd){bd=d;best=i;}});return best;}
 function hitBridge(rf,cf){let best=-1,bd=0.3;D.bridges.forEach((b,i)=>{const d=segDist(rf,cf,b[0],b[1],b[2],b[3]);if(d<bd){bd=d;best=i;}});return best;}
 function pushUndo(){ui.undo.push(JSON.stringify(D));if(ui.undo.length>150)ui.undo.shift();ui.redo=[];}
-function commit(noRoute){const bk=JSON.stringify(D.board);if(!noRoute&&D.settings.autoRoute&&D.links.length)route({moved:ui.moved});ui.moved=null;save();if(bk!==ui.lastBoard){ui.lastBoard=bk;resize();boardUI();}recompute();renderLeft();}
+function commit(noRoute){syncDefs(D.customParts);const bk=JSON.stringify(D.board);if(!noRoute&&D.settings.autoRoute&&D.links.length)route({moved:ui.moved});ui.moved=null;save();if(bk!==ui.lastBoard){ui.lastBoard=bk;resize();boardUI();}recompute();renderLeft();}
 function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(D));}catch(e){}}
 function sameSec(r1,c1,r2,c2){return c1===c2&&secStart(r1)===secStart(r2);}
 function addBridge(r1,c1,r2,c2){if(!inb(r1,c1)||!inb(r2,c2))return false;if(Math.abs(r1-r2)+Math.abs(c1-c2)!==1)return false;if(sameSec(r1,c1,r2,c2))return false;
@@ -626,7 +634,8 @@ function bindParams(root,p){
 function renderLeft0(){
   $('#tools').innerHTML=TOOLS.map(([id,l,k])=>`<button class="btn ${ui.tool===id&&!ui.placing?'on':''}" data-tool="${id}" ${ui.sim?'disabled':''}>${l}<kbd>${k}</kbd></button>`).join('');
   const cats=[...new Set(Object.values(DEFS).map(d=>d.cat))];
-  $('#lib').innerHTML=cats.map(c=>`<div class="libcat">${esc(c)}</div>`+Object.entries(DEFS).filter(([,d])=>d.cat===c).map(([id,d])=>`<button class="btn ${ui.placing===id?'on':''}" data-lib="${id}" ${ui.sim?'disabled':''}>${esc(d.name)}<span>${esc(d.fp)}</span></button>`).join('')).join('');
+  const libBtn=(id,d)=>`<button class="btn ${ui.placing===id?'on':''}" data-lib="${id}" ${ui.sim?'disabled':''}>${esc(d.name)}<span>${esc(d.fp)}</span></button>`;
+  $('#lib').innerHTML=cats.map(c=>`<div class="libcat">${esc(c)}</div>`+Object.entries(DEFS).filter(([,d])=>d.cat===c).map(([id,d])=>id in PARTS?libBtn(id,d):`<div class="libitem">${libBtn(id,d)}<button class="btn" data-edit="${id}" title="Szerkesztés" aria-label="${esc(d.name)} szerkesztése" ${ui.sim?'disabled':''}>✎</button></div>`).join('')).join('');
   $('#swatches').innerHTML=WCOL.map(([c,l])=>`<button class="sw ${ui.wireColor===c?'on':''}" data-col="${c}" title="${l}" aria-label="${l}" style="background:${c}"></button>`).join('');
   const pr=$('#props');const p=selPart();
   if(p){const d=DEFS[p.type];const extra=paramUI(p);
@@ -639,6 +648,8 @@ function renderLeft0(){
     $('#pRot').onclick=rotate;$('#pMir').onclick=mirror;$('#pDel').onclick=delSel;
     {const row=document.createElement('div');row.className='row';row.innerHTML=`<button class="btn" id="pDup" title="Új példány ugyanezekkel a beállításokkal">⧉ Duplikálás <kbd>D</kbd></button><label class="check small"><input type="checkbox" id="pXray" ${p.xray?'checked':''}> Röntgen</label>`;pr.appendChild(row);
       $('#pDup').onclick=()=>duplicate(p);$('#pXray').onchange=e=>{pushUndo();if(e.target.checked)p.xray=true;else delete p.xray;commit(true);};}
+    {const row=document.createElement('div');row.className='row';const own=!(p.type in PARTS);row.innerHTML=own?'<button class="btn" id="pEditDef">✎ Alkatrész szerkesztése</button>':'<button class="btn" id="pCopyDef" title="A beépített leírásból saját, szerkeszthető alkatrész">Másolat saját alkatrészként</button>';pr.appendChild(row);
+      if(own)$('#pEditDef').onclick=()=>openEditor(editorHost,{type:p.type});else $('#pCopyDef').onclick=()=>openEditor(editorHost,{from:PARTS[p.type]});}
     {const row=document.createElement('div');row.className='row';row.innerHTML='<button class="btn" id="pToAuto" title="Az alkatrész kézi bekötését kapcsolatokká alakítja, így mozgatáskor követi">Bekötés automatikusra</button>';pr.appendChild(row);
       $('#pToAuto').onclick=()=>{if(!manualToAuto(p.id))flashMsg('Ennek az alkatrésznek nincs kézi bekötése');};}
     if(p.type==='button'){const row=document.createElement('div');row.className='row';row.innerHTML='<button class="btn" id="pAuto">A → GPIO, B → GND</button>';pr.appendChild(row);
@@ -662,7 +673,7 @@ function renderLeft0(){
   } else pr.innerHTML=`<span class="muted small">${ui.tool==='link'&&!ui.placing?'Kattints egy lábra, majd a cél lábra (vagy GND / szabad GPIO).':''}${ui.placing?`Lerakás: <b>${DEFS[ui.placing].name}</b>${ui.ghost.from?` (${esc(ui.ghost.from)} másolata)`:''}. Kattints a panelra; Shift+kattintással több példány.`:ui.tool==='bridge'?'Húzd az egeret szomszédos lyukakon át: minden szekcióhatárnál híd keletkezik.':ui.tool==='wire'?'Kattints a kezdő, majd a cél lyukra.':ui.tool==='erase'?'Kattints vagy húzz a törlendő elemen.':'Kattints egy alkatrészre, vezetékre vagy hídra. Shift+kattintás vagy keret húzása üres helyen: több elem. Ctrl+A: minden.'}</span>`;
 }
 $('#tools').addEventListener('click',e=>{const b=e.target.closest('[data-tool]');if(b)setTool(b.dataset.tool);});
-$('#lib').addEventListener('click',e=>{const b=e.target.closest('[data-lib]');if(!b)return;const t=b.dataset.lib;ui.placing=ui.placing===t?null:t;ui.ghost={rot:0,mir:false};ui.sel=null;ui.wireStart=null;renderLeft();draw();});
+$('#lib').addEventListener('click',e=>{const ed=e.target.closest('[data-edit]');if(ed){openEditor(editorHost,{type:ed.dataset.edit});return;}const b=e.target.closest('[data-lib]');if(!b)return;const t=b.dataset.lib;ui.placing=ui.placing===t?null:t;ui.ghost={rot:0,mir:false};ui.sel=null;ui.wireStart=null;renderLeft();draw();});
 $('#swatches').addEventListener('click',e=>{const b=e.target.closest('[data-col]');if(b){ui.wireColor=b.dataset.col;renderLeft();}});
 
 function renderRight(){const fk=focusKey();renderRight0();restoreFocus(fk);}
@@ -725,8 +736,8 @@ $('#vComp').onclick=()=>setView('comp');$('#vCu').onclick=()=>setView('cu');
 $('#zIn').onclick=()=>zoom(0.2);$('#zOut').onclick=()=>zoom(-0.2);
 $('#bUndo').onclick=undo;$('#bRedo').onclick=redo;
 $('#bSim').onclick=()=>setSim(!ui.sim);
-$('#bPreset').onclick=()=>{pushUndo();D=presetMacropad();ui.sel=null;commit();};
-$('#bPreset2').onclick=()=>{pushUndo();D=presetRouted();ui.sel=null;commit();};
+$('#bPreset').onclick=()=>{pushUndo();D=keepLib(presetMacropad());ui.sel=null;commit();};
+$('#bPreset2').onclick=()=>{pushUndo();D=keepLib(presetRouted());ui.sel=null;commit();};
 $('#autoR').addEventListener('change',e=>{pushUndo();D.settings.autoRoute=e.target.checked;commit();});
 $('#bRoute').onclick=()=>{pushUndo();route({full:true});commit(true);};
 $('#bFreeze').onclick=()=>{if(!D.auto.bridges.length&&!D.auto.wires.length)return;pushUndo();D.bridges.push(...D.auto.bridges.map(b=>b.slice(0,4)));D.wires.push(...D.auto.wires.map(w=>({a:w.a,b:w.b,color:w.color})));D.auto={bridges:[],wires:[]};commit(true);};
@@ -735,13 +746,15 @@ $('#bUnroute').onclick=()=>{pushUndo();D.auto={bridges:[],wires:[]};D.settings.a
 $('#links').addEventListener('click',e=>{const b=e.target.closest('[data-dl]');if(b){pushUndo();D.links=D.links.filter(l=>l.id!==b.dataset.dl);commit();return;}
   const li=e.target.closest('[data-li]');if(li){const id=li.dataset.li;ui.selLink=ui.selLink===id?null:id;renderLinks();draw();status();
     if(ui.selLink){const g=linkGeom(D.links.find(x=>x.id===id));if(g){const sc=$('#scroll'),pts=[g.start,g.end].filter(Boolean).map(([r,c])=>toScreen(hx(c),hy(r)));const vx=pts.reduce((t,p)=>t+p[0],0)/pts.length,vy=pts.reduce((t,p)=>t+p[1],0)/pts.length;sc.scrollTo({left:vx-sc.clientWidth/2,top:vy-sc.clientHeight/2,behavior:'smooth'});}}}});
-$('#bClear').onclick=()=>{const b=$('#bClear');if(Date.now()-ui.confirmClear<3000){pushUndo();D=emptyDesign();ui.sel=null;commit();b.textContent='Üres panel';ui.confirmClear=0;return;}ui.confirmClear=Date.now();b.textContent='Biztos? Kattints újra';setTimeout(()=>{b.textContent='Üres panel';},3000);};
+$('#bClear').onclick=()=>{const b=$('#bClear');if(Date.now()-ui.confirmClear<3000){pushUndo();D=keepLib(emptyDesign());ui.sel=null;commit();b.textContent='Üres panel';ui.confirmClear=0;return;}ui.confirmClear=Date.now();b.textContent='Biztos? Kattints újra';setTimeout(()=>{b.textContent='Üres panel';},3000);};
 $('#bExport').onclick=()=>{$('#json').value=JSON.stringify(D,null,1);$('#jsonMsg').textContent='A terv JSON-ja a mezőben.';};
 $('#bCopy').onclick=()=>{const ta=$('#json');if(!ta.value)ta.value=JSON.stringify(D,null,1);navigator.clipboard.writeText(ta.value).then(()=>$('#jsonMsg').textContent='Vágólapra másolva.').catch(()=>{ta.focus();ta.select();$('#jsonMsg').textContent='Kijelöltem a szöveget, másold Ctrl+C-vel.';});};
 $('#bImport').onclick=()=>{try{const d=normalize(JSON.parse($('#json').value));pushUndo();D=d;ui.sel=null;commit();$('#jsonMsg').textContent=`Betöltve: ${d.parts.length} alkatrész, ${d.bridges.length} híd, ${d.wires.length} vezeték.`;}catch(e){$('#jsonMsg').textContent='Hibás JSON: '+e.message;}};
 function normalize(d){
   if(!d||typeof d!=='object')throw new Error('nem objektum');
   const o=emptyDesign();if(d.board)Object.assign(o.board,d.board);
+  for(const [k,def] of Object.entries(d.customParts||{})){if(!/^c_[a-z0-9_]+$/.test(k)||k in PARTS||hasErrors(validatePartDef(def)))continue;o.customParts[k]=def;}
+  syncDefs(o.customParts);
   o.parts=(d.parts||[]).map((p,i)=>{if(!DEFS[p.type])throw new Error('ismeretlen alkatrész: '+p.type);return{id:p.id||('p'+(1000+i)),type:p.type,label:p.label||DEFS[p.type].prefix+(i+1),r:p.r|0,c:p.c|0,rot:(p.rot|0)&3,mir:!!p.mir,...(p.xray?{xray:true}:{}),props:{...DEFS[p.type].props,...(p.props||{})}};});
   o.bridges=(d.bridges||[]).filter(b=>Array.isArray(b)&&b.length===4).map(b=>b.map(Number));
   o.wires=(d.wires||[]).filter(w=>w&&w.a&&w.b).map(w=>({a:w.a.map(Number),b:w.b.map(Number),color:w.color||'#1c7ed6'}));
@@ -1031,6 +1044,29 @@ function presetRouted(){
   return d;
 }
 
+/* ---------- Saját alkatrészek ---------- */
+function keepLib(nd){nd.customParts={...(D&&D.customParts||{})};return nd;}
+const editorHost={
+  builtin:PARTS,
+  custom:()=>D.customParts||{},
+  save(type,def){pushUndo();const t=type||typeKeyFor(def.name,k=>k in DEFS);D.customParts={...D.customParts,[t]:def};commit();libMsg(`Mentve: ${def.name}`);return t;},
+  remove(type){pushUndo();const rest={...D.customParts};delete rest[type];D.customParts=rest;const gone=D.parts.filter(p=>p.type===type).map(p=>p.id);D.parts=D.parts.filter(p=>p.type!==type);gone.forEach(dropLinks);ui.sel=null;commit();libMsg('Alkatrész törölve');},
+  usage:t=>D.parts.filter(p=>p.type===t).length,
+  place(t){if(!DEFS[t])return;ui.placing=t;ui.ghost={rot:0,mir:false};ui.sel=null;ui.wireStart=null;renderLeft();draw();flashMsg('Kattints a panelra a lerakáshoz');},
+  roleColor:r=>ROLEC[r]||'#868e96'
+};
+function libMsg(t){const e=$('#libMsg');if(e)e.textContent=t;}
+$('#bNewPart').onclick=()=>openEditor(editorHost,{});
+$('#bLibExp').onclick=()=>{const n=Object.keys(D.customParts||{}).length;if(!n){libMsg('Még nincs saját alkatrész.');return;}
+  const url=URL.createObjectURL(new Blob([JSON.stringify(exportLibrary(D.customParts),null,2)],{type:'application/json'}));
+  const a=document.createElement('a');a.href=url;a.download='proofboard-alkatreszek.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);libMsg(`${n} alkatrész exportálva.`);};
+$('#bLibImp').onclick=()=>$('#libFile').click();
+$('#libFile').addEventListener('change',async e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(!f)return;
+  try{const res=importLibrary(JSON.parse(await f.text()),k=>k in DEFS);const n=Object.keys(res.parts).length;
+    if(n){pushUndo();D.customParts={...D.customParts,...res.parts};commit();}
+    libMsg(`${n} alkatrész betöltve${res.rejected.length?`, ${res.rejected.length} hibás kihagyva (${res.rejected.map(r=>r.key).join(', ')})`:''}.`);}
+  catch(err){libMsg('Nem sikerült betölteni: '+err.message);}});
+
 /* ---------- Oldalsávok méretezése ---------- */
 (function(){
   const app=$('.app'),DEF={l:250,r:320},LIM={l:[180,560],r:[220,640]};let w={...DEF};
@@ -1079,7 +1115,7 @@ $('#bdApply').onclick=()=>{
 window.pcb={
   load(d){D=normalize(typeof d==='string'?JSON.parse(d):d);ui.sel=null;commit();return true;},
   get(){return JSON.parse(JSON.stringify(D));},
-  preset(){D=presetMacropad();commit();},
+  preset(){D=keepLib(presetMacropad());commit();},
   sim(on=true){setSim(!!on);},
   press(label,down=true){const p=D.parts.find(x=>x.label===label&&hasPress(x));if(!p)return false;if(!ui.sim)setSim(true);ui.pressed[p.id]=!!down;recompute();return true;},
   read(){return SIM?SIM.gpios.map(g=>({pin:g.q.name,mode:g.mode,V:+g.V.toFixed(3),level:logic(g)})):[];},
@@ -1087,7 +1123,7 @@ window.pcb={
   route(){route({full:true});commit(true);return pcb.links();},
   move(label,dr,dc){const p=D.parts.find(x=>x.label===label);if(!p)return false;const t={...p,r:p.r+dr,c:p.c+dc};if(!partFits(t))return false;pushUndo();p.r=t.r;p.c=t.c;ui.moved=new Set([p.id]);commit();return true;},
   links(){return D.links.map(l=>({...l,text:linkText(l),...(ui.linkState.get(l.id)||{})}));},
-  presetRouted(){D=presetRouted();commit();},
+  presetRouted(){D=keepLib(presetRouted());commit();},
   toAuto(pid){return manualToAuto(pid||null);},
   defs(){return JSON.parse(JSON.stringify(PARTS));},
   // --- tesztekhez és szkripteléshez ---
@@ -1099,6 +1135,9 @@ window.pcb={
   linkInfo(){return D.links.map(l=>{const g=linkGeom(l);return{text:linkText(l),start:g&&g.start,end:g&&g.end,endPin:g&&g.endPin?pinLabel(g.endPin):null,bridges:g?g.bridges.length:0};});},
   selectLink(i){const l=D.links[i];ui.selLink=l?l.id:null;renderLinks();draw();status();return statusText();},
   reveal(r,c){const sc=$('#scroll'),[vx,vy]=toScreen(hx(c),hy(r));sc.scrollTo(vx-sc.clientWidth/2,vy-sc.clientHeight/2);const rc=cv.getBoundingClientRect();return{x:rc.left+vx,y:rc.top+vy};},
+  customParts(){return JSON.parse(JSON.stringify(D.customParts||{}));},
+  addPart(def){const problems=validatePartDef(def);if(hasErrors(problems))return{type:null,problems};return{type:editorHost.save(null,def),problems};},
+  openEditor(type){openEditor(editorHost,type?{type}:{});},
   version:__APP_VERSION__
 };
 function statusText(){return $('#status').textContent;}
@@ -1106,7 +1145,7 @@ function statusText(){return $('#status').textContent;}
 /* ---------- Indulás ---------- */
 (function init(){
   let d=null;try{const s=localStorage.getItem(STORE_KEY);if(s)d=normalize(JSON.parse(s));}catch(e){d=null;}
-  D=d||presetMacropad();
+  D=d||presetMacropad();syncDefs(D.customParts);
   boardUI();
   A0=analyze(false);AS=A0;setView('comp');renderLeft();recompute();
   // kezdeti nagyítás a szélességhez
