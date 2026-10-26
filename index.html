@@ -38,6 +38,7 @@
     <section>
       <p class="h">Eszközök</p>
       <div class="tools" id="tools"></div>
+      <p class="help touch-only" style="margin-top:8px">Érintéssel: egy ujjal húzva görgetsz, alkatrészen húzva mozgatod; hosszan nyomva kijelölő keret; két ujjal nagyítás és görgetés. Lerakáskor az előnézet az ujjad fölött jár, felengedésre kerül le.</p>
     </section>
     <section>
       <p class="h">Alkatrészek</p>
@@ -80,6 +81,7 @@
   <div class="gutter" id="gL" role="separator" aria-orientation="vertical" aria-label="Bal oldalsáv szélessége" tabindex="0" title="Húzd a szélesség állításához, dupla kattintás: alapméret"></div>
   <main class="stage">
     <div class="scroll" id="scroll"><canvas id="cv"></canvas></div>
+    <div class="fab" id="fab" role="toolbar" aria-label="Műveletek a kijelöléssel" hidden></div>
     <div class="status" id="status">—</div>
   </main>
   <div class="gutter" id="gR" role="separator" aria-orientation="vertical" aria-label="Jobb oldalsáv szélessége" tabindex="0" title="Húzd a szélesség állításához, dupla kattintás: alapméret"></div>
@@ -140,6 +142,11 @@
       </details>
     </section>
   </aside>
+  <nav class="tabbar" id="tabbar" aria-label="Panelek">
+    <button class="tab on" data-sheet="" aria-pressed="true">Panel</button>
+    <button class="tab" data-sheet="left" aria-pressed="false">Eszközök</button>
+    <button class="tab" data-sheet="right" aria-pressed="false">Ellenőrzés <span class="badge" id="tabIss"></span></button>
+  </nav>
 </div>
 <script type="module" src="/src/app.ts"></script>
 </body>
