@@ -8,6 +8,7 @@ Próbanyák-tervező és -szimulátor a böngészőben: 1×3-as szekciós (tripa
 
 - **Panel:** állítható méret és szekcióhossz (pontraszter, 1×2…1×5, teljes csík), alkatrészoldali és tükrözött rézoldali nézet, 90°-os nézetforgatás.
 - **Alkatrészek:** Raspberry Pi Pico W, 12 mm-es nyomógomb, ellenállás, kerámia és elektrolit kondenzátor, átkötő huzal, LED, dióda, NPN tranzisztor (BC547, 2N3904, 2N2222A), N-MOSFET, tüskesor, akkucsatlakozó, valamint modulok: TP4056 töltő, Nokia 5110 kijelző, KY-023 joystick, és külső alkatrészek: DC motor, SG90 szervó. Forgatás, tükrözés, duplikálás, többes kijelölés, röntgen nézet.
+- **Csíkvágás:** csíkos (és szekciós) panelen kézi vágás a Csíkvágás eszközzel (<kbd>K</kbd>): a lyuk közepére kattintva kifúrt lyuk, két sor közé kattintva rés; automatikus csíkvágás a kapcsolatok szerint (csíkos panelen alapból bekapcsolva), amely a forrás csíkján lévő szabad GPIO-t is hozzárendeli.
 - **Bekötés:**
   - kézi forrasztóhidak a rézoldalon, szabad vezetékek az alkatrészoldalon;
   - kapcsolatok (pl. „gomb A → szabad GPIO”, „B → GND”) automatikus útvonalkereséssel, amely mozgatáskor csak az érintett útvonalakat tervezi újra;
@@ -36,7 +37,7 @@ npm run build:single # egyetlen önálló HTML-fájl (dist-single/index.html)
 ```
 src/core/     séma (típusok), kifejezés-értelmező, alkatrész-fordító, leírás-ellenőrző, könyvtárformátum — tiszta, típusos
 src/parts/    beépített alkatrészleírások (adat)
-src/engine/   egyenletmegoldó (csomóponti analízis)
+src/engine/   egyenletmegoldó (csomóponti analízis), panel-elrendezés (csíkdarabok, vágások, vágásjavaslat)
 src/ui/       alkatrész-szerkesztő
 src/app.ts    felület, netlista, szimuláció, ellenőrzés, útvonalkereső — folyamatosan bomlik modulokra
 tests/unit/   Vitest

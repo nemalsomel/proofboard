@@ -7,7 +7,8 @@ Próbanyák-tervező és -szimulátor (Vite + TypeScript, keretrendszer nélkül
 - `npm test` / `npm run test:e2e` külön is futtatható (az e2e a `dist/`-et szolgálja ki, ezért előtte `npm run build`).
 
 ## Szerkezet és szabályok
-- `src/core/` (séma, kifejezések, fordító), `src/parts/` (beépített alkatrészek), `src/engine/solve.ts` – szigorúan típusos, DOM-mentes, unit tesztelt.
+- `src/core/` (séma, kifejezések, fordító), `src/parts/` (beépített alkatrészek), `src/engine/solve.ts`, `src/engine/board.ts` – szigorúan típusos, DOM-mentes, unit tesztelt.
+- A rézcsík-darabok (cellák) egyetlen forrása a `buildLayout` (szekciók + csíkvágások): netlista, útvonalkereső és rajzolás is ezt használja, fix szekcióhosszal ne számolj.
 - `src/app.ts` még `// @ts-nocheck`. Folyamatosan bontjuk `src/engine/` (netlista, szimuláció, ellenőrzés, útvonalkereső) és `src/ui/` (rajzolás, panelek, állapot) modulokra; kiemeléskor a kód típust kap, a viselkedés nem változik.
 - Alkatrész = adat (`src/core/schema.ts`). Új alkatrészhez a `src/parts/builtin.ts`-be kerül leírás; típusnévre (`p.type==='…'`) új kódot ne írj, ha a séma kifejezi: ellenőrzés és útvonalkereső a lábszerepekből (`role`), képességekből (`caps`, pl. `adc`) és a `vmin`/`vmax` tartományból dolgozik. A külső alkatrész (`mount: 'off'`) a panel mellé kerül, a lábai kivezetések, kábellel (vezetékvég a kivezetésen) köt be.
 - Az e2e tesztek csak a `window.pcb` API-t és a DOM-ot használják. Ha egy tesztnek új belső állapot kell, az API bővüljön.
