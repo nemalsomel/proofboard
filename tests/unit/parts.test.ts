@@ -78,3 +78,17 @@ describe('modulok és lábképességek', () => {
     expect(r(-100)).toEqual([10001, 1]);
   });
 });
+
+describe('kondenzátor és NPN', () => {
+  it('az NPN lábsorrendje a típustól függ', () => {
+    const order = (kind: string) => DEFS.npn.pins(inst('npn', { kind })).sort((a, b) => a.lc - b.lc).map(q => q.id).join('');
+    expect(order('BC547')).toBe('CBE');
+    expect(order('2N2222')).toBe('EBC');
+  });
+  it('kis értékek is pontosan jutnak a modellbe (100 nF, 10 pF)', () => {
+    for (const f of [100e-9, 10e-12]) {
+      const el = (DEFS.cap.def.model || [])[0] as { f: string };
+      expect(num(el.f, penvD(DEFS.cap.def, inst('cap', { f })))).toBeCloseTo(f, 20);
+    }
+  });
+});

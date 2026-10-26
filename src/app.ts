@@ -20,7 +20,7 @@ const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 
 /* ---------- Alkatrész-definíciók ---------- */
 const rgba=(hex,a)=>{const n=parseInt(hex.slice(1),16);return`rgba(${n>>16},${(n>>8)&255},${n&255},${a})`;};
-const ROLEC={vin:'#d6336c',pout:'#e8590c',chg:'#e8590c',sig:'#2563eb',adc:'#0ca678',nc:'#adb5bd',j:'#aeb5bb',s:'#1f2328',g:'#2563eb',d:'#868e96',A:'#2563eb',B:'#d97706',an:'#e03131',ka:'#1f2328',gnd:'#1f2328',p33:'#e03131',pwr:'#be4bdb',gpio:'#2563eb',misc:'#868e96',r:'#868e96',h:'#868e96',bp:'#e03131',bn:'#1f2328'};
+const ROLEC={c:'#868e96',cp:'#e03131',cn:'#1f2328',col:'#5c666e',base:'#2563eb',emit:'#1f2328',vin:'#d6336c',pout:'#e8590c',chg:'#e8590c',sig:'#2563eb',adc:'#0ca678',nc:'#adb5bd',j:'#aeb5bb',s:'#1f2328',g:'#2563eb',d:'#868e96',A:'#2563eb',B:'#d97706',an:'#e03131',ka:'#1f2328',gnd:'#1f2328',p33:'#e03131',pwr:'#be4bdb',gpio:'#2563eb',misc:'#868e96',r:'#868e96',h:'#868e96',bp:'#e03131',bn:'#1f2328'};
 const DEFS=compileAll(PARTS);
 /** A saját alkatrészek fordítása a beépítettek mellé (a terv `customParts` mezőjéből). */
 function syncDefs(custom){
@@ -124,23 +124,26 @@ const pinLabel=q=>q.part.type==='pico'?`${q.part.label}.${q.name}`:`${q.part.lab
 /* ---------- Áramkör-szimuláció (csomóponti analízis, szakaszonként lineáris diódák) ---------- */
 const GPIO_MODES=[['pullup','be, felhúzva'],['pulldown','be, lehúzva'],['float','be, lebegő'],['adc','analóg (ADC)'],['out_high','ki: 1'],['out_low','ki: 0']];
 function gpioMode(p,id,q,A){return D.gpio[p.id+'.'+id]||(q?gpioDefault(q,A):'pullup');}
+const RBE=20,RCE=1; // NPN: bázis-emitter és telítési soros ellenállás (Ω)
 function simulate(A){
   const idx=new Map();const nd=net=>{if(!idx.has(net))idx.set(net,idx.size);return idx.get(net);};
   for(const q of A.pins) if(q.net>=0) nd(q.net);
   const n=idx.size;
-  const picos=[],leds=[],ress=[],bats=[],fets=[];
+  const picos=[],leds=[],ress=[],bats=[],fets=[],caps=[],bjts=[];
   for(const p of D.parts){const bp=A.byPart.get(p.id);const m=bp.map,N=id=>idx.get(m[id].net);const model=DEFS[p.type].def.model;if(!model)continue;const E=penv(p);
     for(const el of model){
       if(el.el==='pico')picos.push({p,gnd:N(el.gnd),vbus:N(el.vbus),vsys:N(el.vsys),v33:N(el.v33),gp:bp.pins.filter(q=>q.role==='gpio').map(q=>({q,node:idx.get(q.net),mode:gpioMode(p,q.id,q,A)})),reg:false,d:false});
       else if(el.el==='diode')leds.push({p,a:N(el.a),k:N(el.k),vf:num(el.vf,E),ron:Math.max(1e-3,num(el.ron??15,E)),imax:el.imax!=null?num(el.imax,E):null,light:!!el.light,on:false});
       else if(el.el==='resistor')ress.push({p,a:N(el.a),b:N(el.b),g:1/Math.max(1e-3,num(el.ohm,E))});
       else if(el.el==='source')bats.push({p,a:N(el.p),b:N(el.n),E:num(el.v,E),g:1/Math.max(1e-3,num(el.rint??0.1,E)),kind:el.kind||'battery'});
+      else if(el.el==='capacitor')caps.push({p,a:N(el.a),b:N(el.b),f:num(el.f,E),vmax:el.vmax!=null?num(el.vmax,E):null,polar:!!el.polar});
+      else if(el.el==='npn')bjts.push({p,c:N(el.c),b:N(el.b),e:N(el.e),beta:Math.max(1,num(el.beta,E)),vbe:num(el.vbe??0.65,E),vcesat:num(el.vcesat??0.1,E),imax:el.imax!=null?num(el.imax,E):null,be:false,st:'off',ic:0});
       else if(el.el==='nmos')fets.push({p,d:N(el.d),g:N(el.g),s:N(el.s),vth:num(el.vth,E),ron:Math.max(1e-3,num(el.ron,E)),imax:el.imax!=null?num(el.imax,E):null,on:false});
     }
   }
   let V=new Float64Array(n),els=[];
   for(let it=0;it<60;it++){
-    els=[];const add=(a,b,g,E,kind,ref)=>els.push({a,b,g,E,kind,ref});
+    els=[];const add=(a,b,g,E,kind,ref,cp,cn)=>els.push(cp==null?{a,b,g,E,kind,ref}:{a,b,g,E,kind,ref,cp,cn});
     for(let i=0;i<n;i++)add(i,-1,1e-9,0,'leak');
     for(const pc of picos){
       add(pc.gnd,-1,1e4,0,'gref',pc);
@@ -157,24 +160,39 @@ function simulate(A){
     for(const l of leds)add(l.a,l.k,l.on?1/l.ron:1e-9,l.on?l.vf:0,'led',l);
     for(const b of bats)add(b.a,b.b,b.g,b.E,'bat',b);
     for(const f of fets)add(f.d,f.s,f.on?1/f.ron:1e-9,0,'fet',f);
+    // NPN: B–E dióda; C–E lezárva, telítve (kis ellenállás + Uce,sat) vagy aktívan (áramforrás Ic = β·Ib)
+    for(const t of bjts){add(t.b,t.e,t.be?1/RBE:1e-9,t.be?t.vbe:0,'bjt_be',t);
+      if(t.st==='sat')add(t.c,t.e,1/RCE,t.vcesat,'bjt_ce',t);else if(t.st==='act')add(t.c,t.e,t.beta/RBE,t.vbe,'bjt_ce',t,t.b,t.e);} // aktív: Ic = β·(Ube−0,65)/Rbe = β·Ib
     V=solve(n,els);
     let ch=false;
     for(const l of leds){const d=V[l.a]-V[l.k];if(!l.on&&d>l.vf+1e-4){l.on=true;ch=true;}else if(l.on&&d<l.vf){l.on=false;ch=true;}}
     for(const f of fets){const on=(V[f.g]-V[f.s])>f.vth;if(on!==f.on){f.on=on;ch=true;}}
+    for(const t of bjts){const vbe=V[t.b]-V[t.e],vce=V[t.c]-V[t.e];
+      if(!t.be&&vbe>t.vbe+1e-4){t.be=true;ch=true;}else if(t.be&&vbe<t.vbe){t.be=false;ch=true;}
+      const want=t.beta*(t.be?Math.max(0,(vbe-t.vbe)/RBE):0);
+      if(!t.be){if(t.st!=='off'){t.st='off';ch=true;}}
+      else if(t.st==='off'){t.st='act';ch=true;}
+      else if(t.st==='sat'){if((vce-t.vcesat)/RCE>want*1.02+1e-9){t.st='act';ch=true;}}
+      else if(vce<t.vcesat-0.01){t.st='sat';ch=true;}}
     for(const pc of picos){const d=V[pc.vbus]-V[pc.vsys];if(!pc.d&&d>0.3001){pc.d=true;ch=true;}else if(pc.d&&d<0.3){pc.d=false;ch=true;}
       const w=(V[pc.vsys]-V[pc.gnd])>1.8;if(w!==pc.reg){pc.reg=w;ch=true;}}
     if(!ch)break;
   }
-  const cur=e=>e.g*((e.a>=0?V[e.a]:0)-(e.b>=0?V[e.b]:0)-e.E);
+  const vv=i=>i>=0?V[i]:0,cur=e=>e.g*(vv(e.cp??e.a)-vv(e.cn??e.b)-e.E);
   // lebegés: forrásokból elérhető-e
   const adj=Array.from({length:n},()=>[]),seed=new Set();
-  for(const e of els){if(e.kind==='leak'||e.g<1e-6)continue;if(e.a>=0&&e.b>=0){adj[e.a].push(e.b);adj[e.b].push(e.a);}
+  for(const e of els){if(e.kind==='leak'||e.g<1e-6||e.cp!=null)continue;if(e.a>=0&&e.b>=0){adj[e.a].push(e.b);adj[e.b].push(e.a);}
     if(['gref','vbus','v33','gout','bat'].includes(e.kind)){if(e.a>=0)seed.add(e.a);if(e.b>=0)seed.add(e.b);}}
   const reach=new Uint8Array(n),st=[...seed];st.forEach(i=>reach[i]=1);
   while(st.length){const i=st.pop();for(const j of adj[i])if(!reach[j]){reach[j]=1;st.push(j);}}
   const netV=new Map(),floating=new Set();
   for(const [net,i] of idx){netV.set(net,V[i]);if(!reach[i])floating.add(net);}
-  const out={netV,floating,leds:[],picos:[],gpios:[],bats:[],srcI:[],fets:[]};
+  const out={netV,floating,leds:[],picos:[],gpios:[],bats:[],srcI:[],fets:[],caps:[],bjts:[]};
+  // kondenzátor: feszültség és időállandó (τ = R·C, R a kapcsain látott Thevenin-ellenállás a munkapontban)
+  for(const k of caps){const U=V[k.a]-V[k.b],test=solve(n,[...els,{a:k.a,b:k.b,g:1e-9,E:-1e6}]),R=Math.abs((test[k.a]-test[k.b])-U)/1e-3;
+    out.caps.push({p:k.p,U,f:k.f,vmax:k.vmax,polar:k.polar,R,tau:R<1e8?R*k.f:null,float:!reach[k.a]||!reach[k.b]});}
+  for(const t of bjts){const be=els.find(e=>e.kind==='bjt_be'&&e.ref===t),ce=els.find(e=>e.kind==='bjt_ce'&&e.ref===t);
+    out.bjts.push({p:t.p,st:t.st,ib:be?Math.max(0,cur(be)):0,ic:ce?cur(ce):0,vbe:V[t.b]-V[t.e],vce:V[t.c]-V[t.e],beta:t.beta,imax:t.imax,floatBase:!reach[t.b]});}
   for(const e of els){
     if(e.kind==='led')out.leds.push({p:e.ref.p,I:Math.max(0,cur(e)),on:e.ref.on,light:e.ref.light,imax:e.ref.imax});
     if(e.kind==='fet'){const f=e.ref;out.fets.push({p:f.p,on:f.on,vgs:V[f.g]-V[f.s],I:cur(e),imax:f.imax,floatGate:!reach[f.g]});}
@@ -255,6 +273,13 @@ function checkAll(){
     for(const s of SIM.srcI){if(s.kind==='vbus'&&s.I>1)add('err',`Zárlat a VBUS-on (${s.I.toFixed(1)} A)`,[]);if(s.kind==='v33'&&s.I>0.3)add('err',`3V3 túlterhelve vagy zárlatos (${(s.I*1000).toFixed(0)} mA)`,[]);}
     for(const g of SIM.gpios){const mA=Math.abs(g.I)*1000;if(mA>50)add('err',`${g.q.name}: ${mA.toFixed(0)} mA, kimenet zárlatban`,[[g.q.r,g.q.c]]);else if(mA>12)add('warn',`${g.q.name}: ${mA.toFixed(1)} mA, sok (ajánlott max. ~12 mA)`,[[g.q.r,g.q.c]]);}
     for(const l of SIM.leds){if(l.light&&l.I>0.03)add('warn',`${l.p.label}: ${(l.I*1000).toFixed(0)} mA, előtét-ellenállás kell`,[]);else if(!l.light&&l.imax&&l.I>l.imax)add('warn',`${l.p.label}: ${fmtSI(l.I)}A, több a megengedett ${fmtSI(l.imax)}A-nél`,[]);}
+    for(const t of SIM.bjts){const L=t.p.label;
+      if(t.floatBase)add('warn',`${L}: a bázis lebeg. Tegyél lehúzó ellenállást a B és az E közé (pl. 10 kΩ), vagy kösd kimenetre.`,[]);
+      if(t.imax&&Math.abs(t.ic)>t.imax)add('warn',`${L}: ${fmtSI(Math.abs(t.ic))}A kollektoráram, több a megengedett ${fmtSI(t.imax)}A-nél`,[]);
+      else if(t.st==='act'&&t.ic>1e-3)add('warn',`${L}: nem telítődik (Uce ${t.vce.toFixed(2)} V, Ic ${fmtSI(t.ic)}A = β·Ib). Kapcsolónak kisebb bázisellenállás kell: a bázisáram (most ${fmtSI(t.ib)}A) legyen a kívánt kollektoráram kb. tizede.`,[]);}
+    for(const k of SIM.caps){const L=k.p.label;if(k.float)continue;
+      if(k.polar&&k.U<-0.5)add('err',`${L}: fordítva van bekötve (${k.U.toFixed(2)} V). Az elektrolit kondenzátor + lába kerüljön a magasabb feszültségre.`,[]);
+      else if(k.vmax!=null&&Math.abs(k.U)>k.vmax)add('err',`${L}: ${Math.abs(k.U).toFixed(2)} V, több a névleges ${k.vmax} V-nál`,[]);}
     for(const f of SIM.fets){if(f.floatGate)add('warn',`${f.p.label}: a gate lebeg. Tegyél lehúzó ellenállást a G és az S közé (pl. 100 kΩ), vagy kösd kimenetre.`,[]);if(f.imax&&Math.abs(f.I)>f.imax)add('warn',`${f.p.label}: ${fmtSI(Math.abs(f.I))}A, több a megengedett ${fmtSI(f.imax)}A-nél`,[]);}
     for(const b of SIM.bats){if(b.kind==='supply'){if(b.I<-2)add('err',`${b.p.label}: zárlat a tápbemeneten (${(-b.I).toFixed(1)} A)`,[]);continue;}
       // töltőmodulról (chg láb) tölt-e, vagy közvetlenül a Pico USB-jéről a VSYS-en át
@@ -730,6 +755,9 @@ function renderRight0(){
   const lights=SIM.leds.filter(l=>l.light);
   if(SIM.fets.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>FET</th><th>U<sub>GS</sub></th><th>I<sub>D</sub></th><th>Állapot</th></tr></thead><tbody>`+SIM.fets.map(f=>`<tr><td>${esc(f.p.label)}</td><td>${f.floatGate?'lebeg':f.vgs.toFixed(2)+' V'}</td><td>${fmtSI(Math.abs(f.I))}A</td><td>${f.on?'<span class="c-ok">nyitva</span>':'<span class="muted">zárva</span>'}</td></tr>`).join('')+'</tbody></table>';
   if(lights.length){h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>LED</th><th>Áram</th><th>Állapot</th></tr></thead><tbody>`+lights.map(l=>`<tr><td>${esc(l.p.label)}</td><td>${(l.I*1000).toFixed(2)} mA</td><td>${l.I>2e-4?'<span class="c-ok">világít</span>':'<span class="muted">sötét</span>'}</td></tr>`).join('')+'</tbody></table>';}
+  const BST={off:'<span class="muted">zárva</span>',act:'<span class="c-warn">aktív</span>',sat:'<span class="c-ok">telítve</span>'};
+  if(SIM.bjts.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>NPN</th><th>I<sub>B</sub></th><th>I<sub>C</sub></th><th>U<sub>CE</sub></th><th>Állapot</th></tr></thead><tbody>`+SIM.bjts.map(t=>`<tr><td>${esc(t.p.label)}</td><td>${t.floatBase?'lebeg':fmtSI(t.ib)+'A'}</td><td>${fmtSI(Math.abs(t.ic))}A</td><td>${t.vce.toFixed(2)} V</td><td>${BST[t.st]}</td></tr>`).join('')+'</tbody></table>';
+  if(SIM.caps.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>Kond.</th><th>U</th><th title="Időállandó: ennyi idő alatt töltődik fel kb. 63%-ra, 5τ alatt teljesen">τ</th></tr></thead><tbody>`+SIM.caps.map(k=>`<tr><td>${esc(k.p.label)} <span class="muted">${fmtSI(k.f)}F</span></td><td>${k.float?'–':k.U.toFixed(2)+' V'}</td><td>${k.tau!=null?fmtSI(k.tau)+'s':'<span class="muted">nincs töltőút</span>'}</td></tr>`).join('')+'</tbody></table>';
   const batt=SIM.bats.filter(b=>b.kind!=='supply');
   if(batt.length)h+=batt.map(b=>`<div class="small" style="margin-top:6px">${esc(b.p.label)}: ${b.I>1e-4?'töltődik':b.I<-1e-4?'merül':'nincs terhelés'} ${Math.abs(b.I)>1e-4?`(${(Math.abs(b.I)*1000).toFixed(1)} mA)`:''}</div>`).join('');
   $('#simOut').innerHTML=h;
@@ -1172,7 +1200,7 @@ window.pcb={
   // --- tesztekhez és szkripteléshez ---
   select(labels){const ids=D.parts.filter(p=>labels.includes(p.label)).map(p=>p.id);ui.sel=ids.length?grp(ids):null;renderLeft();draw();return ids.length;},
   rotate(){rotate();},mirror(){mirror();},undo(){undo();},redo(){redo();},
-  simInfo(){return SIM?{leds:SIM.leds.map(l=>({label:l.p.label,I:l.I,light:!!l.light})),fets:SIM.fets.map(f=>({label:f.p.label,on:f.on,vgs:f.vgs,I:f.I,floatGate:f.floatGate})),bats:SIM.bats.map(b=>({label:b.p.label,I:b.I,kind:b.kind})),picos:SIM.picos.map(x=>({label:x.p.label,powered:x.powered}))}:null;},
+  simInfo(){return SIM?{leds:SIM.leds.map(l=>({label:l.p.label,I:l.I,light:!!l.light})),fets:SIM.fets.map(f=>({label:f.p.label,on:f.on,vgs:f.vgs,I:f.I,floatGate:f.floatGate})),bats:SIM.bats.map(b=>({label:b.p.label,I:b.I,kind:b.kind})),picos:SIM.picos.map(x=>({label:x.p.label,powered:x.powered})),caps:SIM.caps.map(k=>({label:k.p.label,U:k.U,R:k.R,tau:k.tau})),bjts:SIM.bjts.map(t=>({label:t.p.label,st:t.st,ib:t.ib,ic:t.ic,vbe:t.vbe,vce:t.vce}))}:null;},
   pins(label){const p=D.parts.find(x=>x.label===label);if(!p)return null;const A=A0;return gpins(p).map(q=>{const on=inb(q.r,q.c);return{id:q.id,name:q.name,r:q.r,c:q.c,net:on?A.find(A.sid(q.r,q.c)):null};});},
   netV(label,pin){const p=D.parts.find(x=>x.label===label);const q=p&&A0.pins.find(x=>x.part===p&&x.id===pin);return q&&SIM?SIM.netV.get(q.net):null;},
   linkInfo(){return D.links.map(l=>{const g=linkGeom(l);return{text:linkText(l),start:g&&g.start,end:g&&g.end,endPin:g&&g.endPin?pinLabel(g.endPin):null,bridges:g?g.bridges.length:0};});},

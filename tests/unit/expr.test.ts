@@ -39,3 +39,11 @@ describe('SI-értékek', () => {
     expect(stepE12(500, 1)).toBe(560);
   });
 });
+
+describe('sablon kis számokkal', () => {
+  it('nem kerekíti nullára a kis értékeket, a lebegőpontos zajt viszont eltünteti', async () => {
+    const { tpl } = await import('../../src/core/expr');
+    expect(tpl('{f}', { f: 1e-7, $opt: {} })).toBe('1e-7');
+    expect(tpl('{a+b}', { a: 0.1, b: 0.2, $opt: {} })).toBe('0.3');
+  });
+});

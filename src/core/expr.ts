@@ -87,7 +87,7 @@ export function tpl(str: unknown, env: Record<string, unknown>): string {
     const t = e.trim();
     const v = /^[A-Za-z_$][\w.]*$/.test(t) ? lookup(env as Env, t) : evx(t, env);
     if (fm && FMT[fm]) return FMT[fm](v);
-    return v == null ? '' : typeof v === 'number' ? String(+v.toFixed(6)) : String(v);
+    return v == null ? '' : typeof v === 'number' ? String(+v.toPrecision(12)) : String(v);
   });
 }
 

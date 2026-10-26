@@ -17,10 +17,12 @@ export const MODEL_PINS: Record<ModelEl['el'], string[]> = {
   diode: ['a', 'k'],
   source: ['p', 'n'],
   nmos: ['d', 'g', 's'],
+  capacitor: ['a', 'b'],
+  npn: ['c', 'b', 'e'],
   pico: ['gnd', 'vbus', 'vsys', 'v33'],
 };
 const MODEL_NUMS: Record<ModelEl['el'], string[]> = {
-  resistor: ['ohm'], diode: ['vf', 'ron', 'imax'], source: ['v', 'rint'], nmos: ['vth', 'ron', 'imax'], pico: [],
+  resistor: ['ohm'], diode: ['vf', 'ron', 'imax'], source: ['v', 'rint'], nmos: ['vth', 'ron', 'imax'], capacitor: ['f', 'vmax'], npn: ['beta', 'vbe', 'vcesat', 'imax'], pico: [],
 };
 
 const isObj = (x: unknown): x is Record<string, any> => !!x && typeof x === 'object' && !Array.isArray(x);

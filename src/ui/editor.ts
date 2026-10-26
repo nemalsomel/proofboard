@@ -26,12 +26,14 @@ export const ROLES: Array<[string, string]> = [
   ['an', 'anód / +'], ['ka', 'katód / −'], ['nc', 'nincs bekötve'], ['h', 'általános'],
 ];
 
-type ModelKind = 'resistor' | 'diode' | 'source' | 'nmos';
+type ModelKind = 'resistor' | 'diode' | 'source' | 'nmos' | 'capacitor' | 'npn';
 const MODEL_UI: Record<ModelKind, { label: string; pins: Array<[string, string]>; vals: Array<[string, string, string, number]> }> = {
   resistor: { label: 'Ellenállás', pins: [['a', '1. vég'], ['b', '2. vég']], vals: [['ohm', 'Érték', 'Ω', 1000]] },
   diode: { label: 'Dióda', pins: [['a', 'anód'], ['k', 'katód']], vals: [['vf', 'Nyitófesz.', 'V', 0.7]] },
   source: { label: 'Feszültségforrás', pins: [['p', '+'], ['n', '−']], vals: [['v', 'Feszültség', 'V', 3.3]] },
   nmos: { label: 'N-MOSFET', pins: [['d', 'drain'], ['g', 'gate'], ['s', 'source']], vals: [['vth', 'Küszöb', 'V', 2], ['ron', 'Nyitott ell.', 'Ω', 1]] },
+  capacitor: { label: 'Kondenzátor', pins: [['a', '1. vég (+)'], ['b', '2. vég']], vals: [['f', 'Kapacitás', 'F', 100e-9], ['vmax', 'Névleges fesz.', 'V', 16]] },
+  npn: { label: 'NPN tranzisztor', pins: [['c', 'kollektor'], ['b', 'bázis'], ['e', 'emitter']], vals: [['beta', 'Erősítés (β)', '', 200]] },
 };
 
 interface PinRow { id: string; name: string; lr: number; lc: number; role: string; group: string; volt?: string }
@@ -115,6 +117,8 @@ export function formToDef(f: Form): PartDef {
       case 'diode': return { el: 'diode', a: m.pins[0], k: m.pins[1], vf: v(0), ron: 0.5 };
       case 'source': return { el: 'source', p: m.pins[0], n: m.pins[1], v: v(0), rint: 0.1 };
       case 'nmos': return { el: 'nmos', d: m.pins[0], g: m.pins[1], s: m.pins[2], vth: v(0), ron: v(1) };
+      case 'capacitor': return { el: 'capacitor', a: m.pins[0], b: m.pins[1], f: v(0), vmax: v(1) };
+      case 'npn': return { el: 'npn', c: m.pins[0], b: m.pins[1], e: m.pins[2], beta: v(0) };
     }
   });
   const oneRow = new Set(rs).size === 1 || new Set(cs).size === 1;

@@ -25,3 +25,17 @@ describe('csomóponti analízis', () => {
   });
   it('üres hálózat', () => expect(solve(0, [])).toHaveLength(0));
 });
+
+describe('vezérelt ág', () => {
+  it('feszültségvezérelt áramforrás: I = g·(Vcp − Vcn − E) az a → b irányban', async () => {
+    const { solve } = await import('../../src/engine/solve');
+    // 0: vezérlő csomópont 2 V-on (1 V-os forrás + 1 Ω), 1: kimenet 1 kΩ-on a föld felé; I = 1e-3·(V0 − 0) folyik a 1-be
+    const V = solve(2, [
+      { a: 0, b: -1, g: 1, E: 2 },
+      { a: 1, b: -1, g: 1e-3, E: 0 },
+      { a: -1, b: 1, g: 1e-3, E: 0, cp: 0, cn: -1 },
+    ]);
+    expect(V[0]).toBeCloseTo(2, 9);
+    expect(V[1]).toBeCloseTo(2, 9); // 2 mA · 1 kΩ
+  });
+});

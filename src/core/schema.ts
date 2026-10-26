@@ -102,6 +102,10 @@ export type ModelEl =
   /** kind: 'battery' (alap; töltésre figyel) vagy 'supply' (tápegység, pl. USB-bemenet). */
   | { el: 'source'; p: string; n: string; v: Num; rint?: Num; kind?: 'battery' | 'supply' }
   | { el: 'nmos'; d: string; g: string; s: string; vth: Num; ron: Num; imax?: Num }
+  /** Kondenzátor: egyenáramon szakadás. vmax: névleges feszültség, polar: elektrolit (a = +). */
+  | { el: 'capacitor'; a: string; b: string; f: Num; vmax?: Num; polar?: boolean }
+  /** NPN tranzisztor: B–E dióda (vbe), C–E lezárt / aktív (Ic = β·Ib) / telített (vcesat). */
+  | { el: 'npn'; c: string; b: string; e: string; beta: Num; vbe?: Num; vcesat?: Num; imax?: Num }
   | { el: 'pico'; gnd: string; vbus: string; vsys: string; v33: string };
 
 /**

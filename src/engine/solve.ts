@@ -2,6 +2,8 @@
  * Csomóponti analízis: minden elem egy "ág" két csomópont között,
  * vezetőképességgel (g) és sorba kapcsolt forrásfeszültséggel (E):
  *   az a → b irányú áram = g · (Va − Vb − E).
+ * Vezérelt ág (cp/cn megadva): az a → b irányú áram = g · (Vcp − Vcn − E),
+ * azaz feszültségvezérelt áramforrás (pl. tranzisztor kollektorárama a bázis–emitter feszültségből).
  * A −1 csomópont a referencia (0 V).
  */
 export interface Branch {
@@ -11,15 +13,18 @@ export interface Branch {
   E: number;
   kind?: string;
   ref?: unknown;
+  /** Vezérlő csomópontok (alapból a és b). */
+  cp?: number;
+  cn?: number;
 }
 
 /** Lineáris egyenletrendszer felírása és megoldása részleges főelem-kiválasztásos Gauss-eliminációval. */
 export function solve(n: number, els: readonly Branch[]): Float64Array {
   const G = new Float64Array(n * n), I = new Float64Array(n);
-  for (const { a, b, g, E } of els) {
-    if (a >= 0) { G[a * n + a] += g; I[a] += g * E; }
-    if (b >= 0) { G[b * n + b] += g; I[b] -= g * E; }
-    if (a >= 0 && b >= 0) { G[a * n + b] -= g; G[b * n + a] -= g; }
+  for (const { a, b, g, E, cp = a, cn = b } of els) {
+    // KCL: az a csomópontból kifolyó áram g·(Vcp − Vcn − E), a b-be ugyanennyi befolyik
+    if (a >= 0) { if (cp >= 0) G[a * n + cp] += g; if (cn >= 0) G[a * n + cn] -= g; I[a] += g * E; }
+    if (b >= 0) { if (cp >= 0) G[b * n + cp] -= g; if (cn >= 0) G[b * n + cn] += g; I[b] -= g * E; }
   }
   for (let k = 0; k < n; k++) {
     let mx = k, mv = Math.abs(G[k * n + k]);
