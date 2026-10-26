@@ -58,7 +58,8 @@ export interface ParamDef {
 }
 
 export type Layer = 'body' | 'detail' | 'label' | 'lead' | 'xray';
-export type Shape = 'rect' | 'circle' | 'poly' | 'line' | 'text' | 'axial' | 'radial' | 'link';
+/** dial: forgó mutató az `at` pont körül (motor: forgás, szervó: szög a szimulációból). */
+export type Shape = 'rect' | 'circle' | 'poly' | 'line' | 'text' | 'axial' | 'radial' | 'link' | 'dial';
 
 export interface PrimStyle {
   layer?: Layer;
@@ -106,6 +107,10 @@ export type ModelEl =
   | { el: 'capacitor'; a: string; b: string; f: Num; vmax?: Num; polar?: boolean }
   /** NPN tranzisztor: B–E dióda (vbe), C–E lezárt / aktív (Ic = β·Ib) / telített (vcesat). */
   | { el: 'npn'; c: string; b: string; e: string; beta: Num; vbe?: Num; vcesat?: Num; imax?: Num }
+  /** DC motor: üzemi ellenállás (a + → b), névleges feszültség; induktív, visszacsapó dióda kell mellé. */
+  | { el: 'motor'; a: string; b: string; ohm: Num; vnom: Num }
+  /** Szervó: tápfelvétel (vp–gnd), a szöget a sig lábon érkező PWM impulzusszélessége adja (min…max ms → 0…180°). */
+  | { el: 'servo'; vp: string; gnd: string; sig: string; ohm: Num; pmin?: Num; pmax?: Num }
   | { el: 'pico'; gnd: string; vbus: string; vsys: string; v33: string };
 
 /**
@@ -156,6 +161,11 @@ export interface PartDef {
   pinLabels?: PinLabels;
   model?: ModelEl[];
   controls?: Control[];
+  /**
+   * Szerelés: 'board' (alap) a lábak a panel lyukaiba kerülnek; 'off' külső alkatrész (motor, szervó…):
+   * a panel mellett áll, a lábai kivezetések, amelyekhez vezeték (kábel) köt be a panelra.
+   */
+  mount?: 'board' | 'off';
   /** Szerkesztői adatok (a futás figyelmen kívül hagyja), pl. az űrlap állapota. */
   meta?: Record<string, unknown>;
 }

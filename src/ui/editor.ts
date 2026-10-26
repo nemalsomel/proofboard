@@ -26,13 +26,14 @@ export const ROLES: Array<[string, string]> = [
   ['an', 'anód / +'], ['ka', 'katód / −'], ['nc', 'nincs bekötve'], ['h', 'általános'],
 ];
 
-type ModelKind = 'resistor' | 'diode' | 'source' | 'nmos' | 'capacitor' | 'npn';
+type ModelKind = 'resistor' | 'diode' | 'source' | 'nmos' | 'capacitor' | 'npn' | 'motor';
 const MODEL_UI: Record<ModelKind, { label: string; pins: Array<[string, string]>; vals: Array<[string, string, string, number]> }> = {
   resistor: { label: 'Ellenállás', pins: [['a', '1. vég'], ['b', '2. vég']], vals: [['ohm', 'Érték', 'Ω', 1000]] },
   diode: { label: 'Dióda', pins: [['a', 'anód'], ['k', 'katód']], vals: [['vf', 'Nyitófesz.', 'V', 0.7]] },
   source: { label: 'Feszültségforrás', pins: [['p', '+'], ['n', '−']], vals: [['v', 'Feszültség', 'V', 3.3]] },
   nmos: { label: 'N-MOSFET', pins: [['d', 'drain'], ['g', 'gate'], ['s', 'source']], vals: [['vth', 'Küszöb', 'V', 2], ['ron', 'Nyitott ell.', 'Ω', 1]] },
   capacitor: { label: 'Kondenzátor', pins: [['a', '1. vég (+)'], ['b', '2. vég']], vals: [['f', 'Kapacitás', 'F', 100e-9], ['vmax', 'Névleges fesz.', 'V', 16]] },
+  motor: { label: 'DC motor', pins: [['a', '+'], ['b', '−']], vals: [['ohm', 'Üzemi ell.', 'Ω', 20], ['vnom', 'Névleges fesz.', 'V', 3]] },
   npn: { label: 'NPN tranzisztor', pins: [['c', 'kollektor'], ['b', 'bázis'], ['e', 'emitter']], vals: [['beta', 'Erősítés (β)', '', 200]] },
 };
 
@@ -41,6 +42,8 @@ interface ModelRow { el: ModelKind; pins: string[]; vals: string[] }
 interface Form {
   name: string; prefix: string; cat: string; bodyText: string;
   pad: number; fill: string; showLabel: boolean; names: 'below' | 'above' | 'none';
+  /** Külső alkatrész (motor, szenzor kábelen): a panel mellé kerül, a lábai kivezetések. */
+  off?: boolean;
   /** A test kiterjesztése a lábakon túl (lyukban): fent, lent, balra, jobbra. */
   ext: { t: number; b: number; l: number; r: number };
   pins: PinRow[]; model: ModelRow[]; press: [string, string] | null;
@@ -118,6 +121,7 @@ export function formToDef(f: Form): PartDef {
       case 'source': return { el: 'source', p: m.pins[0], n: m.pins[1], v: v(0), rint: 0.1 };
       case 'nmos': return { el: 'nmos', d: m.pins[0], g: m.pins[1], s: m.pins[2], vth: v(0), ron: v(1) };
       case 'capacitor': return { el: 'capacitor', a: m.pins[0], b: m.pins[1], f: v(0), vmax: v(1) };
+      case 'motor': return { el: 'motor', a: m.pins[0], b: m.pins[1], ohm: v(0), vnom: v(1) };
       case 'npn': return { el: 'npn', c: m.pins[0], b: m.pins[1], e: m.pins[2], beta: v(0) };
     }
   });
@@ -131,6 +135,7 @@ export function formToDef(f: Form): PartDef {
     meta: { editor: 1, form: JSON.parse(JSON.stringify(f)) },
   };
   if (groups.length) def.groups = groups;
+  if (f.off) { def.mount = 'off'; def.fp = `külső · ${pins.length} kivezetés`; }
   if (f.names !== 'none') def.pinLabels = { mode: 'name', off: f.names === 'below' ? 0.75 : -0.75 };
   if (model.length) def.model = model;
   if (f.press && f.press[0] && f.press[1]) def.controls = [{ kind: 'press', closes: [[f.press[0], f.press[1]]] }];
@@ -277,6 +282,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
           <label for="pe_btext">Felirat a testen</label><input type="text" id="pe_btext" data-f="bodyText" value="${esc(f.bodyText)}" placeholder="pl. TP4056">
           <label for="pe_names">Lábnevek</label><select id="pe_names" data-f="names">${opt('below', 'a lábak alatt', f.names)}${opt('above', 'a lábak felett', f.names)}${opt('none', 'nincsenek', f.names)}</select>
           <label></label><label class="check small"><input type="checkbox" data-f="showLabel" ${f.showLabel ? 'checked' : ''}> Példánynév kiírása (pl. U1)</label>
+          <label></label><label class="check small" title="A panel mellé kerül; a lábaihoz kábel (vezeték) köt be"><input type="checkbox" data-f="off" ${f.off ? 'checked' : ''}> Külső alkatrész (kábellel bekötve)</label>
         </div>
       </section>
       <section class="pe-sec">
@@ -396,6 +402,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       const k = t.dataset.f as keyof Form;
       if (k === 'pad') form.pad = Math.max(0.3, Math.min(3, +t.value || 0.6));
       else if (k === 'showLabel') form.showLabel = t.checked;
+      else if (k === 'off') form.off = t.checked;
       else if (k === 'names') form.names = t.value as Form['names'];
       else if (k === 'name' || k === 'prefix' || k === 'cat' || k === 'bodyText') form[k] = t.value;
       refresh(); return;

@@ -9,7 +9,7 @@ export interface Problem {
   msg: string;
 }
 
-const SHAPES = new Set(['rect', 'circle', 'poly', 'line', 'text', 'axial', 'radial', 'link']);
+const SHAPES = new Set(['rect', 'circle', 'poly', 'line', 'text', 'axial', 'radial', 'link', 'dial']);
 const PARAM_TYPES = new Set(['value', 'number', 'int', 'select', 'color', 'span']);
 /** A modell-elemek lábhivatkozásai. */
 export const MODEL_PINS: Record<ModelEl['el'], string[]> = {
@@ -19,10 +19,12 @@ export const MODEL_PINS: Record<ModelEl['el'], string[]> = {
   nmos: ['d', 'g', 's'],
   capacitor: ['a', 'b'],
   npn: ['c', 'b', 'e'],
+  motor: ['a', 'b'],
+  servo: ['vp', 'gnd', 'sig'],
   pico: ['gnd', 'vbus', 'vsys', 'v33'],
 };
 const MODEL_NUMS: Record<ModelEl['el'], string[]> = {
-  resistor: ['ohm'], diode: ['vf', 'ron', 'imax'], source: ['v', 'rint'], nmos: ['vth', 'ron', 'imax'], capacitor: ['f', 'vmax'], npn: ['beta', 'vbe', 'vcesat', 'imax'], pico: [],
+  resistor: ['ohm'], diode: ['vf', 'ron', 'imax'], source: ['v', 'rint'], nmos: ['vth', 'ron', 'imax'], capacitor: ['f', 'vmax'], npn: ['beta', 'vbe', 'vcesat', 'imax'], motor: ['ohm', 'vnom'], servo: ['ohm', 'pmin', 'pmax'], pico: [],
 };
 
 const isObj = (x: unknown): x is Record<string, any> => !!x && typeof x === 'object' && !Array.isArray(x);
@@ -131,6 +133,7 @@ export function validatePartDef(def: unknown): Problem[] {
 
   // grafika
   (d.graphics || []).forEach((g, i) => { if (!isObj(g) || !SHAPES.has(g.shape)) err(`graphics[${i}].shape`, `Ismeretlen rajzelem: ${isObj(g) ? String(g.shape) : '?'}`); });
+  if (d.mount != null && d.mount !== 'board' && d.mount !== 'off') err('mount', `Ismeretlen szerelés: ${String(d.mount)} (board vagy off).`);
   if (!(d.graphics || []).some(g => (g.layer || 'body') === 'body')) warn('graphics', 'Nincs test (body réteg): az alkatrész csak lábakként látszik.');
 
   return out;

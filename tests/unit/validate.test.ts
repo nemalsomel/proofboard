@@ -69,3 +69,15 @@ describe('vezérlők és tápbemenetek ellenőrzése', () => {
     expect(ps.map(p => p.msg)).toContain('Van tápbemenet, de nincs GND-láb: a tápfeszültség a panel földjéhez képest számít.');
   });
 });
+
+describe('külső alkatrész', () => {
+  it('a szerelés csak board vagy off lehet', () => {
+    expect(hasErrors(validatePartDef({ ...nokia, mount: 'off' }))).toBe(false);
+    expect(validatePartDef({ ...nokia, mount: 'fal' as any }).map(p => p.msg)).toContain('Ismeretlen szerelés: fal (board vagy off).');
+  });
+  it('a beépített motor és szervó külső, a szervó tápja 4,5–6,5 V', () => {
+    expect(PARTS.motor.mount).toBe('off');
+    expect(PARTS.servo.mount).toBe('off');
+    expect(PARTS.servo.pins.find(p => p.id === 'V+')).toMatchObject({ role: 'vin', vmin: 4.5, vmax: 6.5 });
+  });
+});

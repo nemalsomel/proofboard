@@ -36,9 +36,9 @@ const WCOL=[['#1c7ed6','kék'],['#e03131','piros'],['#212529','fekete'],['#f59f0
 const TOOLS=[['select','Kijelölés','V'],['bridge','Forrasztóhíd','B'],['wire','Vezeték','W'],['link','Kapcsolat','C'],['erase','Törlés','E'],['pan','Mozgatás','H']];
 
 /* ---------- Állapot ---------- */
-const emptyDesign=()=>({v:1,board:{rows:78,cols:39,sec:3},parts:[],bridges:[],wires:[],links:[],auto:{bridges:[],wires:[]},customParts:{},gpio:{},settings:{usb:true,btnMode:'hold',autoRoute:true},seq:1});
+const emptyDesign=()=>({v:1,board:{rows:78,cols:39,sec:3},parts:[],bridges:[],wires:[],links:[],auto:{bridges:[],wires:[]},customParts:{},gpio:{},pwm:{},settings:{usb:true,btnMode:'hold',autoRoute:true},seq:1});
 let D, A0, AS, SIM, ISSUES=[];
-const ui={tool:'select',view:'comp',zoom:1,sim:false,hover:null,sel:null,placing:null,ghost:{rot:0,mir:false},wireStart:null,drag:null,pressed:{},holdPtr:new Map(),flash:null,undo:[],redo:[],wireColor:'#1c7ed6',confirmClear:0,linkStart:null,hideAuto:null,rats:false,xray:false,selLink:null,linkState:new Map()};
+const ui={phase:{},anim:false,tool:'select',view:'comp',zoom:1,sim:false,hover:null,sel:null,placing:null,ghost:{rot:0,mir:false},wireStart:null,drag:null,pressed:{},holdPtr:new Map(),flash:null,undo:[],redo:[],wireColor:'#1c7ed6',confirmClear:0,linkStart:null,hideAuto:null,rats:false,xray:false,selLink:null,linkState:new Map()};
 
 function presetMacropad(){
   /* Hídra optimalizált kiosztás: 0 vezeték. Cella = 3 lyukas szekció; sáv b = 3b…3b+2. sor.
@@ -92,7 +92,14 @@ function gpins(p){return DEFS[p.type].pins(p).map(pn=>{const[r,c]=xf(p,pn.lr,pn.
 const inb=(r,c)=>r>=0&&c>=0&&r<D.board.rows&&c<D.board.cols;
 const secStart=r=>r-(r%D.board.sec);
 const EXT=8; // ennyi lyuknyit lóghat ki egy alkatrész a panelról
-function partFits(p){const g=gpins(p);return g.some(q=>inb(q.r,q.c))&&g.every(q=>q.r>=-EXT&&q.c>=-EXT&&q.r<D.board.rows+EXT&&q.c<D.board.cols+EXT);}
+const inCanvas=(r,c)=>r>=-EXT-0.5&&c>=-EXT-0.5&&r<=D.board.rows+EXT-0.5&&c<=D.board.cols+EXT-0.5;
+const isOff=p=>DEFS[p.type].def.mount==='off';
+function partFits(p){const g=gpins(p);
+  if(isOff(p)){const b=DEFS[p.type].bounds(p),cs=[[b.r0,b.c0],[b.r0,b.c1],[b.r1,b.c0],[b.r1,b.c1]].map(([r,c])=>xf(p,r,c));
+    return g.every(q=>!inb(q.r,q.c))&&cs.every(([r,c])=>inCanvas(r,c));}
+  return g.some(q=>inb(q.r,q.c))&&g.every(q=>q.r>=-EXT&&q.c>=-EXT&&q.r<D.board.rows+EXT&&q.c<D.board.cols+EXT);}
+/** Külső alkatrész kivezetése (vagy panelon kívüli láb) egy pontos helyen. */
+function offPinAt(r,c){for(const p of D.parts){if(!isOff(p))continue;for(const q of gpins(p))if(q.r===r&&q.c===c)return q;}return null;}
 
 /* ---------- Netlista ---------- */
 function analyze(press){
@@ -104,7 +111,6 @@ function analyze(press){
   const uni=(a,b)=>{a=find(a);b=find(b);if(a!==b)par[Math.max(a,b)]=Math.min(a,b);};
   const AB=D.auto.bridges.filter(b=>!autoHidden(b[4])),AW=D.auto.wires.filter(w=>!autoHidden(w.links));
   for(const b of [...D.bridges,...AB]) if(inb(b[0],b[1])&&inb(b[2],b[3])) uni(sid(b[0],b[1]),sid(b[2],b[3]));
-  for(const w of [...D.wires,...AW]) if(inb(w.a[0],w.a[1])&&inb(w.b[0],w.b[1])) uni(sid(w.a[0],w.a[1]),sid(w.b[0],w.b[1]));
   const pins=[],byPart=new Map();let k=N;
   for(const [p,gp] of parts){
     const m={};
@@ -113,6 +119,10 @@ function analyze(press){
     for(const [a,b] of DEFS[p.type].internal(p)) uni(m[a].s,m[b].s);
     if(press&&ui.pressed[p.id])for(const c of DEFS[p.type].def.controls||[])if(c.kind==='press')for(const [a,b] of c.closes)if(m[a]&&m[b])uni(m[a].s,m[b].s);
   }
+  // vezetékek: lyuk–lyuk, vagy kábel egy panelon kívüli kivezetéshez
+  const offAt=new Map();for(const q of pins)if(!q.on)offAt.set(q.r+':'+q.c,q.s);
+  const node=e=>inb(e[0],e[1])?sid(e[0],e[1]):offAt.get(e[0]+':'+e[1]);
+  for(const w of [...D.wires,...AW]){const x=node(w.a),y=node(w.b);if(x!=null&&y!=null)uni(x,y);}
   for(const q of pins) q.net=find(q.s);
   const netPins=new Map(),netSecs=new Map();
   for(const q of pins){if(!netPins.has(q.net))netPins.set(q.net,[]);netPins.get(q.net).push(q);}
@@ -122,14 +132,42 @@ function analyze(press){
 const pinLabel=q=>q.part.type==='pico'?`${q.part.label}.${q.name}`:`${q.part.label}.${q.id}`;
 
 /* ---------- Áramkör-szimuláció (csomóponti analízis, szakaszonként lineáris diódák) ---------- */
-const GPIO_MODES=[['pullup','be, felhúzva'],['pulldown','be, lehúzva'],['float','be, lebegő'],['adc','analóg (ADC)'],['out_high','ki: 1'],['out_low','ki: 0']];
+const GPIO_MODES=[['pullup','be, felhúzva'],['pulldown','be, lehúzva'],['float','be, lebegő'],['adc','analóg (ADC)'],['out_high','ki: 1'],['out_low','ki: 0'],['pwm','ki: PWM']];
 function gpioMode(p,id,q,A){return D.gpio[p.id+'.'+id]||(q?gpioDefault(q,A):'pullup');}
 const RBE=20,RCE=1; // NPN: bázis-emitter és telítési soros ellenállás (Ω)
+/* PWM: időszeletekre bontott szimuláció. Az azonos frekvenciájú, egyszerre induló PWM-kimenetek
+   kitöltéseiből szakaszok lesznek (mindegyikben fix magas/alacsony szintek); az eredmény a szakaszok
+   idővel súlyozott átlaga, a GPIO- és forrásáramoknál a csúcsérték. */
+const pwmCfg=key=>({duty:50,freq:1000,...((D.pwm||{})[key]||{})});
 function simulate(A){
+  const pw=[];for(const p of D.parts)for(const q of A.byPart.get(p.id).pins)if(q.role==='gpio'&&gpioMode(p,q.id,q,A)==='pwm')pw.push({key:p.id+'.'+q.id,q,...pwmCfg(p.id+'.'+q.id)});
+  const cuts=[...new Set(pw.map(x=>Math.max(0,Math.min(100,+x.duty||0))))].filter(d=>d>0&&d<100).sort((a,b)=>a-b),bounds=[0,...cuts,100],runs=[];
+  for(let i=0;i+1<bounds.length;i++){const lo=bounds[i],w=(bounds[i+1]-lo)/100;if(w<=0)continue;runs.push({w,o:simulate1(A,new Set(pw.filter(x=>x.duty>lo).map(x=>x.key)))});}
+  const out=mergeSims(runs);
+  out.pwm=new Map(pw.map(x=>[x.q.net,x]));
+  // szervó: a jelvezetéken érkező PWM impulzusszélessége → szög
+  for(const s of out.servos){const x=out.pwm.get(s.sigNet);s.pulse=x?x.duty/100/Math.max(1e-9,x.freq)*1000:null;
+    const ok=x&&x.freq>=40&&x.freq<=400&&s.pulse>=s.pmin-0.2&&s.pulse<=s.pmax+0.2;s.angle=ok?Math.max(0,Math.min(180,(s.pulse-s.pmin)/(s.pmax-s.pmin)*180)):null;}
+  return out;
+}
+const SIM_MAX={gpios:new Set(['I']),srcI:new Set(['I'])},ST_RANK={off:0,sat:1,act:2};
+function mergeSims(runs){
+  if(runs.length===1)return runs[0].o;
+  const o0=runs[0].o,out={...o0,netV:new Map(),floating:new Set()};
+  for(const {w,o} of runs){for(const [k,v] of o.netV)out.netV.set(k,(out.netV.get(k)||0)+w*v);for(const k of o.floating)out.floating.add(k);}
+  for(const name of ['leds','picos','gpios','bats','srcI','fets','caps','bjts','motors','servos'])out[name]=o0[name].map((x,i)=>{const r={...x};
+    for(const k in x){const v=x[k],vs=runs.map(({w,o})=>[w,o[name][i][k]]);
+      if(typeof v==='number'){r[k]=SIM_MAX[name]&&SIM_MAX[name].has(k)?vs.reduce((m,[,y])=>Math.abs(y)>Math.abs(m)?y:m,0):vs.reduce((t,[w,y])=>t+w*(typeof y==='number'?y:0),0);}
+      else if(typeof v==='boolean')r[k]=vs.some(([,y])=>y);
+      else if(k==='st')r[k]=vs.reduce((m,[,y])=>ST_RANK[y]>ST_RANK[m]?y:m,v);}
+    return r;});
+  return out;
+}
+function simulate1(A,high){
   const idx=new Map();const nd=net=>{if(!idx.has(net))idx.set(net,idx.size);return idx.get(net);};
   for(const q of A.pins) if(q.net>=0) nd(q.net);
   const n=idx.size;
-  const picos=[],leds=[],ress=[],bats=[],fets=[],caps=[],bjts=[];
+  const picos=[],leds=[],ress=[],bats=[],fets=[],caps=[],bjts=[],motors=[],servos=[];
   for(const p of D.parts){const bp=A.byPart.get(p.id);const m=bp.map,N=id=>idx.get(m[id].net);const model=DEFS[p.type].def.model;if(!model)continue;const E=penv(p);
     for(const el of model){
       if(el.el==='pico')picos.push({p,gnd:N(el.gnd),vbus:N(el.vbus),vsys:N(el.vsys),v33:N(el.v33),gp:bp.pins.filter(q=>q.role==='gpio').map(q=>({q,node:idx.get(q.net),mode:gpioMode(p,q.id,q,A)})),reg:false,d:false});
@@ -138,6 +176,8 @@ function simulate(A){
       else if(el.el==='source')bats.push({p,a:N(el.p),b:N(el.n),E:num(el.v,E),g:1/Math.max(1e-3,num(el.rint??0.1,E)),kind:el.kind||'battery'});
       else if(el.el==='capacitor')caps.push({p,a:N(el.a),b:N(el.b),f:num(el.f,E),vmax:el.vmax!=null?num(el.vmax,E):null,polar:!!el.polar});
       else if(el.el==='npn')bjts.push({p,c:N(el.c),b:N(el.b),e:N(el.e),beta:Math.max(1,num(el.beta,E)),vbe:num(el.vbe??0.65,E),vcesat:num(el.vcesat??0.1,E),imax:el.imax!=null?num(el.imax,E):null,be:false,st:'off',ic:0});
+      else if(el.el==='motor')motors.push({p,a:N(el.a),b:N(el.b),g:1/Math.max(1e-3,num(el.ohm,E)),vnom:Math.max(0.1,num(el.vnom,E))});
+      else if(el.el==='servo')servos.push({p,vp:N(el.vp),gnd:N(el.gnd),sigNet:m[el.sig].net,g:1/Math.max(1e-3,num(el.ohm,E)),pmin:num(el.pmin??0.5,E),pmax:num(el.pmax??2.5,E)});
       else if(el.el==='nmos')fets.push({p,d:N(el.d),g:N(el.g),s:N(el.s),vth:num(el.vth,E),ron:Math.max(1e-3,num(el.ron,E)),imax:el.imax!=null?num(el.imax,E):null,on:false});
     }
   }
@@ -150,13 +190,15 @@ function simulate(A){
       if(D.settings.usb)add(pc.vbus,pc.gnd,10,5,'vbus',pc);
       add(pc.vbus,pc.vsys,pc.d?5:1e-9,pc.d?0.3:0,'pdiode',pc);
       if(pc.reg){add(pc.v33,pc.gnd,10,3.3,'v33',pc);
-        for(const g of pc.gp){
-          if(g.mode==='pullup')add(g.node,pc.v33,2e-5,0,'pull',g);
-          else if(g.mode==='pulldown')add(g.node,pc.gnd,2e-5,0,'pull',g);
-          else if(g.mode==='out_high')add(g.node,pc.gnd,1/40,3.3,'gout',g);
-          else if(g.mode==='out_low')add(g.node,pc.gnd,1/40,0,'gout',g);}}
+        for(const g of pc.gp){const md=g.mode==='pwm'?(high&&high.has(pc.p.id+'.'+g.q.id)?'out_high':'out_low'):g.mode;
+          if(md==='pullup')add(g.node,pc.v33,2e-5,0,'pull',g);
+          else if(md==='pulldown')add(g.node,pc.gnd,2e-5,0,'pull',g);
+          else if(md==='out_high')add(g.node,pc.gnd,1/40,3.3,'gout',g);
+          else if(md==='out_low')add(g.node,pc.gnd,1/40,0,'gout',g);}}
     }
     for(const r of ress)add(r.a,r.b,r.g,0,'res',r);
+    for(const m of motors)add(m.a,m.b,m.g,0,'motor',m);
+    for(const s of servos)add(s.vp,s.gnd,s.g,0,'servo',s);
     for(const l of leds)add(l.a,l.k,l.on?1/l.ron:1e-9,l.on?l.vf:0,'led',l);
     for(const b of bats)add(b.a,b.b,b.g,b.E,'bat',b);
     for(const f of fets)add(f.d,f.s,f.on?1/f.ron:1e-9,0,'fet',f);
@@ -187,7 +229,9 @@ function simulate(A){
   while(st.length){const i=st.pop();for(const j of adj[i])if(!reach[j]){reach[j]=1;st.push(j);}}
   const netV=new Map(),floating=new Set();
   for(const [net,i] of idx){netV.set(net,V[i]);if(!reach[i])floating.add(net);}
-  const out={netV,floating,leds:[],picos:[],gpios:[],bats:[],srcI:[],fets:[],caps:[],bjts:[]};
+  const out={netV,floating,leds:[],picos:[],gpios:[],bats:[],srcI:[],fets:[],caps:[],bjts:[],motors:[],servos:[]};
+  for(const m of motors){const U=V[m.a]-V[m.b];out.motors.push({p:m.p,U,I:U*m.g,vnom:m.vnom,speed:Math.max(-1.5,Math.min(1.5,U/m.vnom))});}
+  for(const s of servos){const U=V[s.vp]-V[s.gnd];out.servos.push({p:s.p,U,I:U*s.g,sigNet:s.sigNet,pmin:s.pmin,pmax:s.pmax});}
   // kondenzátor: feszültség és időállandó (τ = R·C, R a kapcsain látott Thevenin-ellenállás a munkapontban)
   for(const k of caps){const U=V[k.a]-V[k.b],test=solve(n,[...els,{a:k.a,b:k.b,g:1e-9,E:-1e6}]),R=Math.abs((test[k.a]-test[k.b])-U)/1e-3;
     out.caps.push({p:k.p,U,f:k.f,vmax:k.vmax,polar:k.polar,R,tau:R<1e8?R*k.f:null,float:!reach[k.a]||!reach[k.b]});}
@@ -207,14 +251,14 @@ function simulate(A){
   }
   return out;
 }
-const logic=g=>!g.powered?'–':g.float?'?':g.mode==='adc'?'A':g.V>=2?'1':g.V<=0.8?'0':'?';
+const logic=g=>!g.powered?'–':g.float?'?':g.mode==='adc'?'A':g.mode==='pwm'?'P':g.V>=2?'1':g.V<=0.8?'0':'?';
 
 /* ---------- Ellenőrzés ---------- */
 function checkAll(){
   const iss=[],add=(sev,msg,holes)=>iss.push({sev,msg,holes:holes||[]});
   const A=A0;
   const hasPico=D.parts.some(p=>p.type==='pico');
-  for(const p of D.parts){const bp=A.byPart.get(p.id);if(bp.pins.every(q=>!q.on))add('warn',`${p.label}: teljesen a panelon kívül esik`,[]);}
+  for(const p of D.parts){const bp=A.byPart.get(p.id);if(!isOff(p)&&bp.pins.every(q=>!q.on))add('warn',`${p.label}: teljesen a panelon kívül esik`,[]);}
   const hole=new Map();
   for(const q of A.pins){if(!q.on)continue;const k=q.r+':'+q.c;if(!hole.has(k))hole.set(k,[]);hole.get(k).push(q);}
   for(const [k,a] of hole) if(a.length>1) add('err',`Ütközés a ${k} lyukban: ${a.map(pinLabel).join(', ')}`,[[a[0].r,a[0].c]]);
@@ -253,18 +297,18 @@ function checkAll(){
       else{const btnA=new Map();for(const q of qs)if(q.part.type==='button'&&q.role==='A')btnA.set(q.part.id,q);const gp=qs.find(q=>q.part.type==='pico'&&q.role==='gpio');
         if(gp&&btnA.size>1)add('warn',`${[...btnA.values()].map(q=>q.part.label).join(', ')} ugyanazon a GPIO-n (${gp.name})`,[...btnA.values()].map(q=>[q.r,q.c]));}}}
   {const box=p=>{const b=DEFS[p.type].bounds(p),pts=[[b.r0,b.c0],[b.r0,b.c1],[b.r1,b.c0],[b.r1,b.c1]].map(([r,c])=>xf(p,r,c));const rs=pts.map(x=>x[0]),cs=pts.map(x=>x[1]);return[Math.min(...rs)+0.25,Math.max(...rs)-0.25,Math.min(...cs)+0.25,Math.max(...cs)-0.25];};
-    const bx=D.parts.map(p=>[p,box(p)]);
+    const bx=D.parts.filter(p=>!isOff(p)).map(p=>[p,box(p)]);
     for(let i=0;i<bx.length;i++)for(let j=i+1;j<bx.length;j++){const [p,a]=bx[i],[q,b]=bx[j];if(a[0]<b[1]&&b[0]<a[1]&&a[2]<b[3]&&b[2]<a[3])add('warn',`${p.label} és ${q.label} teste átfed`,[[p.r,p.c],[q.r,q.c]]);}}
   if(picoSec.length>3){const p=picoSec[0][0].part;add('err',`${p.label}: ${picoSec.length} szekcióban több láb közös szekcióba esik. A lábsor nem futhat szekcióirányban, forgasd 90°-kal.`,picoSec.flatMap(a=>a.map(q=>[q.r,q.c])));}
   else for(const dq of picoSec)add('err',`Zárlat: ${dq.map(pinLabel).join(' · ')} egy szekcióba esik`,dq.map(q=>[q.r,q.c]));
   // vezetékvégek
   const pinHole=new Set(A.pins.map(q=>q.r+':'+q.c)),wend=new Map();
-  D.wires.forEach((w,i)=>{for(const e of [w.a,w.b]){const k=e[0]+':'+e[1];wend.set(k,(wend.get(k)||0)+1);
+  D.wires.forEach((w,i)=>{for(const e of [w.a,w.b]){if(!inb(e[0],e[1]))continue;const k=e[0]+':'+e[1];wend.set(k,(wend.get(k)||0)+1);
     if(pinHole.has(k)){const sug=freeHoleNear(e[0],e[1],pinHole);add('warn',`Vezetékvég a ${k} lyukban egy alkatrészlábbal közösen, ez nem elég stabil. ${sug?`Tedd át a ${sug} lyukba (ugyanaz a szekció).`:'A szekcióban nincs szabad lyuk: hídd át egy oldalszomszédos szekcióba, és onnan vezesd tovább.'}`,[e]);}}});
   for(const [k,n] of wend) if(n>1){const [r,c]=k.split(':').map(Number);add('warn',`${n} vezetékvég ugyanabban a ${k} lyukban`,[[r,c]]);}
   // gombok GPIO nélkül
   for(const l of D.links){const st=ui.linkState.get(l.id);if(st&&!st.ok){const q=findPin(l.a);add('warn',`Kapcsolat nincs bekötve: ${linkText(l)}`,q?[[q.r,q.c]]:[]);}
-    else if(st&&st.wire){const q=findPin(l.a);add('warn',`${linkText(l)}: csak vezetékkel köthető be (nincs szabad hídút)`,q?[[q.r,q.c]]:[]);}}
+    else if(st&&st.wire&&!st.cable){const q=findPin(l.a);add('warn',`${linkText(l)}: csak vezetékkel köthető be (nincs szabad hídút)`,q?[[q.r,q.c]]:[]);}}
   if(hasPico)for(const p of D.parts){if(p.type!=='button')continue;if(D.links.some(l=>l.a.startsWith(p.id+'.')))continue;const m=A.byPart.get(p.id).map;
     const ok=['A1','B1'].some(id=>(A.netPins.get(m[id].net)||[]).some(q=>q.part.type==='pico'&&q.role==='gpio'));
     if(!ok)add('warn',`${p.label}: egyik oldala sincs GPIO-ra kötve`,[[m.A1.r,m.A1.c]]);}
@@ -273,6 +317,8 @@ function checkAll(){
     for(const s of SIM.srcI){if(s.kind==='vbus'&&s.I>1)add('err',`Zárlat a VBUS-on (${s.I.toFixed(1)} A)`,[]);if(s.kind==='v33'&&s.I>0.3)add('err',`3V3 túlterhelve vagy zárlatos (${(s.I*1000).toFixed(0)} mA)`,[]);}
     for(const g of SIM.gpios){const mA=Math.abs(g.I)*1000;if(mA>50)add('err',`${g.q.name}: ${mA.toFixed(0)} mA, kimenet zárlatban`,[[g.q.r,g.q.c]]);else if(mA>12)add('warn',`${g.q.name}: ${mA.toFixed(1)} mA, sok (ajánlott max. ~12 mA)`,[[g.q.r,g.q.c]]);}
     for(const l of SIM.leds){if(l.light&&l.I>0.03)add('warn',`${l.p.label}: ${(l.I*1000).toFixed(0)} mA, előtét-ellenállás kell`,[]);else if(!l.light&&l.imax&&l.I>l.imax)add('warn',`${l.p.label}: ${fmtSI(l.I)}A, több a megengedett ${fmtSI(l.imax)}A-nél`,[]);}
+    for(const m of SIM.motors){const L=m.p.label;if(Math.abs(m.U)>m.vnom*1.25)add('warn',`${L}: ${Math.abs(m.U).toFixed(2)} V, több a névleges ${m.vnom} V-nál`,[]);}
+    for(const s of SIM.servos){if(s.U>3&&s.angle==null)add('warn',`${s.p.label}: nincs érvényes szervójel. A jel lábát kösd egy PWM módú GPIO-ra: 50 Hz, 2,5–12,5 % kitöltés (7,5 % = középállás).`,[]);}
     for(const t of SIM.bjts){const L=t.p.label;
       if(t.floatBase)add('warn',`${L}: a bázis lebeg. Tegyél lehúzó ellenállást a B és az E közé (pl. 10 kΩ), vagy kösd kimenetre.`,[]);
       if(t.imax&&Math.abs(t.ic)>t.imax)add('warn',`${L}: ${fmtSI(Math.abs(t.ic))}A kollektoráram, több a megengedett ${fmtSI(t.imax)}A-nél`,[]);
@@ -289,6 +335,13 @@ function checkAll(){
       if(charger&&b.I>0){if(b.I>1.2)add('warn',`${b.p.label}: ${b.I.toFixed(1)} A töltőáram, sok`,[]);continue;}
       if(b.I>2)add('err',`${b.p.label}: zárlat (${b.I.toFixed(1)} A)`,[]);else if(b.I>0.1)add('err',`${b.p.label}: az USB közvetlenül tölti az akkut (${b.I.toFixed(1)} A). A VSYS elé Schottky-dióda kell.`,[]);else if(b.I<-2)add('err',`${b.p.label}: zárlat (${(-b.I).toFixed(1)} A)`,[]);}
   }
+  // motorok (induktív terhelés): visszacsapó dióda és meghajtás
+  for(const p of D.parts){const model=DEFS[p.type].def.model||[];for(const el of model){if(el.el!=='motor')continue;
+    const m=A.byPart.get(p.id).map,na=m[el.a].net,nb=m[el.b].net,qa=A.netPins.get(na)||[],qb=A.netPins.get(nb)||[];
+    if(qa.length<2||qb.length<2)continue;
+    if(qa.some(q=>q.role==='gpio')||qb.some(q=>q.role==='gpio'))add('err',`${p.label}: a motor közvetlenül GPIO-ra van kötve. Tranzisztor vagy MOSFET kell a meghajtásához.`,[]);
+    const fly=D.parts.some(o=>(DEFS[o.type].def.model||[]).some(e=>{if(e.el!=='diode')return false;const om=A.byPart.get(o.id).map,a=om[e.a].net,k=om[e.k].net;return (a===na&&k===nb)||(a===nb&&k===na);}));
+    if(!fly)add('warn',`${p.label}: nincs visszacsapó dióda a motoron. Tegyél egy diódát (pl. 1N5817) a motor kapcsaira, a katódjával a + felé, különben kikapcsoláskor a feszültségtüske tönkreteheti a tranzisztort.`,[]);}}
   // tápbemenetek: feszültség a saját GND-lábhoz képest
   if(SIM)for(const p of D.parts){const bp=AS.byPart.get(p.id);const vins=bp.pins.filter(q=>q.role==='vin');if(!vins.length)continue;
     const gq=bp.pins.find(q=>q.role==='gnd'),model=DEFS[p.type].def.model||[],V=q=>SIM.floating.has(q.net)?null:SIM.netV.get(q.net);
@@ -465,6 +518,12 @@ function drawPrim(p,g,o){
     else{if(st.fill){ctx.fillStyle=col(st.fill);ctx.fill();}if(st.stroke){if(st.dash)ctx.setLineDash([3,3]);ctx.strokeStyle=col(st.stroke);ctx.lineWidth=st.width||1.2;ctx.stroke();ctx.setLineDash([]);}}};
   const ends=()=>{const a=pt(st.from),b=pt(st.to),[x1,y1]=L(p,a[0],a[1]),[x2,y2]=L(p,b[0],b[1]);const len=Math.hypot(x2-x1,y2-y1)||1;return{x1,y1,x2,y2,len,ux:(x2-x1)/len,uy:(y2-y1)/len,mx:(x1+x2)/2,my:(y1+y2)/2,ang:Math.atan2(y2-y1,x2-x1)};};
   switch(st.shape){
+    case 'dial':{// forgó mutató: szervónál a szög (0° bal, 90° fel, 180° jobb), motornál a forgási fázis
+      const[r0,c0]=pt(st.at),R=N(st.rad||1);let dr=-1,dc=0;
+      if(ui.sim&&SIM){const s=SIM.servos.find(x=>x.p===p);if(s){if(s.angle!=null&&s.U>3){const a=s.angle*Math.PI/180;dr=-Math.sin(a);dc=-Math.cos(a);}}
+        else if(SIM.motors.some(x=>x.p===p)){const f=ui.phase[p.id]||0;dr=Math.sin(f);dc=Math.cos(f);}}
+      const[x0,y0]=L(p,r0,c0),[x1,y1]=L(p,r0+dr*R,c0+dc*R);ctx.lineCap='round';ctx.strokeStyle=col(st.color||'#495057');ctx.lineWidth=N(st.width||0.3)*P;line(x0,y0,x1,y1);
+      ctx.fillStyle=col(st.color||'#495057');ctx.beginPath();ctx.arc(x1,y1,N(st.width||0.3)*P*0.6,0,7);ctx.fill();break;}
     case 'rect':poly(p,N(st.r[0]),N(st.r[1]),N(st.c[0]),N(st.c[1]));paint();break;
     case 'circle':{const[r,c]=pt(st.at),[x,y]=L(p,r,c);ctx.beginPath();ctx.arc(x,y,N(st.rad)*P,0,7);paint();break;}
     case 'poly':{const ps=st.pts.map(pt).map(([r,c])=>L(p,r,c));ctx.beginPath();ctx.moveTo(ps[0][0],ps[0][1]);for(const q of ps.slice(1))ctx.lineTo(q[0],q[1]);ctx.closePath();paint();break;}
@@ -532,7 +591,7 @@ cv.addEventListener('pointerdown',ev=>{
       ui.sel=w>=0?{kind:'wire',i:w}:{kind:'bridge',i:b};renderLeft();draw();return;}
     ui.drag={kind:'box',h0:h,h1:h,add:sh};cv.setPointerCapture(ev.pointerId);return;}
   if(ui.tool==='bridge'){if(!inb(h.r,h.c))return;pushUndo();ui.drag={kind:'bridge',last:[h.r,h.c],n:0};cv.setPointerCapture(ev.pointerId);return;}
-  if(ui.tool==='wire'){if(!inb(h.r,h.c))return;
+  if(ui.tool==='wire'){if(!inb(h.r,h.c)&&!offPinAt(h.r,h.c))return;
     if(!ui.wireStart){ui.wireStart=[h.r,h.c];draw();return;}
     if(ui.wireStart[0]===h.r&&ui.wireStart[1]===h.c){ui.wireStart=null;draw();return;}
     pushUndo();D.wires.push({a:ui.wireStart,b:[h.r,h.c],color:ui.wireColor});ui.wireStart=null;commit();return;}
@@ -750,7 +809,8 @@ function renderRight0(){
   const used=SIM.gpios.filter(g=>{const net=A.pins.find(q=>q.part===g.q.part&&q.id===g.q.id).net;return (A0.netPins.get(A0.pins.find(q=>q.part===g.q.part&&q.id===g.q.id).net)||[]).length>1||(A0.netSecs.get(A0.pins.find(q=>q.part===g.q.part&&q.id===g.q.id).net)||0)>1;});
   if(used.length){h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>GPIO</th><th>Mód</th><th>U</th><th>Szint</th></tr></thead><tbody>`;
     for(const g of used){const key=g.p.id+'.'+g.q.id,l=logic(g);
-      h+=`<tr><td>${g.q.name}</td><td><select data-gpio="${key}" aria-label="${g.q.name} mód">${GPIO_MODES.filter(x=>x[0]!=='adc'||hasCap(g.q,'adc')).map(([v,t])=>`<option value="${v}" ${g.mode===v?'selected':''}>${t}</option>`).join('')}</select></td><td>${g.powered&&!g.float?g.V.toFixed(2):'–'}</td><td><span class="lv ${l==='1'?'lv1':l==='0'?'lv0':'lvq'}">${l}</span>${Math.abs(g.I)>1e-4?` <span class="muted">${(Math.abs(g.I)*1000).toFixed(1)} mA</span>`:''}</td></tr>`;}
+      h+=`<tr><td>${g.q.name}</td><td><select data-gpio="${key}" aria-label="${g.q.name} mód">${GPIO_MODES.filter(x=>x[0]!=='adc'||hasCap(g.q,'adc')).map(([v,t])=>`<option value="${v}" ${g.mode===v?'selected':''}>${t}</option>`).join('')}</select></td><td>${g.powered&&!g.float?g.V.toFixed(2):'–'}</td><td><span class="lv ${l==='1'?'lv1':l==='0'?'lv0':'lvq'}">${l}</span>${Math.abs(g.I)>1e-4?` <span class="muted">${(Math.abs(g.I)*1000).toFixed(1)} mA</span>`:''}</td></tr>`
+      if(g.mode==='pwm'){const c=pwmCfg(key),sid=key.replace('.','_');h+=`<tr class="pwmrow"><td></td><td colspan="3"><label class="small" for="pwmd_${sid}">kitöltés</label> <input type="number" id="pwmd_${sid}" data-pwm="${key}" data-pf="duty" min="0" max="100" step="1" value="${c.duty}" style="width:58px"> % <label class="small" for="pwmf_${sid}">frekv.</label> <input type="number" id="pwmf_${sid}" data-pwm="${key}" data-pf="freq" min="1" max="100000" step="1" value="${c.freq}" style="width:76px"> Hz</td></tr>`;}}
     h+='</tbody></table>';}
   const lights=SIM.leds.filter(l=>l.light);
   if(SIM.fets.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>FET</th><th>U<sub>GS</sub></th><th>I<sub>D</sub></th><th>Állapot</th></tr></thead><tbody>`+SIM.fets.map(f=>`<tr><td>${esc(f.p.label)}</td><td>${f.floatGate?'lebeg':f.vgs.toFixed(2)+' V'}</td><td>${fmtSI(Math.abs(f.I))}A</td><td>${f.on?'<span class="c-ok">nyitva</span>':'<span class="muted">zárva</span>'}</td></tr>`).join('')+'</tbody></table>';
@@ -758,6 +818,8 @@ function renderRight0(){
   const BST={off:'<span class="muted">zárva</span>',act:'<span class="c-warn">aktív</span>',sat:'<span class="c-ok">telítve</span>'};
   if(SIM.bjts.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>NPN</th><th>I<sub>B</sub></th><th>I<sub>C</sub></th><th>U<sub>CE</sub></th><th>Állapot</th></tr></thead><tbody>`+SIM.bjts.map(t=>`<tr><td>${esc(t.p.label)}</td><td>${t.floatBase?'lebeg':fmtSI(t.ib)+'A'}</td><td>${fmtSI(Math.abs(t.ic))}A</td><td>${t.vce.toFixed(2)} V</td><td>${BST[t.st]}</td></tr>`).join('')+'</tbody></table>';
   if(SIM.caps.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>Kond.</th><th>U</th><th title="Időállandó: ennyi idő alatt töltődik fel kb. 63%-ra, 5τ alatt teljesen">τ</th></tr></thead><tbody>`+SIM.caps.map(k=>`<tr><td>${esc(k.p.label)} <span class="muted">${fmtSI(k.f)}F</span></td><td>${k.float?'–':k.U.toFixed(2)+' V'}</td><td>${k.tau!=null?fmtSI(k.tau)+'s':'<span class="muted">nincs töltőút</span>'}</td></tr>`).join('')+'</tbody></table>';
+  if(SIM.motors.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>Motor</th><th>U</th><th>I</th><th>Fordulat</th></tr></thead><tbody>`+SIM.motors.map(m=>`<tr><td>${esc(m.p.label)}</td><td>${m.U.toFixed(2)} V</td><td>${fmtSI(Math.abs(m.I))}A</td><td>${Math.abs(m.speed)<0.02?'<span class="muted">áll</span>':`${Math.round(Math.abs(m.speed)*100)} %${m.speed<0?' ↺':''}`}</td></tr>`).join('')+'</tbody></table>';
+  if(SIM.servos.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>Szervó</th><th>U</th><th>Jel</th><th>Szög</th></tr></thead><tbody>`+SIM.servos.map(s=>`<tr><td>${esc(s.p.label)}</td><td>${s.U.toFixed(2)} V</td><td>${s.pulse!=null?s.pulse.toFixed(2)+' ms':'–'}</td><td>${s.angle!=null&&s.U>3?Math.round(s.angle)+'°':'<span class="muted">–</span>'}</td></tr>`).join('')+'</tbody></table>';
   const batt=SIM.bats.filter(b=>b.kind!=='supply');
   if(batt.length)h+=batt.map(b=>`<div class="small" style="margin-top:6px">${esc(b.p.label)}: ${b.I>1e-4?'töltődik':b.I<-1e-4?'merül':'nincs terhelés'} ${Math.abs(b.I)>1e-4?`(${(Math.abs(b.I)*1000).toFixed(1)} mA)`:''}</div>`).join('');
   $('#simOut').innerHTML=h;
@@ -776,7 +838,9 @@ function renderSliders(){const ss=sliders(),el=$('#simCtl');
 function setSlider(p,key,v){const pr=(DEFS[p.type].def.params||[]).find(x=>x.key===key);if(!pr)return false;v=Math.max(pr.min,Math.min(pr.max,+v||0));p.props={...p.props,[key]:v};
   SIM=simulate(AS);ISSUES=checkAll();renderRight();draw();save();return true;}
 $('#simCtl').addEventListener('input',e=>{const t=e.target.closest('[data-sl]');if(!t)return;const [pid,key]=t.dataset.sl.split('|');const p=D.parts.find(x=>x.id===pid);if(p)setSlider(p,key,t.value);});
-$('#simOut').addEventListener('change',e=>{const s=e.target.closest('[data-gpio]');if(!s)return;pushUndo();D.gpio[s.dataset.gpio]=s.value;commit();});
+$('#simOut').addEventListener('change',e=>{const w=e.target.closest('[data-pwm]');if(w){const v=+w.value;if(!isFinite(v))return;pushUndo();const k=w.dataset.pwm,c=pwmCfg(k);
+    c[w.dataset.pf]=w.dataset.pf==='duty'?Math.max(0,Math.min(100,v)):Math.max(1,Math.min(100000,v));D.pwm={...(D.pwm||{}),[k]:c};commit();return;}
+  const s=e.target.closest('[data-gpio]');if(!s)return;pushUndo();D.gpio[s.dataset.gpio]=s.value;commit();});
 $('#usb').addEventListener('change',e=>{pushUndo();D.settings.usb=e.target.checked;commit();});
 $('#mHold').onclick=()=>{D.settings.btnMode='hold';ui.pressed={};save();recompute();};
 $('#mToggle').onclick=()=>{D.settings.btnMode='toggle';save();recompute();};
@@ -789,7 +853,12 @@ function status(){
   if(ui.sim&&SIM&&qs.length)t+=SIM.floating.has(root)?' · lebeg':` · ${(SIM.netV.get(root)||0).toFixed(2)} V`;
   s.textContent=t;
 }
-function recompute(){A0=analyze(false);AS=ui.sim?analyze(true):A0;SIM=simulate(AS);linkStates();ISSUES=checkAll();renderRight();renderLinks();status();draw();}
+function recompute(){A0=analyze(false);AS=ui.sim?analyze(true):A0;SIM=simulate(AS);linkStates();ISSUES=checkAll();renderRight();renderLinks();status();draw();animate();}
+/* motorok forgása szimuláció közben (kb. 30 kép/s, csak amíg valami forog) */
+function animate(){if(ui.anim||!ui.sim||!SIM||!SIM.motors.some(m=>Math.abs(m.speed)>0.02))return;ui.anim=true;let last=performance.now();
+  const step=t=>{if(!ui.sim||!SIM||!SIM.motors.some(m=>Math.abs(m.speed)>0.02)){ui.anim=false;return;}
+    if(t-last>=33){const dt=Math.min(0.2,(t-last)/1000);last=t;for(const m of SIM.motors)ui.phase[m.p.id]=((ui.phase[m.p.id]||0)+m.speed*dt*2*Math.PI*1.5)%(2*Math.PI);draw();}
+    requestAnimationFrame(step);};requestAnimationFrame(step);}
 
 /* ---------- Felső sáv ---------- */
 $('#vRats').onclick=()=>toggleRats();
@@ -823,7 +892,7 @@ function normalize(d){
   o.parts=(d.parts||[]).map((p,i)=>{if(!DEFS[p.type])throw new Error('ismeretlen alkatrész: '+p.type);return{id:p.id||('p'+(1000+i)),type:p.type,label:p.label||DEFS[p.type].prefix+(i+1),r:p.r|0,c:p.c|0,rot:(p.rot|0)&3,mir:!!p.mir,...(p.xray?{xray:true}:{}),props:{...DEFS[p.type].props,...(p.props||{})}};});
   o.bridges=(d.bridges||[]).filter(b=>Array.isArray(b)&&b.length===4).map(b=>b.map(Number));
   o.wires=(d.wires||[]).filter(w=>w&&w.a&&w.b).map(w=>({a:w.a.map(Number),b:w.b.map(Number),color:w.color||'#1c7ed6'}));
-  o.gpio=d.gpio||{};o.settings={...o.settings,...(d.settings||{})};
+  o.gpio=d.gpio||{};o.pwm=d.pwm&&typeof d.pwm==='object'?d.pwm:{};o.settings={...o.settings,...(d.settings||{})};
   o.links=(d.links||[]).filter(l=>l&&l.a&&l.b).map((l,i)=>({id:l.id||('l'+(5000+i)),a:String(l.a),b:String(l.b),gpio:l.gpio||null}));
   const au=d.auto||{};o.auto={bridges:(au.bridges||[]).filter(b=>Array.isArray(b)&&b.length>=4).map(b=>[...b.slice(0,4).map(Number),Array.isArray(b[4])?b[4]:(b[4]?[b[4]]:[])]),wires:(au.wires||[]).filter(w=>w&&w.a&&w.b).map(w=>({a:w.a,b:w.b,color:w.color||'#7048e8',links:w.links||(w.link?[w.link]:[])}))};
   o.seq=Math.max(d.seq||1,...o.parts.map(p=>+(String(p.id).replace(/\D/g,''))+1||1),...o.links.map(l=>+(String(l.id).replace(/\D/g,''))+1||1));
@@ -842,21 +911,22 @@ function dropLinks(pid){D.links=D.links.filter(l=>!l.a.startsWith(pid+'.')&&!l.b
 function addLink(a,b){if(D.links.some(l=>(l.a===a&&l.b===b)||(l.a===b&&l.b===a)))return;pushUndo();D.links.push({id:'l'+(D.seq++),a,b,gpio:null});commit();}
 function linkStates(){
   ui.linkState=new Map();const A=A0;
-  const pinNet=ref=>{const q=findPin(ref);if(!q||!inb(q.r,q.c))return -1;return A.find(A.sid(q.r,q.c));};
+  const pinNet=ref=>{const i=ref.indexOf('.'),bp=A.byPart.get(ref.slice(0,i)),q=bp&&bp.map[ref.slice(i+1)];if(!q||(!q.on&&!isOff(q.part)))return -1;return q.net;};
   for(const l of D.links){const na=pinNet(l.a);let ok=false,gp=null;
     if(na>=0){const qs=A.netPins.get(na)||[];
       if(l.b==='GND')ok=qs.some(q=>q.part.type==='pico'&&q.role==='gnd');
       else if(l.b==='GPIO'){const an=(findPin(l.a)||{}).role==='adc';gp=qs.find(q=>q.part.type==='pico'&&q.role==='gpio'&&(!an||hasCap(q,'adc')));ok=!!gp;}
       else ok=pinNet(l.b)===na;}
     const nb=D.auto.bridges.filter(b=>(b[4]||[]).includes(l.id)).length,wire=D.auto.wires.some(w=>(w.links||[]).includes(l.id));
-    ui.linkState.set(l.id,{ok,gpio:gp?gp.name:null,gpioRef:gp?gp.part.id+'.'+gp.id:null,nb,wire});}
+    const offRef=ref=>{const q=findPin(ref);return !!q&&isOff(q.part);},cable=offRef(l.a)||offRef(l.b);
+    ui.linkState.set(l.id,{ok,gpio:gp?gp.name:null,gpioRef:gp?gp.part.id+'.'+gp.id:null,nb,wire,cable});}
 }
 function renderLinks(){
   $('#autoR').checked=!!D.settings.autoRoute;
   const n=D.links.length,ok=[...ui.linkState.values()].filter(s=>s.ok).length;
   $('#linkSum').innerHTML=n?`<span class="chip ${ok===n?'c-ok':'c-warn'}">${ok}/${n} bekötve</span>`:'';
   $('#links').innerHTML=n?D.links.map(l=>{const s=ui.linkState.get(l.id)||{};
-    const st=!s.ok?'<span class="c-err">nincs</span>':s.wire?'<span class="c-warn">vezeték</span>':s.nb?`<span class="c-ok">${s.nb} híd</span>`:'<span class="muted">kézi</span>';
+    const st=!s.ok?'<span class="c-err">nincs</span>':s.cable?'<span class="c-ok">kábel</span>':s.wire?'<span class="c-warn">vezeték</span>':s.nb?`<span class="c-ok">${s.nb} híd</span>`:'<span class="muted">kézi</span>';
     return `<li class="lk${ui.selLink===l.id?' on':''}" data-li="${l.id}" title="Kattints: kezdő- és végpont, útvonal kiemelése"><span class="t">${esc(linkText(l))}${s.gpio&&l.b==='GPIO'?` <b>${s.gpio}</b>`:''}</span>${st}<button data-dl="${l.id}" aria-label="Kapcsolat törlése" title="Törlés">×</button></li>`;}).join('')
     :'<li class="muted small" style="padding:4px 6px">Még nincs kapcsolat.</li>';
   const ab=D.auto.bridges.length,aw=D.auto.wires.length,mb=D.bridges.length,mw=D.wires.length;
@@ -1052,8 +1122,31 @@ function route(opts){
     for(const a of sc)for(const h1 of freeHoles(a))for(const t of tc)for(const h2 of freeHoles(t)){const d=Math.hypot(h1[0]-h2[0],h1[1]-h2[1]);if(d<bd){bd=d;bp=[h1,h2,t];}}
     if(bp){S.wires.push({a:bp[0],b:bp[1],color:'#7048e8',links:[l.id]});S.wireEnds.add(bp[0].join(':'));S.wireEnds.add(bp[1].join(':'));S.uni(src,bp[2]);}
   }
+  // kábelek: külső kivezetés → a cél szekciójának (vagy hálózatának) szabad lyuka, a kivezetéshez legközelebb
+  const offByRef=new Map();for(const p of D.parts)if(isOff(p))for(const q of gpins(p))offByRef.set(p.id+'.'+q.id,q);
+  const cables=D.links.filter(l=>offByRef.has(l.a)||offByRef.has(l.b)).sort((x,y)=>prio(x)-prio(y));
+  const takenG=new Set();
+  for(const l of cables){
+    const T=offByRef.get(l.a)||offByRef.get(l.b),other=offByRef.has(l.a)?l.b:l.a;
+    if(offByRef.has(other)){const U=offByRef.get(other);S.wires.push({a:[T.r,T.c],b:[U.r,U.c],color:'#495057',links:[l.id]});continue;}
+    // kábelszín: föld fekete, táp piros, jel narancs
+    const POW=new Set(['p33','pwr','bp','chg','pout','vin','mp']),X0=pinByRef.get(other),color=other==='GND'||T.role==='gnd'||(X0&&X0.role==='gnd')?'#212529':POW.has(T.role)||(X0&&POW.has(X0.role))?'#c92a2a':'#e8590c';
+    const I=info(S);let ok=null,pref=-1;
+    if(other==='GND')ok=r=>isGnd(I.get(r));
+    else if(other==='GPIO'){const an=T.role==='adc';
+      if(l.gpio&&pinByRef.has(l.gpio)){const g=pinByRef.get(l.gpio);pref=S.find(cellOf(g.r,g.c));}
+      ok=r=>{const qs=I.get(r);if(takenG.has(r)||!freeGpio(qs,r,S))return false;return an?hasCap(qs[0],'adc'):true;};}
+    else{const X=pinByRef.get(other);if(!X)continue;const t=S.find(cellOf(X.r,X.c));ok=r=>r===t;}
+    let best=null,bd=1e9;
+    for(let i=0;i<NC;i++){const r=S.find(i);if(!ok(r))continue;
+      const spare=other==='GPIO'&&T.role!=='adc'&&hasCap((I.get(r)||[])[0],'adc')?6:0,bonus=r===pref?-1e4:0;
+      for(const h of freeHoles(i)){const d=Math.hypot(h[0]-T.r,h[1]-T.c)+spare+bonus;if(d<bd){bd=d;best={h,r};}}}
+    if(!best)continue;
+    S.wires.push({a:[T.r,T.c],b:best.h,color,links:[l.id]});S.wireEnds.add(best.h.join(':'));
+    if(other==='GPIO'){takenG.add(best.r);const g=(I.get(best.r)||[]).find(q=>q.role==='gpio');if(g)l.gpio=g.part.id+'.'+g.id;}
+  }
   D.auto={bridges:S.bridges,wires:S.wires};
-  const I=info(S);for(const l of links){if(l.b!=='GPIO')continue;const an=needAdc(l);const g=(I.get(srcOf(S,l))||[]).find(q=>q.part.type==='pico'&&q.role==='gpio'&&(!an||hasCap(q,'adc')));if(g)l.gpio=g.part.id+'.'+g.id;}
+  const I=info(S);for(const l of links){if(l.b!=='GPIO'||cables.includes(l))continue;const an=needAdc(l);const g=(I.get(srcOf(S,l))||[]).find(q=>q.part.type==='pico'&&q.role==='gpio'&&(!an||hasCap(q,'adc')));if(g)l.gpio=g.part.id+'.'+g.id;}
 }
 function manualToAuto(pid){
   const want=pid?(pid instanceof Set?pid:new Set([pid])):null;
@@ -1200,8 +1293,8 @@ window.pcb={
   // --- tesztekhez és szkripteléshez ---
   select(labels){const ids=D.parts.filter(p=>labels.includes(p.label)).map(p=>p.id);ui.sel=ids.length?grp(ids):null;renderLeft();draw();return ids.length;},
   rotate(){rotate();},mirror(){mirror();},undo(){undo();},redo(){redo();},
-  simInfo(){return SIM?{leds:SIM.leds.map(l=>({label:l.p.label,I:l.I,light:!!l.light})),fets:SIM.fets.map(f=>({label:f.p.label,on:f.on,vgs:f.vgs,I:f.I,floatGate:f.floatGate})),bats:SIM.bats.map(b=>({label:b.p.label,I:b.I,kind:b.kind})),picos:SIM.picos.map(x=>({label:x.p.label,powered:x.powered})),caps:SIM.caps.map(k=>({label:k.p.label,U:k.U,R:k.R,tau:k.tau})),bjts:SIM.bjts.map(t=>({label:t.p.label,st:t.st,ib:t.ib,ic:t.ic,vbe:t.vbe,vce:t.vce}))}:null;},
-  pins(label){const p=D.parts.find(x=>x.label===label);if(!p)return null;const A=A0;return gpins(p).map(q=>{const on=inb(q.r,q.c);return{id:q.id,name:q.name,r:q.r,c:q.c,net:on?A.find(A.sid(q.r,q.c)):null};});},
+  simInfo(){return SIM?{leds:SIM.leds.map(l=>({label:l.p.label,I:l.I,light:!!l.light})),fets:SIM.fets.map(f=>({label:f.p.label,on:f.on,vgs:f.vgs,I:f.I,floatGate:f.floatGate})),bats:SIM.bats.map(b=>({label:b.p.label,I:b.I,kind:b.kind})),picos:SIM.picos.map(x=>({label:x.p.label,powered:x.powered})),caps:SIM.caps.map(k=>({label:k.p.label,U:k.U,R:k.R,tau:k.tau})),bjts:SIM.bjts.map(t=>({label:t.p.label,st:t.st,ib:t.ib,ic:t.ic,vbe:t.vbe,vce:t.vce})),motors:SIM.motors.map(m=>({label:m.p.label,U:m.U,I:m.I,speed:m.speed})),servos:SIM.servos.map(s=>({label:s.p.label,U:s.U,pulse:s.pulse,angle:s.angle}))}:null;},
+  pins(label){const p=D.parts.find(x=>x.label===label);if(!p)return null;const m=A0.byPart.get(p.id).map;return gpins(p).map(q=>{const on=inb(q.r,q.c);return{id:q.id,name:q.name,r:q.r,c:q.c,net:on||isOff(p)?m[q.id].net:null};});},
   netV(label,pin){const p=D.parts.find(x=>x.label===label);const q=p&&A0.pins.find(x=>x.part===p&&x.id===pin);return q&&SIM?SIM.netV.get(q.net):null;},
   linkInfo(){return D.links.map(l=>{const g=linkGeom(l);return{text:linkText(l),start:g&&g.start,end:g&&g.end,endPin:g&&g.endPin?pinLabel(g.endPin):null,bridges:g?g.bridges.length:0};});},
   selectLink(i){const l=D.links[i];ui.selLink=l?l.id:null;renderLinks();draw();status();return statusText();},
@@ -1209,6 +1302,7 @@ window.pcb={
   customParts(){return JSON.parse(JSON.stringify(D.customParts||{}));},
   addPart(def){const problems=validatePartDef(def);if(hasErrors(problems))return{type:null,problems};return{type:editorHost.save(null,def),problems};},
   openEditor(type){openEditor(editorHost,type?{type}:{});},
+  pwm(pin,duty,freq){const q=D.parts.flatMap(gpins).find(x=>x.name===pin&&x.role==='gpio');if(!q)return false;const k=q.part.id+'.'+q.id;pushUndo();D.gpio[k]='pwm';D.pwm={...(D.pwm||{}),[k]:{...pwmCfg(k),...(duty!=null?{duty}:{}),...(freq!=null?{freq}:{})}};commit();return true;},
   slider(label,key,v){const p=D.parts.find(x=>x.label===label);return !!p&&setSlider(p,key,v);},
   version:__APP_VERSION__
 };
