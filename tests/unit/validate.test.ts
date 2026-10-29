@@ -81,3 +81,18 @@ describe('külső alkatrész', () => {
     expect(PARTS.servo.pins.find(p => p.id === 'V+')).toMatchObject({ role: 'vin', vmin: 4.5, vmax: 6.5 });
   });
 });
+
+describe('szerkesztő: leírás → űrlap', () => {
+  it('az űrlapból készült leírás veszteség nélkül visszaalakul; a haladó elemeket jelzi', async () => {
+    const { defToForm, formToDef } = await import('../../src/ui/editor');
+    const d = { ...nokia, model: [{ el: 'resistor' as const, a: '6', b: '8', ohm: 330 }] };
+    const r = defToForm(d);
+    expect(r.lost).toEqual(['a test mérete', 'saját rajzelemek']); // a kézzel írt grafika és test eltér az űrlapétól
+    const own = formToDef(r.form!);
+    delete own.meta;
+    const again = defToForm(own);
+    expect(again.lost).toEqual([]);
+    expect(again.form!.pins.map(p => p.name)).toEqual(['RST', 'CE', 'DC', 'DIN', 'CLK', 'VCC', 'BL', 'GND']);
+    expect(defToForm(PARTS.pico).lost).toEqual(expect.arrayContaining(['paraméterek', 'lábtábla']));
+  });
+});

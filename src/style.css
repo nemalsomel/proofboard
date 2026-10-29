@@ -171,3 +171,4 @@ textarea{width:100%;height:150px;resize:vertical;font-size:11px;margin-top:8px;b
   .fab .btn.danger{color:var(--err)}
   .status{font-size:11px;padding:4px 10px;min-height:24px}
 }
+.pe-warn{border:1px solid var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:13px}

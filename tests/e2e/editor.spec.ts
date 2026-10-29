@@ -99,3 +99,56 @@ test('saját alkatrész nyomógomb-vezérlővel a szimulációban', async ({ pag
     return { up, down, iss: pcb.issues().map(i => i.msg) };`);
   expect(r).toEqual({ up: '1', down: '0', iss: [] });
 });
+
+test('Esc nem dobja el a szerkesztést; az Elvetés visszaállítja a kiinduló állapotot', async ({ page }) => {
+  await page.click('#bNewPart');
+  await page.fill('#pe_name', 'Piszkozat modul');
+  await page.fill('#pe_gnames', 'A,B,C');
+  await page.click('[data-act="gen"]');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.pe')).toHaveCount(0);
+  await page.click('#bNewPart');
+  await expect(page.locator('#pe_name')).toHaveValue('Piszkozat modul');
+  await expect(page.locator('.pe-pins tbody tr')).toHaveCount(3);
+  await expect(page.locator('.pe [data-ref="sub"]')).toContainText('nem mentett módosítások');
+  await page.click('[data-act="discard"]');
+  await expect(page.locator('[data-act="discard"]')).toHaveText('Biztos? Kattints újra');
+  await page.click('[data-act="discard"]');
+  await expect(page.locator('#pe_name')).toHaveValue('Új modul');
+  await expect(page.locator('.pe-pins tbody tr')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.click('#bNewPart');
+  await expect(page.locator('#pe_name')).toHaveValue('Új modul');
+});
+
+test('Űrlap ↔ JSON: a beállítások mindkét irányban átkerülnek; amit az űrlap nem tud, arra figyelmeztet', async ({ page }) => {
+  await page.click('#bNewPart');
+  await page.fill('#pe_name', 'Oda-vissza');
+  await page.fill('#pe_gnames', 'VCC,GND,OUT');
+  await page.click('[data-act="gen"]');
+  await page.click('.pe [data-tab="json"]');
+  const j = JSON.parse(await page.locator('#pe_json').inputValue());
+  expect(j.name).toBe('Oda-vissza');
+  expect(j.pins.map((p: any) => p.name)).toEqual(['VCC', 'GND', 'OUT']);
+  j.name = 'JSON-ból'; j.pins[2].role = 'adc'; j.pins.push({ id: '4', name: 'EN', lr: 0, lc: 3, role: 'sig' });
+  j.model = [{ el: 'resistor', a: '1', b: '2', ohm: 4700 }];
+  await page.fill('#pe_json', JSON.stringify(j, null, 2));
+  await page.click('.pe [data-tab="form"]');
+  await expect(page.locator('#pe_name')).toHaveValue('JSON-ból');
+  await expect(page.locator('.pe-pins tbody tr')).toHaveCount(4);
+  await expect(page.locator('.pe-pins select[data-k="role"]').nth(2)).toHaveValue('adc');
+  await expect(page.locator('[data-model="0"][data-k="val0"]')).toHaveValue('4.7k');
+  await expect(page.locator('[data-model="0"][data-k="pin0"] option:checked')).toHaveText('VCC (azon. 1)');
+  // haladó elem: paraméter → figyelmeztetés, maradhat JSON-ban
+  await page.click('.pe [data-tab="json"]');
+  const k = JSON.parse(await page.locator('#pe_json').inputValue());
+  k.params = [{ key: 'x', label: 'X', type: 'number', default: 1 }];
+  await page.fill('#pe_json', JSON.stringify(k));
+  await page.click('.pe [data-tab="form"]');
+  await expect(page.locator('.pe-warn')).toContainText('paraméterek');
+  await page.click('[data-act="stayjson"]');
+  await expect(page.locator('.pe [data-tab="json"]')).toHaveClass(/on/);
+  await page.click('.pe [data-tab="form"]');
+  await page.click('[data-act="toform"]');
+  await expect(page.locator('#pe_name')).toHaveValue('JSON-ból');
+});

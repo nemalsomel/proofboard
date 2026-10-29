@@ -94,3 +94,12 @@ test('TP4056: a saját USB-ről tölti az akkut és táplálja a Picót; a Pico 
   const both = await pcb<string[]>(page, design([TP, BAT], tpLinks, true) + `return pcb.issues().map(i => i.msg);`);
   expect(both).toContainEqual(expect.stringContaining('BAT1: a Pico USB-je a VSYS-en át közvetlenül tölti az akkut'));
 });
+
+test('Pico sortáv szabadon állítható (pl. 8), a lábak és a GPIO-k követik', async ({ page }) => {
+  const r = await pcb<any>(page, `pcb.preset(); pcb.select(['PICO']); const el = document.querySelector('#pp_span');
+    el.value = '8'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+    const ps = pcb.pins('PICO'), rows = [...new Set(ps.map(q => q.r))].sort((a, b) => a - b);
+    return { type: el.type, span: pcb.get().parts.find(p => p.label === 'PICO').props.span, rows };`);
+  expect(r).toMatchObject({ type: 'number', span: 8 });
+  expect(r.rows[1] - r.rows[0]).toBe(8);
+});

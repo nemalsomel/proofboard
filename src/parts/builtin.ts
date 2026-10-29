@@ -25,7 +25,7 @@ for(const k in PICO_NAMES){const n=PICO_NAMES[k];PICO_TABLE[k]=PICO_ADC.has(n)?[
 const TO92: Array<[number, number]> =Array.from({length:13},(_,k)=>{const a=Math.PI*k/12;return[+(0.35-1.25*Math.sin(a)).toFixed(3),+(1+1.45*Math.cos(a)).toFixed(3)];});
 export const PARTS: Record<string, PartDef> = {
   pico:{name:'Raspberry Pi Pico W',fp:'2×20 láb, sortáv 6',prefix:'PICO',cat:'Vezérlő',
-    params:[{key:'span',label:'Sortáv',type:'select',default:6,geo:true,options:[{v:6,label:'6 osztás (0 → 6)'},{v:7,label:'7 osztás (0 → 7)'}],help:'Adatlap: 17,78 mm a két lábsor között (= 7 osztás). Vonalzóval ellenőrizhető.'}],
+    params:[{key:'span',label:'Sortáv (osztás)',type:'int',default:6,min:3,max:16,step:1,geo:true,help:'A két lábsor távolsága lyukban (0 → {span}). Adatlap szerint 17,78 mm = 7 osztás, de tüskesorral, foglalatban vagy adapterlapon más is lehet (pl. 6 vagy 8). Vonalzóval mérd le a sajátodat.'}],
     pinTable:PICO_TABLE,
     pins:[{repeat:20,id:'{40-i}',lr:0,lc:'{i}'},{repeat:20,id:'{1+i}',lr:'{span}',lc:'{i}'}],
     groups:[['3','8','13','18','23','28','33','38']],

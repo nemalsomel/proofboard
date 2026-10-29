@@ -142,6 +142,76 @@ export function formToDef(f: Form): PartDef {
   return def;
 }
 
+/** Az összehasonlításhoz: a leírás azon része, amelyet az űrlap is előállít (meta és fp nélkül). */
+const SHAPE_KEYS: Array<[keyof PartDef, string]> = [
+  ['name', 'név'], ['prefix', 'előtag'], ['cat', 'kategória'], ['mount', 'szerelés'], ['pins', 'lábak (kifejezések, ismétlés vagy extra mezők)'], ['groups', 'lábcsoportok'],
+  ['params', 'paraméterek'], ['pinTable', 'lábtábla'], ['bounds', 'a test mérete'], ['graphics', 'saját rajzelemek'], ['pinLabels', 'lábfeliratok'],
+  ['model', 'a villamos modell részletei'], ['controls', 'vezérlők'],
+];
+const MODEL_FIELDS: Record<ModelKind, { pins: string[]; vals: string[] }> = {
+  resistor: { pins: ['a', 'b'], vals: ['ohm'] }, diode: { pins: ['a', 'k'], vals: ['vf'] }, source: { pins: ['p', 'n'], vals: ['v'] },
+  nmos: { pins: ['d', 'g', 's'], vals: ['vth', 'ron'] }, capacitor: { pins: ['a', 'b'], vals: ['f', 'vmax'] },
+  motor: { pins: ['a', 'b'], vals: ['ohm', 'vnom'] }, npn: { pins: ['c', 'b', 'e'], vals: ['beta'] },
+};
+
+/**
+ * Leírásból űrlap (a JSON → Űrlap váltáshoz). `lost`: mi az, amit az űrlap nem tud visszaadni
+ * (a leírás és az űrlapból újra előállított leírás eltérései); üres, ha a váltás veszteségmentes.
+ */
+export function defToForm(def: PartDef, base?: { form: Form; graphics: unknown; bounds: unknown }): { form: Form | null; lost: string[] } {
+  if (!def || !Array.isArray(def.pins)) return { form: null, lost: ['lábak'] };
+  // ha a rajz és a test még az űrlapé (a JSON-ban nem nyúltak hozzá), az űrlap megjelenési beállításai maradnak
+  const same = (x: unknown, y: unknown) => JSON.stringify(x ?? null) === JSON.stringify(y ?? null);
+  const gen = base && same(def.graphics, base.graphics) && same(def.bounds, base.bounds);
+  const meta = (def.meta && (def.meta as { form?: Form }).form) || (gen ? base!.form : undefined);
+  const f: Form = meta && Array.isArray(meta.pins) ? JSON.parse(JSON.stringify(meta)) : newForm();
+  f.ext = Object.assign({ t: 0, b: 0, l: 0, r: 0 }, f.ext || {});
+  f.name = String(def.name ?? ''); f.prefix = String(def.prefix ?? ''); f.cat = String(def.cat ?? '');
+  f.off = def.mount === 'off';
+  const gOf = new Map<string, string>();
+  (def.groups || []).forEach((g, i) => { if (Array.isArray(g)) for (const id of g) gOf.set(id, 'g' + (i + 1)); });
+  const lost = new Set<string>();
+  f.pins = [];
+  for (const p of def.pins) {
+    if (!p || p.repeat != null || typeof p.lr !== 'number' || typeof p.lc !== 'number') { lost.add('lábak (kifejezések, ismétlés vagy extra mezők)'); continue; }
+    const volt = p.vmin != null || p.vmax != null ? `${p.vmin ?? ''}-${p.vmax ?? ''}` : '';
+    f.pins.push({ id: String(p.id), name: p.name != null ? String(p.name) : String(p.id), lr: p.lr, lc: p.lc, role: p.role || 'sig', group: gOf.get(String(p.id)) || '', ...(volt ? { volt } : {}) });
+  }
+  f.model = [];
+  for (const el of def.model || []) {
+    const k = el.el as ModelKind, mf = MODEL_FIELDS[k];
+    if (!mf) { lost.add('a villamos modell részletei'); continue; }
+    const e = el as unknown as Record<string, unknown>;
+    f.model.push({ el: k, pins: mf.pins.map(x => String(e[x] ?? '')), vals: mf.vals.map((x, i) => (typeof e[x] === 'number' ? fmtSI(e[x] as number) : e[x] != null ? String(e[x]) : fmtSI(MODEL_UI[k].vals[i][3]))) });
+  }
+  const press = (def.controls || []).find(c => c.kind === 'press') as { closes: string[][] } | undefined;
+  f.press = press && press.closes[0] ? [press.closes[0][0], press.closes[0][1]] : null;
+  if (!meta) {
+    const body = (def.graphics || []).find(g => g.shape === 'rect' && (g.layer || 'body') === 'body');
+    if (body && typeof body.fill === 'string' && /^#[0-9a-f]{6}$/i.test(body.fill)) f.fill = body.fill;
+    const txt = (def.graphics || []).find(g => g.shape === 'text' && g.layer === 'detail');
+    f.bodyText = txt && txt.text ? String(txt.text) : '';
+    f.showLabel = (def.graphics || []).some(g => g.shape === 'text' && g.layer === 'label' && g.text === '{label}');
+    f.names = !def.pinLabels ? 'none' : (def.pinLabels.off ?? 0.75) < 0 ? 'above' : 'below';
+  }
+  if (def.params && def.params.length) lost.add('paraméterek');
+  if (def.pinTable) lost.add('lábtábla');
+  // veszteség: az újra előállított leírás eltér-e (a lábak eltolása a 0:0 pontra nem számít)
+  if (f.pins.length) {
+    const back = formToDef(f), o = def.pins[0] as { lr: number; lc: number };
+    const shift = (d: PartDef) => JSON.parse(JSON.stringify(d, (k, v) => (k === 'meta' || k === 'fp' ? undefined : v)));
+    const a = shift(def), b = shift(back);
+    if (typeof o.lr === 'number' && (o.lr || o.lc)) b.pins = b.pins.map((p: { lr: number; lc: number }) => ({ ...p, lr: p.lr + o.lr, lc: p.lc + o.lc }));
+    const canon = (x: unknown) => JSON.stringify(x, (_k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).filter(([, y]) => y !== undefined).sort(([p], [q]) => p.localeCompare(q))) : v));
+    for (const [k, label] of SHAPE_KEYS) {
+      if (k === 'graphics' || k === 'bounds') { if (meta) continue; } // a meta.form alapján épült rajz és test megegyezik
+      if (k === 'pins' && b.pins) { if (canon(a.pins) !== canon(b.pins.map((p: Record<string, unknown>, i: number) => ({ ...p, name: a.pins[i]?.name ?? p.name })))) lost.add(label); continue; }
+      if (canon(a[k] ?? null) !== canon(b[k] ?? null) && !(k === 'cat' && !a.cat && b.cat === 'Saját')) lost.add(label);
+    }
+  }
+  return { form: f.pins.length ? f : null, lost: [...lost] };
+}
+
 const newForm = (): Form => ({ name: 'Új modul', prefix: 'U', cat: 'Saját', bodyText: '', pad: 0.6, ext: { t: 0, b: 0, l: 0, r: 0 }, fill: FILLS[0], showLabel: true, names: 'below', pins: [], model: [], press: null });
 const formOf = (def: PartDef): Form | null => {
   const f = def.meta && (def.meta as { form?: Form }).form;
@@ -151,18 +221,45 @@ const formOf = (def: PartDef): Form | null => {
   return c;
 };
 
+/* Piszkozatok: a bezárt (nem mentett) szerkesztés állapota alkatrészenként; az Elvetés törli. */
+interface Draft { tab: 'form' | 'json'; form: Form | null; jsonText: string }
+const DRAFT_KEY = 'proofboard.editor.drafts';
+function drafts(): Record<string, Draft> { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}') || {}; } catch { return {}; } }
+function putDraft(k: string, d: Draft | null): void {
+  const all = drafts(); if (d) all[k] = d; else delete all[k];
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(all)); } catch { /* tárhely nélkül csak a munkamenetben */ }
+}
+
 /** A szerkesztő megnyitása. `type`: meglévő saját alkatrész; `from`: kiindulási leírás (pl. beépített másolata). */
 export function openEditor(host: EditorHost, opts: { type?: string; from?: PartDef } = {}): void {
   const existing = opts.type ? host.custom()[opts.type] : undefined;
   const start = existing || opts.from;
-  let form: Form | null = start ? formOf(start) : newForm();
-  let jsonDef: PartDef | null = form ? null : JSON.parse(JSON.stringify(start));
-  if (jsonDef && opts.from && !existing) { jsonDef.name = jsonDef.name + ' (másolat)'; delete jsonDef.meta; }
-  let tab: 'form' | 'json' = form ? 'form' : 'json';
-  let sel = -1;
+  const draftKey = opts.type ? 'type:' + opts.type : opts.from ? 'from:' + opts.from.name : 'new';
+  let form: Form | null = null, jsonDef: PartDef | null = null, tab: 'form' | 'json' = 'form';
+  /** Kiinduló állapot: űrlap, ha a leírás veszteség nélkül megjeleníthető rajta, különben JSON. */
+  const initial = (): void => {
+    jsonDef = null; jsonText = ''; jsonErr = ''; pending = null;
+    if (!start) { form = newForm(); tab = 'form'; return; }
+    const d: PartDef = JSON.parse(JSON.stringify(start));
+    if (opts.from && !existing) { d.name = d.name + ' (másolat)'; delete d.meta; }
+    const m = formOf(d), conv = m ? { form: m, lost: [] } : defToForm(d);
+    if (conv.form && !conv.lost.length) { form = conv.form; if (opts.from && !existing) form.name = d.name; tab = 'form'; }
+    else { form = null; jsonDef = d; tab = 'json'; }
+  };
+  let sel = -1, selModel = -1;
   let jsonText = '';
   let jsonErr = '';
-  let confirmDel = 0;
+  let confirmDel = 0, confirmDiscard = 0;
+  /** JSON → Űrlap váltáskor a veszteséggel járó átalakítás, megerősítésre várva. */
+  let pending: { form: Form; lost: string[] } | null = null;
+  /** Az utolsó űrlap → JSON váltáskor előállított rajz és test (ha a JSON-ban változatlan, az űrlapé marad). */
+  let lastGen: { form: Form; graphics: unknown; bounds: unknown } | null = null;
+  initial();
+  const dr = drafts()[draftKey];
+  const restored = !!dr;
+  if (dr) { tab = dr.tab; form = dr.form; jsonText = dr.jsonText || ''; if (tab === 'json') { try { jsonDef = JSON.parse(jsonText); } catch (e) { jsonErr = 'Hibás JSON: ' + (e instanceof Error ? e.message : String(e)); } } }
+  const snapshot = () => JSON.stringify({ tab, form, jsonText: tab === 'json' ? jsonText : '' });
+  let clean = restored ? '' : snapshot();
 
   const back = document.createElement('div');
   back.className = 'pe-back';
@@ -184,8 +281,9 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       </div>
       <footer class="pe-foot">
         ${existing ? '<button class="btn danger" data-act="delete">Törlés</button>' : ''}
+        <button class="btn" data-act="discard" title="A nem mentett módosítások elvetése, vissza a kiinduló állapotra">Elvetés</button>
         <span style="flex:1"></span>
-        <button class="btn" data-act="close">Mégse</button>
+        <button class="btn" data-act="close" title="Bezárás; a módosítások megmaradnak, legközelebb innen folytathatod (Esc)">Bezárás</button>
         <button class="btn" data-act="save">Mentés</button>
         <button class="btn on" data-act="saveplace">Mentés és lerakás</button>
       </footer>
@@ -196,6 +294,22 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   const prevFocus = document.activeElement as HTMLElement | null;
 
   const currentDef = (): PartDef | null => (tab === 'form' && form ? formToDef(form) : jsonDef);
+  /** Váltás a fülek között: az aktuális állapot átkerül a másik nézetbe. */
+  function switchTab(t: 'form' | 'json'): void {
+    if (t === tab && !pending) return;
+    if (t === 'json') {
+      if (form) { const d = formToDef(form); delete d.meta; jsonDef = d; jsonText = JSON.stringify(d, null, 2); jsonErr = ''; lastGen = { form: JSON.parse(JSON.stringify(form)), graphics: d.graphics, bounds: d.bounds }; }
+      tab = 'json'; pending = null; render(); return;
+    }
+    const ta = left.querySelector<HTMLTextAreaElement>('#pe_json'); if (ta) jsonText = ta.value;
+    let d: PartDef;
+    try { d = JSON.parse(jsonText); jsonDef = d; jsonErr = ''; }
+    catch (e) { jsonErr = 'Hibás JSON: ' + (e instanceof Error ? e.message : String(e)) + ' – javítsd, mielőtt az űrlapra váltasz.'; render(); return; }
+    const conv = defToForm(d, lastGen || undefined);
+    if (!conv.form) { jsonErr = 'Az űrlapon legalább egy, fix helyű láb kell (számmal megadott sor és oszlop).'; render(); return; }
+    if (conv.lost.length) { pending = { form: conv.form, lost: conv.lost }; render(); return; }
+    form = conv.form; tab = 'form'; pending = null; render();
+  }
   const problems = (): Problem[] => {
     if (tab === 'json' && jsonErr) return [{ level: 'error', path: 'json', msg: jsonErr }];
     const d = currentDef();
@@ -205,7 +319,12 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     return ps;
   };
 
-  const close = () => { back.remove(); document.removeEventListener('keydown', onDocKey, true); prevFocus?.focus?.(); };
+  /** Bezárás: a nem mentett állapot piszkozatként megmarad (az Esc sem dob el semmit). */
+  const close = (keep = true) => {
+    if (tab === 'json') { const ta = left.querySelector<HTMLTextAreaElement>('#pe_json'); if (ta) jsonText = ta.value; }
+    if (keep && snapshot() !== clean) putDraft(draftKey, { tab, form, jsonText: tab === 'json' ? jsonText : '' });
+    back.remove(); document.removeEventListener('keydown', onDocKey, true); prevFocus?.focus?.();
+  };
   const onDocKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
   document.addEventListener('keydown', onDocKey, true);
   back.addEventListener('keydown', e => e.stopPropagation());
@@ -213,11 +332,10 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
 
   // ---------- megjelenítés ----------
   function render(): void {
-    $('sub').textContent = existing ? ` · ${existing.name}` : opts.from ? ' · új, másolatból' : ' · új alkatrész';
+    $('sub').textContent = (existing ? ` · ${existing.name}` : opts.from ? ' · új, másolatból' : ' · új alkatrész') + (restored && snapshot() !== clean ? ' · nem mentett módosítások' : '');
     back.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach(b => {
       b.classList.toggle('on', b.dataset.tab === tab);
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
-      if (b.dataset.tab === 'form') b.disabled = !form;
     });
     left.innerHTML = tab === 'form' && form ? formHtml(form) : jsonHtml();
     refresh();
@@ -231,7 +349,8 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     back.querySelectorAll<HTMLButtonElement>('[data-act="save"],[data-act="saveplace"]').forEach(b => { b.disabled = err; });
   }
   const opt = (v: string, l: string, cur: string) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
-  const pinOpts = (f: Form, cur: string) => '<option value="">–</option>' + f.pins.map(p => opt(p.id, `${p.id}${p.name && p.name !== p.id ? ' · ' + p.name : ''}`, cur)).join('');
+  /** A láb a lábneve szerint (ahogy az előnézeten látszik), ha eltér, zárójelben az azonosító. */
+  const pinOpts = (f: Form, cur: string) => '<option value="">–</option>' + f.pins.map(p => opt(p.id, `${p.name || p.id}${p.name && p.name !== p.id ? ` (azon. ${p.id})` : ''}`, cur)).join('');
 
   function formHtml(f: Form): string {
     const nextR = f.pins.length ? Math.max(...f.pins.map(p => p.lr)) + 2 : 0, nextC = f.pins.length ? Math.min(...f.pins.map(p => p.lc)) : 0;
@@ -305,9 +424,11 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   function jsonHtml(): string {
     const d = currentDef();
     if (!jsonText) { const c: PartDef | null = d ? JSON.parse(JSON.stringify(d)) : null; if (c) delete c.meta; jsonText = c ? JSON.stringify(c, null, 2) : ''; }
+    const warn = pending ? `<div class="pe-warn" role="alert"><b>Az űrlap ezeket nem tudja megjeleníteni:</b> ${pending.lost.map(esc).join(', ')}.
+        Ha mégis átváltasz, ezek elvesznek.<div class="grp" style="margin-top:6px"><button class="btn" data-act="toform">Váltás az űrlapra (elhagyja őket)</button><button class="btn" data-act="stayjson">Maradok a JSON-nál</button></div></div>` : '';
     return `
-      <section class="pe-sec">
-        <p class="help">${form ? 'A leírás teljes JSON-formája. Ha itt módosítod és alkalmazod, utána csak JSON-ban szerkeszthető tovább.' : 'Ez a leírás haladó elemeket tartalmaz (kifejezések, paraméterek, saját rajzelemek), ezért csak JSON-ban szerkeszthető. A mezők leírása: src/core/schema.ts.'}</p>
+      <section class="pe-sec">${warn}
+        <p class="help">A leírás teljes JSON-formája; az űrlapon beállítottak itt is megjelennek, és az itteni módosítások az űrlapra váltáskor visszakerülnek. Ha a leírás olyat tartalmaz, amit az űrlap nem tud (kifejezések, paraméterek, saját rajzelemek), a váltás előtt szól. A mezők leírása: src/core/schema.ts.</p>
         <textarea class="pe-json" id="pe_json" spellcheck="false" aria-label="Leírás JSON">${esc(jsonText)}</textarea>
         <div class="grp" style="margin-top:8px"><button class="btn" data-act="applyjson">JSON alkalmazása</button>
           <label class="small muted">Kiindulás beépítettből: <select id="pe_from" aria-label="beépített alkatrész"><option value="">–</option>${Object.entries(host.builtin).map(([k, d]) => `<option value="${k}">${esc(d.name)}</option>`).join('')}</select></label></div>
@@ -348,11 +469,16 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       if (body && body.text) { const pinTop = Math.min(...rs) - 0.5, tr = pinTop - B.r0 >= 1 ? (B.r0 + pinTop) / 2 : (B.r0 + B.r1) / 2;
         ctx.fillStyle = lightText(fill) ? '#f1f3f5' : '#1d231f'; ctx.font = `600 ${Math.max(9, S * 0.5)}px ui-monospace,monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(body.text, X((B.c0 + B.c1) / 2), Y(tr)); }
     }
-    // lábak
+    // lábak (a kijelölt modellelem kivezetései lilával, sorszámmal: 1. vég, 2. vég…)
+    const modelPins = form && tab === 'form' && selModel >= 0 && form.model[selModel] ? form.model[selModel].pins : [];
     ctx.font = `600 ${Math.max(8, S * 0.36)}px ui-monospace,monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     pts.forEach((p, i) => {
       const x = X(p.lc), y = Y(p.lr);
       if (i === sel) { ctx.strokeStyle = '#a8571f'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, S * 0.48, 0, 7); ctx.stroke(); }
+      const mk = modelPins.indexOf(p.id);
+      if (mk >= 0) { ctx.strokeStyle = '#7048e8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, S * 0.5, 0, 7); ctx.stroke();
+        ctx.fillStyle = '#7048e8'; ctx.font = `700 ${Math.max(8, S * 0.34)}px ui-monospace,monospace`; ctx.fillText(String(mk + 1), x + S * 0.42, y - S * 0.42);
+        ctx.font = `600 ${Math.max(8, S * 0.36)}px ui-monospace,monospace`; }
       ctx.fillStyle = host.roleColor(p.role); ctx.beginPath(); ctx.arc(x, y, S * 0.3, 0, 7); ctx.fill();
       ctx.fillStyle = '#e9ecef'; ctx.beginPath(); ctx.arc(x, y, S * 0.12, 0, 7); ctx.fill();
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,252,240,.9)'; ctx.fillStyle = '#1d231f';
@@ -397,6 +523,11 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
 
   back.addEventListener('input', e => {
     const t = e.target as HTMLInputElement;
+    if (t.id === 'pe_json') { // élő ellenőrzés gépelés közben
+      jsonText = t.value;
+      try { jsonDef = JSON.parse(jsonText); jsonErr = ''; } catch (err) { jsonErr = 'Hibás JSON: ' + (err instanceof Error ? err.message : String(err)); }
+      refresh(); return;
+    }
     if (!form || tab !== 'form') return;
     if (t.dataset.f) {
       const k = t.dataset.f as keyof Form;
@@ -424,7 +555,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     const t = e.target as HTMLSelectElement & HTMLInputElement;
     if (t.id === 'pe_from' && t.value) {
       const d: PartDef = JSON.parse(JSON.stringify(host.builtin[t.value])); d.name += ' (másolat)'; delete d.meta;
-      jsonDef = d; jsonText = ''; jsonErr = ''; form = null; tab = 'json'; render(); return;
+      jsonDef = d; jsonText = ''; jsonErr = ''; tab = 'json'; pending = null; render(); return;
     }
     if (!form || tab !== 'form') return;
     if (t.dataset.pin != null && t.dataset.k === 'role') {
@@ -444,6 +575,8 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   });
   back.addEventListener('focusin', e => {
     const t = e.target as HTMLElement;
+    const mi = t.dataset.model != null ? +t.dataset.model : -1;
+    if (mi !== selModel) { selModel = mi; drawPreview(); }
     if (t.dataset.pin != null && +t.dataset.pin !== sel) {
       sel = +t.dataset.pin;
       left.querySelectorAll('tr[data-row]').forEach(tr => tr.classList.toggle('on', (tr as HTMLElement).dataset.row === String(sel)));
@@ -453,14 +586,16 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   back.addEventListener('click', e => {
     const b = (e.target as HTMLElement).closest('button');
     if (!b) return;
-    if (b.dataset.tab) {
-      const t = b.dataset.tab as 'form' | 'json';
-      if (t === 'json') jsonText = '';
-      tab = t; render(); return;
-    }
+    if (b.dataset.tab) { switchTab(b.dataset.tab as 'form' | 'json'); return; }
     if (b.dataset.fill && form) { form.fill = b.dataset.fill; render(); return; }
     const act = b.dataset.act;
     if (act === 'close') return close();
+    if (act === 'toform' && pending) { form = pending.form; pending = null; tab = 'form'; render(); return; }
+    if (act === 'stayjson') { pending = null; render(); return; }
+    if (act === 'discard') {
+      if (Date.now() - confirmDiscard > 3000) { confirmDiscard = Date.now(); b.textContent = 'Biztos? Kattints újra'; setTimeout(() => { b.textContent = 'Elvetés'; }, 3000); return; }
+      confirmDiscard = 0; b.textContent = 'Elvetés'; putDraft(draftKey, null); initial(); sel = -1; selModel = -1; clean = snapshot(); render(); return;
+    }
     if (act === 'gen' && form) {
       const n = Math.max(1, Math.min(40, +(left.querySelector<HTMLInputElement>('#pe_gn')!.value) || 1));
       const dir = left.querySelector<HTMLSelectElement>('#pe_gdir')!.value as 'h' | 'v';
@@ -479,21 +614,21 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (act === 'delmodel' && form) { form.model.splice(+b.dataset.i!, 1); render(); return; }
     if (act === 'applyjson') {
       const ta = left.querySelector<HTMLTextAreaElement>('#pe_json')!; jsonText = ta.value;
-      try { const d = JSON.parse(jsonText); jsonErr = ''; jsonDef = d; form = null; }
+      try { const d = JSON.parse(jsonText); jsonErr = ''; jsonDef = d; }
       catch (err) { jsonErr = 'Hibás JSON: ' + (err instanceof Error ? err.message : String(err)); }
       render(); return;
     }
     if (act === 'save' || act === 'saveplace') {
       const d = currentDef(); if (!d || hasErrors(problems())) return refresh();
       const t = host.save(opts.type ?? null, d);
-      close();
+      putDraft(draftKey, null); close(false);
       if (act === 'saveplace') host.place(t);
       return;
     }
     if (act === 'delete' && opts.type) {
       const n = host.usage(opts.type);
       if (n && Date.now() - confirmDel > 3000) { confirmDel = Date.now(); b.textContent = `Biztos? ${n} példány is törlődik`; return; }
-      host.remove(opts.type); close(); return;
+      host.remove(opts.type); putDraft(draftKey, null); close(false); return;
     }
   });
 
