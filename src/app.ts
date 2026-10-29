@@ -152,14 +152,25 @@ const pwmCfg=key=>({duty:50,freq:1000,...((D.pwm||{})[key]||{})});
 function simulate(A){
   const pw=[];for(const p of D.parts)for(const q of A.byPart.get(p.id).pins)if(q.role==='gpio'&&gpioMode(p,q.id,q,A)==='pwm')pw.push({key:p.id+'.'+q.id,q,...pwmCfg(p.id+'.'+q.id)});
   const cuts=[...new Set(pw.map(x=>Math.max(0,Math.min(100,+x.duty||0))))].filter(d=>d>0&&d<100).sort((a,b)=>a-b),bounds=[0,...cuts,100],runs=[];
-  for(let i=0;i+1<bounds.length;i++){const lo=bounds[i],w=(bounds[i+1]-lo)/100;if(w<=0)continue;runs.push({w,o:simulate1(A,new Set(pw.filter(x=>x.duty>lo).map(x=>x.key)))});}
-  const out=mergeSims(runs);
+  const runAll=()=>{const runs=[];for(let i=0;i+1<bounds.length;i++){const lo=bounds[i],w=(bounds[i+1]-lo)/100;if(w<=0)continue;runs.push({w,o:simulate1(A,new Set(pw.filter(x=>x.duty>lo).map(x=>x.key)))});}return mergeSims(runs);};
+  // órajeles logika: két beállt állapot között az órajel élén a tárolók átveszik a D értékét, utána újraszámol (kaszkád: legfeljebb 16 kör)
+  let out=runAll();for(let pass=0;pass<16&&clockStep(out);pass++)out=runAll();
   out.pwm=new Map(pw.map(x=>[x.q.net,x]));
   // szervó: a jelvezetéken érkező PWM impulzusszélessége → szög
   for(const s of out.servos){const x=out.pwm.get(s.sigNet);s.pulse=x?x.duty/100/Math.max(1e-9,x.freq)*1000:null;
     const ok=x&&x.freq>=40&&x.freq<=400&&s.pulse>=s.pmin-0.2&&s.pulse<=s.pmax+0.2;s.angle=ok?Math.max(0,Math.min(180,(s.pulse-s.pmin)/(s.pmax-s.pmin)*180)):null;}
   return out;
 }
+/** A logikai tárolók állapota alkatrészenként (a szimulációk között megmarad; szimuláció indításakor törlődik). */
+const LSTATE=new Map();
+function clockStep(out){let changed=false;
+  for(const L of out.logics){if(!L.regs.length)continue;const st=LSTATE.get(L.p.id)||{regs:{},clk:{}},next={};
+    for(const r of L.regs){const prev=st.clk[r.name],now=r.clk;st.clk[r.name]=now;
+      const edge=r.edge==='fall'?prev===1&&now===0:prev===0&&now===1;
+      next[r.name]=r.async!=null?r.async:edge?r.d:(r.name in st.regs?st.regs[r.name]:r.val);}
+    for(const k in next)if(next[k]!==st.regs[k])changed=true;
+    st.regs=next;LSTATE.set(L.p.id,st);}
+  return changed;}
 const SIM_MAX={gpios:new Set(['I']),srcI:new Set(['I'])},ST_RANK={off:0,sat:1,act:2};
 function mergeSims(runs){
   if(runs.length===1)return runs[0].o;
@@ -189,11 +200,14 @@ function simulate1(A,high){
       else if(el.el==='motor')motors.push({p,a:N(el.a),b:N(el.b),g:1/Math.max(1e-3,num(el.ohm,E)),vnom:Math.max(0.1,num(el.vnom,E))});
       else if(el.el==='servo')servos.push({p,vp:N(el.vp),gnd:N(el.gnd),sigNet:m[el.sig].net,g:1/Math.max(1e-3,num(el.ohm,E)),pmin:num(el.pmin??0.5,E),pmax:num(el.pmax??2.5,E)});
       else if(el.el==='logic'){const ps=bp.pins,ast=x=>{try{return x&&String(x).trim()?parseExpr(String(x)):null;}catch(e){return null;}};
-        const ins=new Map(),outs=[];
-        for(const o of el.outs||[]){const a=ast(o.expr),oe=ast(o.oe);if(!a||!m[o.pin])continue;outs.push({p,pin:m[o.pin],node:N(o.pin),ast:a,oe,type:o.type==='od'?'od':'pp',st:'z'});
-          for(const v of [...varsOf(a),...(oe?varsOf(oe):[])]){if(ins.has(v))continue;const id=pinRef(v,ps);if(!id)continue;const q=m[id];
-            ins.set(v,{q,node:N(id),open:(A.netPins.get(q.net)||[]).length<=1&&(A.netSecs.get(q.net)||0)<=1});}}
-        logics.push({p,vcc:N(el.vcc),gnd:N(el.gnd),ins,outs,vih:num(el.vih??0.7,E),vil:num(el.vil??0.3,E),g:1/Math.max(1,num(el.rout??50,E)),vdd:0});}
+        const ins=new Map(),outs=[],stored=(LSTATE.get(p.id)||{regs:{}}).regs;
+        const regs=(el.regs||[]).map(r=>({name:r.name,clk:ast(r.clk),d:ast(r.d),reset:ast(r.reset),set:ast(r.set),edge:r.edge==='fall'?'fall':'rise',stored:stored[r.name]??(r.init??0),eff:'X'})).filter(r=>r.clk&&r.d);
+        const rn=new Set(regs.map(r=>r.name));
+        const addIns=a=>{if(!a)return;for(const v of varsOf(a)){if(ins.has(v)||rn.has(v))continue;const id=pinRef(v,ps);if(!id)continue;const q=m[id];
+            ins.set(v,{q,node:N(id),open:(A.netPins.get(q.net)||[]).length<=1&&(A.netSecs.get(q.net)||0)<=1});}};
+        for(const o of el.outs||[]){const a=ast(o.expr),oe=ast(o.oe);if(!a||!m[o.pin])continue;outs.push({p,pin:m[o.pin],node:N(o.pin),ast:a,oe,type:o.type==='od'?'od':'pp',st:'z'});addIns(a);addIns(oe);}
+        for(const r of regs){addIns(r.clk);addIns(r.d);addIns(r.reset);addIns(r.set);}
+        logics.push({p,vcc:N(el.vcc),gnd:N(el.gnd),ins,outs,regs,vih:num(el.vih??0.7,E),vil:num(el.vil??0.3,E),g:1/Math.max(1,num(el.rout??50,E)),vdd:0});}
       else if(el.el==='nmos')fets.push({p,d:N(el.d),g:N(el.g),s:N(el.s),vth:num(el.vth,E),ron:Math.max(1e-3,num(el.ron,E)),imax:el.imax!=null?num(el.imax,E):null,on:false});
     }
   }
@@ -228,7 +242,11 @@ function simulate1(A,high){
     for(const f of fets){const on=(V[f.g]-V[f.s])>f.vth;if(on!==f.on){f.on=on;ch=true;}}
     // logika: a bemeneti szintekből a kimenetek (push-pull: VCC/GND felé, nyitott drain: csak GND felé, X vagy OE=0: nem hajt)
     for(const L of logics){const vdd=V[L.vcc]-V[L.gnd];L.vdd=vdd;
-      const lvl=name=>{const x=L.ins.get(name);if(!x||x.open)return'X';const v=V[x.node]-V[L.gnd];return v>=L.vih*vdd?1:v<=L.vil*vdd?0:'X';};
+      const pin=name=>{const x=L.ins.get(name);if(!x||x.open)return'X';const v=V[x.node]-V[L.gnd];return v>=L.vih*vdd?1:v<=L.vil*vdd?0:'X';};
+      // tárolók: a tárolt érték, amíg az aszinkron törlés/beállítás nem írja felül
+      const rg=new Map(L.regs.map(r=>[r.name,r])),lvS=name=>rg.has(name)?rg.get(name).stored:pin(name);
+      for(const r of L.regs){const rs=r.reset?evalExpr(r.reset,lvS):0,ss=r.set?evalExpr(r.set,lvS):0;r.async=vdd<1?null:rs===1?0:ss===1?1:null;r.eff=vdd<1?'X':r.async??r.stored;}
+      const lvl=name=>rg.has(name)?rg.get(name).eff:pin(name);L.lvl=lvl;
       for(const o of L.outs){let st='z';if(vdd>=1){const en=o.oe?evalExpr(o.oe,lvl):1;if(en===1){const v=evalExpr(o.ast,lvl);st=v==='X'?'z':o.type==='od'?(v?'z':0):v;}}
         if(st!==o.st){o.st=st;ch=true;}}}
     for(const t of bjts){const vbe=V[t.b]-V[t.e],vce=V[t.c]-V[t.e];
@@ -254,7 +272,8 @@ function simulate1(A,high){
   const out={netV,floating,leds:[],picos:[],gpios:[],bats:[],srcI:[],fets:[],caps:[],bjts:[],motors:[],servos:[],logics:[]};
   for(const L of logics){const gl=V[L.gnd],lv=x=>{if(x.open||!reach[x.node])return'X';const v=V[x.node]-gl;return v>=L.vih*L.vdd?1:v<=L.vil*L.vdd?0:'X';};
     out.logics.push({p:L.p,vdd:L.vdd,ins:[...L.ins].map(([name,x])=>({name,lv:L.vdd>=1?lv(x):'X',open:x.open||!reach[x.node]})),
-      outs:L.outs.map(o=>{const e=els.find(x=>x.kind==='lout'&&x.ref===o);return{name:o.pin.name,st:o.st,I:e?Math.abs(cur(e)):0};})});}
+      outs:L.outs.map(o=>{const e=els.find(x=>x.kind==='lout'&&x.ref===o);return{name:o.pin.name,st:o.st,I:e?Math.abs(cur(e)):0};}),
+      regs:L.regs.map(r=>({name:r.name,val:r.eff,clk:L.vdd>=1&&L.lvl?evalExpr(r.clk,L.lvl):'X',d:L.vdd>=1&&L.lvl?evalExpr(r.d,L.lvl):'X',async:r.async??null,edge:r.edge}))});}
   for(const m of motors){const U=V[m.a]-V[m.b];out.motors.push({p:m.p,U,I:U*m.g,vnom:m.vnom,speed:Math.max(-1.5,Math.min(1.5,U/m.vnom))});}
   for(const s of servos){const U=V[s.vp]-V[s.gnd];out.servos.push({p:s.p,U,I:U*s.g,sigNet:s.sigNet,pmin:s.pmin,pmax:s.pmax});}
   // kondenzátor: feszültség és időállandó (τ = R·C, R a kapcsain látott Thevenin-ellenállás a munkapontban)
@@ -808,7 +827,7 @@ function ltab(name,remember=true){ui.ltab=name;
   if(remember)uiPrefSet({ltab:name});}
 document.querySelector('.ltabs').addEventListener('click',e=>{const b=e.target.closest('[data-ltab]');if(b)ltab(b.dataset.ltab);});
 ltab(uiPref().ltab==='lib'?'lib':'edit',false);
-function setSim(on){if(on&&!ui.sim){ui.rtabBack=ui.rtab;rtab('sim',false);}else if(!on&&ui.sim&&ui.rtab==='sim')rtab(ui.rtabBack&&ui.rtabBack!=='sim'?ui.rtabBack:'design',false);
+function setSim(on){if(on&&!ui.sim){LSTATE.clear();ui.rtabBack=ui.rtab;rtab('sim',false);}else if(!on&&ui.sim&&ui.rtab==='sim')rtab(ui.rtabBack&&ui.rtabBack!=='sim'?ui.rtabBack:'design',false);
   ui.sim=on;if(!on){ui.pressed={};ui.holdPtr.clear();}ui.wireStart=null;ui.placing=null;const b=$('#bSim');b.classList.toggle('on',on);b.textContent=on?'■ Szimuláció leállítása':'▶ Szimuláció';recompute();renderLeft();}
 let msgTimer;function flashMsg(m){const s=$('#status');s.textContent=m;s.style.color='var(--err)';clearTimeout(msgTimer);msgTimer=setTimeout(()=>{s.style.color='';status();},1800);}
 
@@ -966,7 +985,7 @@ function renderRight0(){
   if(SIM.bjts.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>NPN</th><th>I<sub>B</sub></th><th>I<sub>C</sub></th><th>U<sub>CE</sub></th><th>Állapot</th></tr></thead><tbody>`+SIM.bjts.map(t=>`<tr><td>${esc(t.p.label)}</td><td>${t.floatBase?'lebeg':fmtSI(t.ib)+'A'}</td><td>${fmtSI(Math.abs(t.ic))}A</td><td>${t.vce.toFixed(2)} V</td><td>${BST[t.st]}</td></tr>`).join('')+'</tbody></table>';
   if(SIM.caps.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>Kond.</th><th>U</th><th title="Időállandó: ennyi idő alatt töltődik fel kb. 63%-ra, 5τ alatt teljesen">τ</th></tr></thead><tbody>`+SIM.caps.map(k=>`<tr><td>${esc(k.p.label)} <span class="muted">${fmtSI(k.f)}F</span></td><td>${k.float?'–':k.U.toFixed(2)+' V'}</td><td>${k.tau!=null?fmtSI(k.tau)+'s':'<span class="muted">nincs töltőút</span>'}</td></tr>`).join('')+'</tbody></table>';
   const LVC=v=>v===1?'lv1':v===0?'lv0':'lvq',LVT=v=>v==='z'?'Z':v==='X'?'?':String(v);
-  if(SIM.logics.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>Logika</th><th>Bemenet</th><th>Kimenet</th></tr></thead><tbody>`+SIM.logics.map(L=>`<tr><td>${esc(L.p.label)}${L.vdd<1?'<br><span class="c-err small">nincs táp</span>':''}</td><td class="lgcells">${L.ins.map(x=>`<span title="${esc(x.name)}${x.open?' (lebeg)':''}">${esc(x.name)}<span class="lv ${LVC(x.lv)}">${LVT(x.lv)}</span></span>`).join(' ')}</td><td class="lgcells">${L.outs.map(o=>`<span>${esc(o.name)}<span class="lv ${LVC(o.st)}">${LVT(o.st)}</span></span>`).join(' ')}</td></tr>`).join('')+'</tbody></table>';
+  if(SIM.logics.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>Logika</th><th>Bemenet</th><th>Kimenet</th></tr></thead><tbody>`+SIM.logics.map(L=>`<tr><td>${esc(L.p.label)}${L.vdd<1?'<br><span class="c-err small">nincs táp</span>':''}</td><td class="lgcells">${L.ins.map(x=>`<span title="${esc(x.name)}${x.open?' (lebeg)':''}">${esc(x.name)}<span class="lv ${LVC(x.lv)}">${LVT(x.lv)}</span></span>`).join(' ')}</td><td class="lgcells">${L.outs.map(o=>`<span>${esc(o.name)}<span class="lv ${LVC(o.st)}">${LVT(o.st)}</span></span>`).join(' ')}${L.regs.length?`<div class="small muted" style="margin-top:2px">tárolók: ${L.regs.map(r=>`<span>${esc(r.name)}<span class="lv ${LVC(r.val)}">${LVT(r.val)}</span></span>`).join(' ')}</div>`:''}</td></tr>`).join('')+'</tbody></table>';
   if(SIM.motors.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>Motor</th><th>U</th><th>I</th><th>Fordulat</th></tr></thead><tbody>`+SIM.motors.map(m=>`<tr><td>${esc(m.p.label)}</td><td>${m.U.toFixed(2)} V</td><td>${fmtSI(Math.abs(m.I))}A</td><td>${Math.abs(m.speed)<0.02?'<span class="muted">áll</span>':`${Math.round(Math.abs(m.speed)*100)} %${m.speed<0?' ↺':''}`}</td></tr>`).join('')+'</tbody></table>';
   if(SIM.servos.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>Szervó</th><th>U</th><th>Jel</th><th>Szög</th></tr></thead><tbody>`+SIM.servos.map(s=>`<tr><td>${esc(s.p.label)}</td><td>${s.U.toFixed(2)} V</td><td>${s.pulse!=null?s.pulse.toFixed(2)+' ms':'–'}</td><td>${s.angle!=null&&s.U>3?Math.round(s.angle)+'°':'<span class="muted">–</span>'}</td></tr>`).join('')+'</tbody></table>';
   const batt=SIM.bats.filter(b=>b.kind!=='supply');
@@ -1461,7 +1480,7 @@ window.pcb={
   // --- tesztekhez és szkripteléshez ---
   select(labels){const ids=D.parts.filter(p=>labels.includes(p.label)).map(p=>p.id);ui.sel=ids.length?grp(ids):null;if(ids.length)ltab('edit');renderLeft();draw();return ids.length;},
   rotate(){rotate();},mirror(){mirror();},undo(){undo();},redo(){redo();},
-  simInfo(){return SIM?{leds:SIM.leds.map(l=>({label:l.p.label,I:l.I,light:!!l.light})),fets:SIM.fets.map(f=>({label:f.p.label,on:f.on,vgs:f.vgs,I:f.I,floatGate:f.floatGate})),bats:SIM.bats.map(b=>({label:b.p.label,I:b.I,kind:b.kind})),picos:SIM.picos.map(x=>({label:x.p.label,powered:x.powered})),caps:SIM.caps.map(k=>({label:k.p.label,U:k.U,R:k.R,tau:k.tau})),bjts:SIM.bjts.map(t=>({label:t.p.label,st:t.st,ib:t.ib,ic:t.ic,vbe:t.vbe,vce:t.vce})),motors:SIM.motors.map(m=>({label:m.p.label,U:m.U,I:m.I,speed:m.speed})),logics:SIM.logics.map(L=>({label:L.p.label,vdd:L.vdd,ins:Object.fromEntries(L.ins.map(x=>[x.name,x.lv])),outs:Object.fromEntries(L.outs.map(o=>[o.name,o.st]))})),servos:SIM.servos.map(s=>({label:s.p.label,U:s.U,pulse:s.pulse,angle:s.angle}))}:null;},
+  simInfo(){return SIM?{leds:SIM.leds.map(l=>({label:l.p.label,I:l.I,light:!!l.light})),fets:SIM.fets.map(f=>({label:f.p.label,on:f.on,vgs:f.vgs,I:f.I,floatGate:f.floatGate})),bats:SIM.bats.map(b=>({label:b.p.label,I:b.I,kind:b.kind})),picos:SIM.picos.map(x=>({label:x.p.label,powered:x.powered})),caps:SIM.caps.map(k=>({label:k.p.label,U:k.U,R:k.R,tau:k.tau})),bjts:SIM.bjts.map(t=>({label:t.p.label,st:t.st,ib:t.ib,ic:t.ic,vbe:t.vbe,vce:t.vce})),motors:SIM.motors.map(m=>({label:m.p.label,U:m.U,I:m.I,speed:m.speed})),logics:SIM.logics.map(L=>({label:L.p.label,vdd:L.vdd,ins:Object.fromEntries(L.ins.map(x=>[x.name,x.lv])),outs:Object.fromEntries(L.outs.map(o=>[o.name,o.st])),regs:Object.fromEntries(L.regs.map(r=>[r.name,r.val]))})),servos:SIM.servos.map(s=>({label:s.p.label,U:s.U,pulse:s.pulse,angle:s.angle}))}:null;},
   pins(label){const p=D.parts.find(x=>x.label===label);if(!p)return null;const m=A0.byPart.get(p.id).map;return gpins(p).map(q=>{const on=inb(q.r,q.c);return{id:q.id,name:q.name,r:q.r,c:q.c,net:on||isOff(p)?m[q.id].net:null};});},
   netV(label,pin){const p=D.parts.find(x=>x.label===label);const q=p&&A0.pins.find(x=>x.part===p&&x.id===pin);return q&&SIM?SIM.netV.get(q.net):null;},
   linkInfo(){return D.links.map(l=>{const g=linkGeom(l);return{text:linkText(l),start:g&&g.start,end:g&&g.end,endPin:g&&g.endPin?pinLabel(g.endPin):null,bridges:g?g.bridges.length:0};});},
@@ -1473,6 +1492,7 @@ window.pcb={
   cuts(){return{manual:JSON.parse(JSON.stringify(D.cuts||[])),auto:JSON.parse(JSON.stringify(D.auto.cuts||[]))};},
   cut(r,c,kind=0){toggleCut([r,c,kind?1:0]);return pcb.cuts();},
   pwm(pin,duty,freq){const q=D.parts.flatMap(gpins).find(x=>x.name===pin&&x.role==='gpio');if(!q)return false;const k=q.part.id+'.'+q.id;pushUndo();D.gpio[k]='pwm';D.pwm={...(D.pwm||{}),[k]:{...pwmCfg(k),...(duty!=null?{duty}:{}),...(freq!=null?{freq}:{})}};commit();return true;},
+  gpio(pin,mode){const q=D.parts.flatMap(gpins).find(x=>x.name===pin&&x.role==='gpio');if(!q||!GPIO_MODES.some(m=>m[0]===mode))return false;D.gpio[q.part.id+'.'+q.id]=mode;commit();return true;},
   slider(label,key,v){const p=D.parts.find(x=>x.label===label);return !!p&&setSlider(p,key,v);},
   version:__APP_VERSION__
 };

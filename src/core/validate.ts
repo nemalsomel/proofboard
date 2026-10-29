@@ -119,6 +119,27 @@ export function validatePartDef(def: unknown): Problem[] {
     }
     if (el.el === 'logic') {
       const outs = Array.isArray(e.outs) ? (e.outs as Array<Record<string, unknown>>) : [];
+      const regs = Array.isArray(e.regs) ? (e.regs as Array<Record<string, unknown>>) : [];
+      const regNames = new Set<string>();
+      regs.forEach((r, j) => {
+        const ra = `${at}.regs[${j}]`, nm = String(r.name ?? '');
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(nm)) err(ra, `Tároló neve: betűvel kezdődő azonosító kell (most: „${nm}”).`);
+        else if (regNames.has(nm)) err(ra, `Kétszer szerepel a tároló: ${nm}`);
+        else if (pins.some(q => q.name === nm)) err(ra, `${nm}: a tároló neve nem lehet egy láb neve.`);
+        regNames.add(nm);
+      });
+      const known = (v: string) => regNames.has(v) || !!pinRef(v, pins);
+      const chk = (src: unknown, where: string, req: boolean) => {
+        if (src == null || String(src).trim() === '') { if (req) err(where.split('|')[0], `${where.split('|')[1]}: hiányzik.`); return; }
+        try { for (const v of varsOf(parseExpr(String(src)))) if (!known(v)) err(where.split('|')[0], `${where.split('|')[1]}: nincs ilyen láb vagy tároló: ${v}`); }
+        catch (x) { err(where.split('|')[0], `${where.split('|')[1]}: ${x instanceof LogicError ? x.message : String(x)}`); }
+      };
+      regs.forEach((r, j) => {
+        const ra = `${at}.regs[${j}]`, nm = String(r.name ?? '?');
+        chk(r.clk, `${ra}|${nm} órajele`, true); chk(r.d, `${ra}|${nm} következő értéke (D)`, true);
+        chk(r.reset, `${ra}|${nm} törlése`, false); chk(r.set, `${ra}|${nm} beállítása`, false);
+        if (r.edge != null && r.edge !== 'rise' && r.edge !== 'fall') err(ra, `${nm}: az él rise vagy fall lehet.`);
+      });
       if (!outs.length) err(`${at}.outs`, 'A logikához legalább egy kimenet kell.');
       const seen = new Set<string>();
       outs.forEach((o, j) => {
@@ -133,7 +154,7 @@ export function validatePartDef(def: unknown): Problem[] {
           if (o[k] == null || (k === 'oe' && String(o[k]).trim() === '')) { if (k === 'expr') err(oa, `${pn}: hiányzik a kifejezés.`); continue; }
           try {
             const ast = parseExpr(String(o[k]));
-            for (const v of varsOf(ast)) if (!pinRef(v, pins)) err(oa, `${pn} ${label}: nincs ilyen (vagy nem egyértelmű) láb: ${v}`);
+            for (const v of varsOf(ast)) if (!known(v)) err(oa, `${pn} ${label}: nincs ilyen (vagy nem egyértelmű) láb vagy tároló: ${v}`);
           } catch (x) { err(oa, `${pn} ${label}: ${x instanceof LogicError ? x.message : String(x)}`); }
         }
         if (o.type != null && o.type !== 'pp' && o.type !== 'od') err(oa, `${pn}: a kimenet típusa pp vagy od lehet.`);

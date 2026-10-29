@@ -1,4 +1,4 @@
-import type { PartDef } from '../core/schema';
+import type { LogicReg, PartDef } from '../core/schema';
 
 /** Raspberry Pi Pico W lábkiosztás (fizikai lábszám → név). */
 export const PICO_NAMES: Record<number, string> = {1:'GP0',2:'GP1',3:'GND',4:'GP2',5:'GP3',6:'GP4',7:'GP5',8:'GND',9:'GP6',10:'GP7',11:'GP8',12:'GP9',13:'GND',14:'GP10',15:'GP11',16:'GP12',17:'GP13',18:'GND',19:'GP14',20:'GP15',21:'GP16',22:'GP17',23:'GND',24:'GP18',25:'GP19',26:'GP20',27:'GP21',28:'GND',29:'GP22',30:'RUN',31:'GP26',32:'GP27',33:'AGND',34:'GP28',35:'ADC_VREF',36:'3V3',37:'3V3_EN',38:'GND',39:'VSYS',40:'VBUS'};
@@ -27,7 +27,7 @@ const TO92: Array<[number, number]> =Array.from({length:13},(_,k)=>{const a=Math
  * DIP-tok (felülnézet, a bevágás balra): az 1. láb lent balra, a számozás az óramutatóval ellentétesen;
  * a két lábsor 3 osztásra (7,62 mm) van. A lábnevek befelé, a testre kerülnek.
  */
-function dip(n: number, name: string, fp: string, names: string[], roleOf: (nm: string) => string, outs: Array<[string, string]>, help: string): PartDef {
+function dip(n: number, name: string, fp: string, names: string[], roleOf: (nm: string) => string, outs: Array<[string, string] | [string, string, string]>, help: string, regs: LogicReg[] = []): PartDef {
   const h = n / 2;
   return {
     name, fp, prefix: 'U', cat: 'Logika',
@@ -44,7 +44,7 @@ function dip(n: number, name: string, fp: string, names: string[], roleOf: (nm: 
       { shape: 'text', layer: 'detail', at: [1.5, (h - 1) / 2], text: '{label} · ' + name.split(' ')[0], size: 0.42, min: 7, color: '#c8ccd0', xray: { color: '#1d231f' } },
     ],
     pinLabels: { mode: 'name', off: 0.62, side: 'in', minP: 15, colors: { sig: '#dee2e6', out: '#ffd8a8', vin: '#ffc9d6', gnd: '#adb5bd' } },
-    model: [{ el: 'logic', vcc: String(names.indexOf('VCC') + 1), gnd: String(names.indexOf('GND') + 1), outs: outs.map(([o, expr]) => ({ pin: String(names.indexOf(o) + 1), expr })), rout: 50 }],
+    model: [{ el: 'logic', vcc: String(names.indexOf('VCC') + 1), gnd: String(names.indexOf('GND') + 1), outs: outs.map(([o, expr, oe]) => ({ pin: String(names.indexOf(o) + 1), expr, ...(oe ? { oe } : {}) })), ...(regs.length ? { regs } : {}), rout: 50 }],
     meta: { help },
   };
 }
@@ -53,6 +53,17 @@ const N00 = ['1A', '1B', '1Y', '2A', '2B', '2Y', 'GND', '3Y', '3A', '3B', '4Y', 
 const O00 = ['1Y', '2Y', '3Y', '4Y'];
 const N139 = ['1E', '1A0', '1A1', '1Y0', '1Y1', '1Y2', '1Y3', 'GND', '2Y3', '2Y2', '2Y1', '2Y0', '2A1', '2A0', '2E', 'VCC'];
 const O139 = ['1Y0', '1Y1', '1Y2', '1Y3', '2Y0', '2Y1', '2Y2', '2Y3'];
+const N74 = ['1CLR', '1D', '1CLK', '1PRE', '1Q', '1Qn', 'GND', '2Qn', '2Q', '2PRE', '2CLK', '2D', '2CLR', 'VCC'];
+const O74 = ['1Q', '1Qn', '2Q', '2Qn'];
+/** 74HC74: két D tároló felfutó élre, aktív alacsony aszinkron törléssel (CLR) és beállítással (PRE). */
+const ff = (g: string): LogicReg => ({ name: 'F' + g, clk: `${g}CLK`, d: `${g}D`, reset: `!${g}CLR`, set: `!${g}PRE` });
+const N595 = ['QB', 'QC', 'QD', 'QE', 'QF', 'QG', 'QH', 'GND', 'QHs', 'SRCLR', 'SRCLK', 'RCLK', 'OE', 'SER', 'QA', 'VCC'];
+const O595 = ['QA', 'QB', 'QC', 'QD', 'QE', 'QF', 'QG', 'QH', 'QHs'];
+/** 74HC595: 8 bites léptetőregiszter (S0…S7, SRCLK) és tárolóregiszter (R0…R7, RCLK); QH' (itt QHs) a soros kimenet. */
+const R595: LogicReg[] = [
+  ...[0, 1, 2, 3, 4, 5, 6, 7].map(i => ({ name: 'S' + i, clk: 'SRCLK', d: i ? 'S' + (i - 1) : 'SER', reset: '!SRCLR' })),
+  ...[0, 1, 2, 3, 4, 5, 6, 7].map(i => ({ name: 'R' + i, clk: 'RCLK', d: 'S' + i })),
+];
 /** 74HC139 kimenetei: aktív alacsony, aktív alacsony engedélyezés (E). */
 const dec = (g: string) => [0, 1, 2, 3].map(k => [`${g}Y${k}`, `!(!${g}E & ${k & 2 ? '' : '!'}${g}A1 & ${k & 1 ? '' : '!'}${g}A0)`] as [string, string]);
 
@@ -166,6 +177,8 @@ export const PARTS: Record<string, PartDef> = {
     pinLabels:{mode:'name',off:0.78,colors:{col:'#5c666e',base:'#1d4ed8',emit:'#1f2328'}},
     model:[{el:'npn',c:'C',b:'B',e:'E',beta:'{kind.beta}',vbe:0.65,vcesat:0.1,imax:'{kind.imax}'}]},
   hc00:dip(14,'74HC00 négy NAND kapu','DIP-14 · 4× NAND',N00,hcRole(O00),O00.map(o=>[o,`!(${o[0]}A & ${o[0]}B)`] as [string,string]),'Négy kétbemenetes NAND kapu (nY = NEM(nA ÉS nB)). Táp 2–6 V; a nem használt bemeneteket kösd GND-re.'),
+  hc74:dip(14,'74HC74 kettős D tároló','DIP-14 · 2× D flip-flop',N74,hcRole(O74),[['1Q','F1'],['1Qn','!F1'],['2Q','F2'],['2Qn','!F2']],'Két D tároló: a CLK felfutó élén Q felveszi D értékét. CLR = 0 törli (Q = 0), PRE = 0 beállítja (Q = 1), az órajeltől függetlenül; használat közben mindkettőt kösd VCC-re. Qn a Q negáltja. Táp 2–6 V.',[ff('1'),ff('2')]),
+  hc595:dip(16,'74HC595 léptetőregiszter','DIP-16 · 8 bit SIPO',N595,hcRole(O595),[...['QA','QB','QC','QD','QE','QF','QG','QH'].map((o,i)=>[o,'R'+i,'!OE'] as [string,string,string]),['QHs','S7']],'8 bites soros-párhuzamos átalakító: SRCLK felfutó élén a SER bit belép, a többi eggyel továbblép; RCLK felfutó élén a 8 bit a QA…QH kimenetekre kerül. OE = 0 engedélyezi a kimeneteket, SRCLR = 0 törli a léptetőregisztert. QHs (QH\') a következő 595 SER bemenetére köthető. Táp 2–6 V.',R595),
   hc139:dip(16,'74HC139 kettős 2→4 dekóder','DIP-16 · 2× (2→4)',N139,hcRole(O139),[...dec('1'),...dec('2')],'Két 2→4 dekóder: az A1 A0 bináris szám szerinti Y kimenet lesz 0 (aktív alacsony), a többi 1; ha E = 1, mind 1. Táp 2–6 V.'),
   motor:{name:'DC motor (130-as)',fp:'külső · + és − kivezetés',prefix:'M',cat:'Külső',mount:'off',
     params:[{key:'vnom',label:'Névleges feszültség',type:'value',unit:'V',default:3,min:1,max:24,step:0.5,help:'A motor a panel mellett áll; a kivezetéseit vezetékkel (kábellel) kösd a panelra. Induktív terhelés: GPIO-ról közvetlenül nem hajtható, tranzisztor vagy MOSFET és visszacsapó dióda kell.'},

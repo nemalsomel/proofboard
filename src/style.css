@@ -237,3 +237,5 @@ input:disabled::placeholder{color:var(--muted)}
 .wirecolor[hidden]{display:none}
 .acc .props,.acc .legend{margin-top:2px}
 .acc>.props{border:0;padding:0;background:none;box-shadow:none}
+.lg-rgrid{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;align-items:center}
+.lg-reg{border-style:dashed}

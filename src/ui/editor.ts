@@ -41,8 +41,11 @@ const MODEL_UI: Record<ModelKind, { label: string; pins: Array<[string, string]>
 };
 
 interface LogicOutRow { pin: string; expr: string; oe: string; type: 'pp' | 'od' }
+interface LogicRegRow { name: string; clk: string; d: string; edge: 'rise' | 'fall'; reset: string; set: string }
 export interface LogicForm {
   vcc: string; gnd: string; outs: LogicOutRow[];
+  /** Tárolók (órajeles állapotbitek). */
+  regs?: LogicRegRow[];
   /** A szerkesztő nézete: kifejezés, igazságtábla vagy kapuk. */
   view?: 'expr' | 'table' | 'gates';
   /** Az igazságtábla bemenetei (lábnevek) a kifejezésekben szereplőkön felül. */
@@ -155,6 +158,7 @@ export function formToDef(f: Form): PartDef {
   if (f.logic && f.logic.outs.length) {
     const L = f.logic;
     const el: ModelEl = { el: 'logic', vcc: L.vcc, gnd: L.gnd, outs: L.outs.map(o => ({ pin: o.pin, expr: o.expr.trim(), ...(o.oe.trim() ? { oe: o.oe.trim() } : {}), ...(o.type === 'od' ? { type: 'od' as const } : {}) })) };
+    if (L.regs && L.regs.length) el.regs = L.regs.map(r => ({ name: r.name.trim(), clk: r.clk.trim(), d: r.d.trim(), ...(r.edge === 'fall' ? { edge: 'fall' as const } : {}), ...(r.reset.trim() ? { reset: r.reset.trim() } : {}), ...(r.set.trim() ? { set: r.set.trim() } : {}) }));
     if (L.vih != null) el.vih = L.vih; if (L.vil != null) el.vil = L.vil; if (L.rout != null) el.rout = L.rout;
     model.push(el);
   }
@@ -206,6 +210,8 @@ export function defToForm(def: PartDef, base?: { form: Form; graphics: unknown; 
       const view = meta && meta.logic ? meta.logic.view : undefined, tv = meta && meta.logic ? meta.logic.tableVars : undefined;
       f.logic = { vcc: String(el.vcc ?? ''), gnd: String(el.gnd ?? ''), outs: el.outs.map(o => ({ pin: String(o.pin), expr: String(o.expr ?? ''), oe: String(o.oe ?? ''), type: o.type === 'od' ? 'od' : 'pp' })),
         ...(view ? { view } : {}), ...(tv ? { tableVars: tv } : {}) };
+      if (Array.isArray(el.regs) && el.regs.length) f.logic.regs = el.regs.map(r => ({ name: String(r.name ?? ''), clk: String(r.clk ?? ''), d: String(r.d ?? ''), edge: r.edge === 'fall' ? 'fall' : 'rise', reset: String(r.reset ?? ''), set: String(r.set ?? '') }));
+      if ((el.regs || []).some(r => r.init != null)) lost.add('a villamos modell részletei');
       for (const k of ['vih', 'vil', 'rout'] as const) { const v = el[k]; if (typeof v === 'number') f.logic[k] = v; else if (v != null) lost.add('a villamos modell részletei'); }
       continue;
     }
@@ -278,6 +284,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     else { form = null; jsonDef = d; tab = 'json'; }
   };
   let sel = -1, selModel = -1, selOut = -1, nameBefore: string | null = null;
+  const regBefore = new Map<number, string>();
   let jsonText = '';
   let jsonErr = '';
   let confirmDel = 0, confirmDiscard = 0;
@@ -475,7 +482,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     return f.logic;
   }
   /** Bemenetnek választható lábnevek: nem táp, nem GND, nem kimenet. */
-  const inputNames = (f: Form) => f.pins.filter(p => p.id !== f.logic?.vcc && p.id !== f.logic?.gnd && !f.logic?.outs.some(o => o.pin === p.id)).map(p => p.name || p.id);
+  const inputNames = (f: Form) => [...f.pins.filter(p => p.id !== f.logic?.vcc && p.id !== f.logic?.gnd && !f.logic?.outs.some(o => o.pin === p.id)).map(p => p.name || p.id), ...(f.logic?.regs || []).map(r => r.name).filter(Boolean)];
   /** A kijelölt kimenet és a kifejezésében szereplő bemenetek lábai (előnézeti kiemeléshez). */
   function logicPins(f: Form, i: number): string[] {
     const o = f.logic?.outs[i]; if (!o) return [];
@@ -492,8 +499,8 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   function exprMsg(f: Form, src: string): string {
     if (!src.trim()) return '<span class="muted">Írd be, mikor legyen a kimenet 1, pl. <code>!(A &amp; B)</code>.</span>';
     try {
-      const e = parseExpr(src), bad = varsOf(e).filter(v => !pinRef(v, pinList(f)));
-      if (bad.length) return `<span class="c-err">Nincs ilyen (vagy nem egyértelmű) láb: ${esc(bad.join(', '))}</span>`;
+      const regs = new Set((f.logic?.regs || []).map(r => r.name)), e = parseExpr(src), bad = varsOf(e).filter(v => !regs.has(v) && !pinRef(v, pinList(f)));
+      if (bad.length) return `<span class="c-err">Nincs ilyen (vagy nem egyértelmű) láb vagy tároló: ${esc(bad.join(', '))}</span>`;
       return `<span class="c-ok">✓</span> ${esc(printExpr(e))}`;
     } catch (x) { return `<span class="c-err">${esc(x instanceof LogicError ? x.message : String(x))}</span>`; }
   }
@@ -527,7 +534,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       body = `<p class="help">Jelek: <code>!</code> NEM, <code>&amp;</code> ÉS, <code>|</code> VAGY, <code>^</code> KIZÁRÓ VAGY, zárójel, <code>0</code>/<code>1</code>; szóval is írható (NOT, AND, OR, XOR). Példa: <code>!(A &amp; B)</code> = NAND.</p>` +
         L.outs.map((o, i) => card(o, i, `<input type="text" class="lg-expr" id="pe_lx_${i}" data-lo="${i}" data-lk="expr" value="${esc(o.expr)}" placeholder="pl. !(A & B)" spellcheck="false" aria-label="${esc(pinName(f, o.pin))} kifejezése">
           <div class="lg-msg" data-lmsg="${i}">${exprMsg(f, o.expr)}</div>
-          <div class="lg-oe"><label class="small" for="pe_lo_${i}">Engedélyezés</label><input type="text" id="pe_lo_${i}" data-lo="${i}" data-lk="oe" value="${esc(o.oe)}" placeholder="üres = mindig hajt; pl. !OE" spellcheck="false"></div>`)).join('');
+          <div class="lg-oe"><label class="small" for="pe_lo_${i}">Engedélyezés</label><input type="text" id="pe_lo_${i}" data-lo="${i}" data-lk="oe" value="${esc(o.oe)}" placeholder="üres = mindig hajt; pl. !OE" spellcheck="false"></div>`)).join('') + regsHtml(f);
     } else if (view === 'gates') {
       body = `<p class="help">Kapukból is összerakható: a legördülőkkel választható a kapu típusa és a bemenetei; a „⊕ helyette kapu” egy bemenetet újabb kapura cserél. A rajz és a kifejezés ugyanaz az adat.</p>` +
         L.outs.map((o, i) => {
@@ -553,6 +560,24 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         <div class="lg-chips"><span class="small muted">Bemenetek a táblázatban:</span> ${chips || '<span class="small muted">–</span>'}</div>${data.errors.map(e => `<p class="c-err small">${esc(e)}</p>`).join('')}${tbl}`;
     }
     return `<section class="pe-sec">${intro}${head}${body}<button class="btn" data-act="lgaddout" style="margin-top:8px">+ Kimenet</button></section>`;
+  }
+  /** Tárolók: név, órajel (él), következő érték, aszinkron törlés/beállítás. */
+  function regsHtml(f: Form): string {
+    const R = f.logic?.regs || [];
+    const fld = (i: number, k: keyof LogicRegRow, label: string, ph: string) => `<label class="small" for="pe_r${k}_${i}">${label}</label><input type="text" id="pe_r${k}_${i}" data-rg="${i}" data-rk="${k}" value="${esc(String(R[i][k]))}" placeholder="${esc(ph)}" spellcheck="false">`;
+    return `<div class="lg-regs"><p class="h" style="margin:14px 0 4px">Tárolók (órajeles állapot)</p>
+      <p class="help">Egy tároló egy megjegyzett bit: az órajel élén felveszi a következő érték kifejezését, egyébként megtartja. A nevére a kimenetek és más tárolók is hivatkozhatnak (pl. kimenet <code>Q</code> = <code>F1</code>). A törlés/beállítás azonnali, amíg a kifejezése 1. Számláló: <code>D = !F1</code>; léptetőregiszter: <code>D = </code> az előző tároló.</p>
+      ${R.map((r, i) => `<div class="lg-out lg-reg" data-rgc="${i}"><div class="lg-head"><label class="small" for="pe_rname_${i}">Név</label><input type="text" id="pe_rname_${i}" data-rg="${i}" data-rk="name" value="${esc(r.name)}" style="width:80px" spellcheck="false">
+          <select data-rg="${i}" data-rk="edge" aria-label="él">${opt('rise', 'felfutó él ↑', r.edge)}${opt('fall', 'lefutó él ↓', r.edge)}</select><span style="flex:1"></span><button class="btn" data-act="lgdelreg" data-i="${i}" title="Tároló törlése" aria-label="Tároló törlése">×</button></div>
+        <div class="lg-rgrid">${fld(i, 'clk', 'Órajel', 'pl. CLK')}${fld(i, 'd', 'Következő (D)', 'pl. D vagy !F1')}${fld(i, 'reset', 'Törlés', 'üres = nincs; pl. !CLR')}${fld(i, 'set', 'Beállítás', 'üres = nincs; pl. !PRE')}</div>
+        <div class="lg-msg" data-rmsg="${i}">${regMsg(f, i)}</div></div>`).join('')}
+      <button class="btn" data-act="lgaddreg" style="margin-top:6px">+ Tároló</button></div>`;
+  }
+  function regMsg(f: Form, i: number): string {
+    const r = f.logic!.regs![i], parts = [['órajel', r.clk], ['következő', r.d], ['törlés', r.reset], ['beállítás', r.set]] as const;
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(r.name)) return '<span class="c-err">A név betűvel kezdődő azonosító legyen.</span>';
+    for (const [l, src] of parts) { if (!src.trim()) { if (l === 'órajel' || l === 'következő') return `<span class="muted">Add meg: ${l}.</span>`; continue; } const m = exprMsg(f, src); if (m.includes('c-err')) return m.replace('<span class="c-err">', `<span class="c-err">${l}: `); }
+    return `<span class="c-ok">✓</span> ${esc(r.name)} ← ${esc(r.d)} a(z) ${esc(r.clk)} ${r.edge === 'fall' ? 'lefutó' : 'felfutó'} élén${r.reset.trim() ? `, törlés: ${esc(r.reset)}` : ''}${r.set.trim() ? `, beállítás: ${esc(r.set)}` : ''}`;
   }
   /** Kapufa-útvonal: '' a gyökér, '0.1' az első bemenet második bemenete. */
   function treeEdit(i: number, path: string, fn: (n: GateNode) => GateNode): void {
@@ -587,10 +612,25 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         L.tableVars = [...new Set([...(L.tableVars || []), ...data.vars])];
         render(); return true;
       }
+      if (act === 'lgaddreg') { const L = ensureLogic(f); L.regs = L.regs || []; let k = 1; while (L.regs.some(r => r.name === 'F' + k) || f.pins.some(p => p.name === 'F' + k)) k++; const ns = inputNames(f); L.regs.push({ name: 'F' + k, clk: f.pins.find(p => /CLK|CLOCK/i.test(p.name))?.name || ns[0] || '', d: '', edge: 'rise', reset: '', set: '' }); render(); return true; }
+      if (act === 'lgdelreg') { f.logic!.regs!.splice(+t.dataset.i!, 1); render(); return true; }
       if (act === 'lgnewgate') { const ns = inputNames(f); f.logic!.outs[+t.dataset.i!].expr = `${ns[0] || '0'} & ${ns[1] || ns[0] || '1'}`; render(); return true; }
       if (act === 'lgin') { const ns = inputNames(f); treeEdit(+t.dataset.i!, t.dataset.gp!, n => ('g' in n ? { g: n.g, ins: [...n.ins, { v: ns[0] || '0' }] } : n)); render(); return true; }
       if (act === 'lgrm') { removeAt(+t.dataset.i!, t.dataset.gp!); render(); return true; }
       return false;
+    }
+    if (t.dataset.rg != null && t.dataset.rk) {
+      const i = +t.dataset.rg, r = f.logic!.regs![i], k = t.dataset.rk as keyof LogicRegRow;
+      if (k === 'edge') { r.edge = t.value === 'fall' ? 'fall' : 'rise'; }
+      else if (k === 'name') {
+        if (kind === 'input') { const old = r.name; r.name = (t.value || '').trim(); regBefore.set(i, regBefore.get(i) ?? old); }
+        else { const old = regBefore.get(i); regBefore.delete(i); if (old && old !== r.name && /^[A-Za-z_][A-Za-z0-9_]*$/.test(r.name)) { // átnevezés a kifejezésekben is
+            const L = f.logic!; for (const o of L.outs) { o.expr = renameVars(o.expr, old, r.name); o.oe = renameVars(o.oe, old, r.name); }
+            for (const x of L.regs!) for (const kk of ['clk', 'd', 'reset', 'set'] as const) x[kk] = renameVars(x[kk], old, r.name);
+            render(); return true; } }
+      } else r[k] = t.value || '';
+      const m = left.querySelector(`[data-rmsg="${i}"]`); if (m) m.innerHTML = regMsg(f, i);
+      refresh(); return true;
     }
     if (t.dataset.lsup) { const L = ensureLogic(f); L[t.dataset.lsup as 'vcc' | 'gnd'] = t.value || ''; if (kind === 'change') render(); else refresh(); return true; }
     if (t.dataset.lvar != null && kind === 'change') {

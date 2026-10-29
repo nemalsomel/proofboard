@@ -99,3 +99,61 @@ test('Logika fül: kifejezés → igazságtábla → kapuk, kétirányú; a JSON
   await page.click('[data-act="save"]');
   expect(await pcb(page, `return Object.values(pcb.customParts())[0].model[0].outs[0].expr;`)).toBe('!(IN1 | B)');
 });
+
+const chip = (type: string, links: Array<[string, string]>) => `
+  const d = { board: { rows: 78, cols: 39, sec: 3 }, customParts: {}, bridges: [], wires: [], gpio: {}, pwm: {}, seq: 100, auto: { bridges: [], wires: [] },
+    parts: [{ id: 'p1', type: 'pico', label: 'PICO', r: 12, c: 32, rot: 2, mir: false, props: { span: 6 } }, { id: 'p2', type: '${type}', label: 'U1', r: 30, c: 5, rot: 0, mir: false, props: {} }],
+    links: ${JSON.stringify(links)}.map(([a, b], i) => ({ id: 'l' + (10 + i), a, b, gpio: null })), settings: { usb: true, btnMode: 'hold', autoRoute: true } };
+  pcb.load(d); pcb.route(); const L = pcb.links(), g = id => L.find(l => l.a === 'p2.' + id).gpio;`;
+
+test('74HC595: soros beléptetés SRCLK-val, átvétel RCLK-val, OE=1-re nagyimpedanciás', async ({ page }) => {
+  const r = await pcb<any>(page, chip('hc595', [['p2.16', 'p1.36'], ['p2.8', 'GND'], ['p2.10', 'p1.36'], ['p2.13', 'GPIO'], ['p2.14', 'GPIO'], ['p2.11', 'GPIO'], ['p2.12', 'GPIO']]) + `
+    const [SER, SRCLK, RCLK, OE] = [g(14), g(11), g(12), g(13)];
+    for (const k of [SER, SRCLK, RCLK, OE]) pcb.gpio(k, 'out_low');
+    pcb.sim(true);
+    const clk = k => { pcb.gpio(k, 'out_high'); pcb.gpio(k, 'out_low'); };
+    const q = () => { const o = pcb.simInfo().logics[0].outs; return ['QA', 'QB', 'QC', 'QD', 'QE', 'QF', 'QG', 'QH'].map(n => o[n]).join(''); };
+    for (const bit of [1, 0, 1, 1]) { pcb.gpio(SER, bit ? 'out_high' : 'out_low'); clk(SRCLK); }
+    const before = q(); clk(RCLK); const after = q();
+    pcb.gpio(OE, 'out_high'); const hiz = q();
+    return { ok: L.every(l => l.ok), before, after, hiz, iss: pcb.issues().map(i => i.msg) };`);
+  expect(r).toMatchObject({ ok: true, before: '00000000', after: '11010000', hiz: 'zzzzzzzz' });
+  expect(r.iss).toEqual([]);
+});
+
+test('74HC74 hullámos számláló: Qn → D és a második órajele, kaszkád élek egy lépésben', async ({ page }) => {
+  const r = await pcb<any>(page, chip('hc74', [['p2.14', 'p1.36'], ['p2.7', 'GND'], ['p2.1', 'p1.36'], ['p2.4', 'p1.36'], ['p2.13', 'p1.36'], ['p2.10', 'p1.36'],
+      ['p2.2', 'p2.6'], ['p2.11', 'p2.6'], ['p2.12', 'p2.8'], ['p2.3', 'GPIO']]) + `
+    const CLK = g(3); pcb.gpio(CLK, 'out_low'); pcb.sim(true);
+    const st = () => { const o = pcb.simInfo().logics[0].outs; return '' + o['2Q'] + o['1Q']; };
+    const seq = [st()];
+    for (let i = 0; i < 4; i++) { pcb.gpio(CLK, 'out_high'); pcb.gpio(CLK, 'out_low'); seq.push(st()); }
+    return { ok: L.every(l => l.ok), seq };`);
+  expect(r.ok).toBe(true);
+  expect(r.seq).toEqual(['00', '01', '10', '11', '00']); // 2Q 1Q: 0, 1, 2, 3, 0
+});
+
+test('Logika fül: tároló hozzáadása, kimenet a tárolóra, átnevezés követése', async ({ page }) => {
+  await page.click('[data-ltab="lib"]');
+  await page.click('#bNewPart');
+  await page.fill('#pe_name', 'Saját D tároló');
+  await page.fill('#pe_gnames', 'GND,VCC,D,CLK,Q');
+  await page.click('[data-act="gen"]');
+  await page.click('.pe [data-tab="logic"]');
+  await page.click('[data-act="lgstart"]');
+  await page.fill('#pe_lx_0', 'F1');
+  await expect(page.locator('[data-lmsg="0"]')).toContainText('Nincs ilyen');
+  await page.click('[data-act="lgaddreg"]');
+  await expect(page.locator('#pe_rname_0')).toHaveValue('F1');
+  await expect(page.locator('#pe_rclk_0')).toHaveValue('CLK');
+  await page.fill('#pe_rd_0', 'D');
+  await expect(page.locator('[data-rmsg="0"]')).toContainText('F1 ← D a(z) CLK felfutó élén');
+  await page.fill('#pe_rname_0', 'MEM');
+  await page.locator('#pe_rname_0').blur();
+  await expect(page.locator('#pe_lx_0')).toHaveValue('MEM');
+  await expect(page.locator('.pe [data-ref="probs"]')).toContainText('rendben');
+  await page.click('.pe [data-tab="json"]');
+  const j = JSON.parse(await page.locator('#pe_json').inputValue());
+  expect(j.model[0].regs).toEqual([{ name: 'MEM', clk: 'CLK', d: 'D' }]);
+  expect(j.model[0].outs).toEqual([{ pin: '5', expr: 'MEM' }]);
+});

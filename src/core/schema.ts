@@ -117,9 +117,14 @@ export type ModelEl =
    * A bemeneti szint a VCC–GND közti feszültség aránya szerint: ≥ vih → 1, ≤ vil → 0, köztes/lebegő → X.
    * A kimenet push-pull ('pp', alap) vagy nyitott drain ('od'); `oe`: engedélyező kifejezés (0 → nagyimpedanciás).
    */
-  | { el: 'logic'; vcc: string; gnd: string; outs: LogicOut[]; vih?: Num; vil?: Num; rout?: Num };
+  | { el: 'logic'; vcc: string; gnd: string; outs: LogicOut[]; regs?: LogicReg[]; vih?: Num; vil?: Num; rout?: Num };
 
 export interface LogicOut { pin: string; expr: string; oe?: string; type?: 'pp' | 'od' }
+/**
+ * Tároló (állapotbit): a `clk` kifejezés felfutó (vagy `edge: 'fall'` esetén lefutó) élén felveszi a `d` értékét.
+ * `reset` / `set`: aszinkron törlés / beállítás, amíg a kifejezés 1. A nevére a kimenetek és más tárolók hivatkozhatnak.
+ */
+export interface LogicReg { name: string; clk: string; d: string; edge?: 'rise' | 'fall'; reset?: string; set?: string; init?: 0 | 1 }
 
 /**
  * Szimuláció közbeni vezérlők.
