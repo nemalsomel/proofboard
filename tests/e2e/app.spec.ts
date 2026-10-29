@@ -158,6 +158,7 @@ test('jobb oldali sáv: fülek, a szimuláció indításakor a Szimuláció fül
   await expect(page.locator('.rtab.on')).toHaveAttribute('data-rtab', 'check'); // vissza oda, ahonnan indult
   await page.click('[data-rtab="design"]');
   await page.click('#accBoard summary');
+  await page.waitForFunction(() => (JSON.parse(localStorage.getItem('proofboard.ui.right') || '{}').acc || {}).accBoard === true);
   await page.reload();
   await page.waitForFunction(() => !!(window as any).pcb);
   await expect(page.locator('#accBoard')).toHaveAttribute('open', '');
