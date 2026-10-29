@@ -75,6 +75,7 @@ test('lerakás: az Eszközök lapról választva, forgatással, az ujj fölé to
   await pcb(page, `pcb.load({ board: { rows: 78, cols: 39, sec: 3 }, parts: [], bridges: [], wires: [], links: [], gpio: {}, settings: { usb: true, btnMode: 'hold', autoRoute: false }, seq: 1 });`);
   await page.locator('#tabbar [data-sheet="left"]').tap();
   await expect(page.locator('.app')).toHaveClass(/sheet-left/);
+  await page.locator('[data-ltab="lib"]').tap();
   await page.locator('[data-lib="res"]').tap();
   await expect(page.locator('.app')).not.toHaveClass(/sheet-left/);
   await page.locator('#fab [data-fab="rot"]').tap();

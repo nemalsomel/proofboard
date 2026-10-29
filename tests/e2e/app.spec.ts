@@ -142,25 +142,46 @@ test('kapcsolat kiválasztása: kezdet, cél és útvonal', async ({ page }) => 
 });
 
 test('jobb oldali sáv: fülek, a szimuláció indításakor a Szimuláció fül, leállításkor vissza; a harmonika állapota megmarad', async ({ page }) => {
-  await expect(page.locator('.rtab.on')).toHaveText('Terv');
+  await expect(page.locator('.right .rtab.on')).toHaveText('Terv');
   await expect(page.locator('#accLinks')).toHaveAttribute('open', '');
   await expect(page.locator('#accBoard')).not.toHaveAttribute('open', '');
   await expect(page.locator('[data-rtab="check"] #issueSum')).toContainText('Rendben'); // az összegzés a fülön látszik
   await page.click('[data-rtab="check"]');
   await expect(page.locator('#issues')).toBeVisible();
   await page.click('#bSim');
-  await expect(page.locator('.rtab.on')).toHaveText('Szimuláció');
+  await expect(page.locator('.right .rtab.on')).toHaveText('Szimuláció');
   await expect(page.locator('#simOut')).toBeVisible();
   await page.click('[data-rtab="design"]'); // el lehet kapcsolni
   await expect(page.locator('#simOut')).toBeHidden();
   await page.click('[data-rtab="sim"]');
   await page.click('#bSim');
-  await expect(page.locator('.rtab.on')).toHaveAttribute('data-rtab', 'check'); // vissza oda, ahonnan indult
+  await expect(page.locator('.right .rtab.on')).toHaveAttribute('data-rtab', 'check'); // vissza oda, ahonnan indult
   await page.click('[data-rtab="design"]');
   await page.click('#accBoard summary');
   await page.waitForFunction(() => (JSON.parse(localStorage.getItem('proofboard.ui.right') || '{}').acc || {}).accBoard === true);
   await page.reload();
   await page.waitForFunction(() => !!(window as any).pcb);
   await expect(page.locator('#accBoard')).toHaveAttribute('open', '');
-  await expect(page.locator('.rtab.on')).toHaveText('Terv');
+  await expect(page.locator('.right .rtab.on')).toHaveText('Terv');
+});
+
+test('bal oldali sáv: Szerkesztés és Alkatrészek fül; vezetékszín csak a Vezeték eszköznél; kijelöléskor a tulajdonságok', async ({ page }) => {
+  await expect(page.locator('.left .rtab.on')).toHaveText('Szerkesztés');
+  await expect(page.locator('#lib')).toBeHidden();
+  await expect(page.locator('#wireColorRow')).toBeHidden();
+  await page.keyboard.press('w');
+  await expect(page.locator('#wireColorRow')).toBeVisible();
+  await page.keyboard.press('v');
+  await expect(page.locator('#wireColorRow')).toBeHidden();
+  await page.click('[data-ltab="lib"]');
+  await expect(page.locator('#lib')).toBeVisible();
+  await expect(page.locator('#bNewPart')).toBeVisible();
+  // kijelölés a panelon → vissza a Szerkesztés fülre, a Kijelölés összegzésében a név
+  await pcb(page, 'pcb.preset();');
+  const k = await pcb<any>(page, `const q = pcb.pins('K1'); return pcb.reveal(q[0].r + 1, q[0].c + 2);`);
+  await page.mouse.click(k.x, k.y);
+  await expect(page.locator('.left .rtab.on')).toHaveText('Szerkesztés');
+  await expect(page.locator('#selSumm')).toHaveText('K1');
+  await page.click('#accLegend summary');
+  await expect(page.locator('.legend')).toBeVisible();
 });

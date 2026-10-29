@@ -626,7 +626,7 @@ function onDown(ev,hAt){
     ui.sel=grp([p.id]);ui.placing=null;setTool('select');commit();return;}
   if(ui.tool==='select'){
     const p=hitPart(h.rf,h.cf),sh=ev.shiftKey;
-    if(p){
+    if(p){if(ui.ltab==='lib')ltab('edit'); // kijelöléskor a tulajdonságok látszódjanak
       if(sh){const g=isGroup()?ui.sel:grp();if(g.parts.has(p.id))g.parts.delete(p.id);else g.parts.add(p.id);ui.sel=gSize(g)?g:null;renderLeft();draw();return;}
       if(!(isGroup()&&ui.sel.parts.has(p.id)))ui.sel=grp([p.id]);
       ui.drag={kind:'gmove',h0:h,sn:groupSnap(ui.sel),dr:0,dc:0,pushed:false};cv.setPointerCapture(ev.pointerId);renderLeft();draw();return;}
@@ -794,13 +794,20 @@ const UIKEY='proofboard.ui.right';
 const uiPref=()=>{try{return JSON.parse(localStorage.getItem(UIKEY)||'{}')||{};}catch(e){return{};}};
 const uiPrefSet=o=>{try{localStorage.setItem(UIKEY,JSON.stringify({...uiPref(),...o}));}catch(e){}};
 function rtab(name,remember=true){ui.rtab=name;
-  document.querySelectorAll('.rtab').forEach(b=>{const on=b.dataset.rtab===name;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
-  document.querySelectorAll('.rpane').forEach(p=>{p.hidden=p.dataset.rpane!==name;});
+  document.querySelectorAll('[data-rtab]').forEach(b=>{const on=b.dataset.rtab===name;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
+  document.querySelectorAll('[data-rpane]').forEach(p=>{p.hidden=p.dataset.rpane!==name;});
   if(remember&&name!=='sim')uiPrefSet({tab:name});}
-document.querySelector('.rtabs').addEventListener('click',e=>{const b=e.target.closest('[data-rtab]');if(b)rtab(b.dataset.rtab);});
-document.querySelector('.rtabs').addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;const ts=[...document.querySelectorAll('.rtab')],i=ts.findIndex(b=>b.classList.contains('on')),n=ts[(i+(e.key==='ArrowRight'?1:ts.length-1))%ts.length];rtab(n.dataset.rtab);n.focus();e.preventDefault();});
+document.querySelector('.right .rtabs').addEventListener('click',e=>{const b=e.target.closest('[data-rtab]');if(b)rtab(b.dataset.rtab);});
+document.querySelector('.right .rtabs').addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;const ts=[...document.querySelectorAll('[data-rtab]')],i=ts.findIndex(b=>b.classList.contains('on')),n=ts[(i+(e.key==='ArrowRight'?1:ts.length-1))%ts.length];rtab(n.dataset.rtab);n.focus();e.preventDefault();});
 document.querySelectorAll('details.acc').forEach(d=>{const st=(uiPref().acc||{})[d.id];if(st!=null)d.open=!!st;d.addEventListener('toggle',()=>uiPrefSet({acc:{...(uiPref().acc||{}),[d.id]:d.open}}));});
 rtab(['design','check'].includes(uiPref().tab)?uiPref().tab:'design',false);
+/* bal oldali sáv: Szerkesztés (eszközök, kijelölés) / Alkatrészek (könyvtár) */
+function ltab(name,remember=true){ui.ltab=name;
+  document.querySelectorAll('[data-ltab]').forEach(b=>{const on=b.dataset.ltab===name;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
+  document.querySelectorAll('[data-lpane]').forEach(p=>{p.hidden=p.dataset.lpane!==name;});
+  if(remember)uiPrefSet({ltab:name});}
+document.querySelector('.ltabs').addEventListener('click',e=>{const b=e.target.closest('[data-ltab]');if(b)ltab(b.dataset.ltab);});
+ltab(uiPref().ltab==='lib'?'lib':'edit',false);
 function setSim(on){if(on&&!ui.sim){ui.rtabBack=ui.rtab;rtab('sim',false);}else if(!on&&ui.sim&&ui.rtab==='sim')rtab(ui.rtabBack&&ui.rtabBack!=='sim'?ui.rtabBack:'design',false);
   ui.sim=on;if(!on){ui.pressed={};ui.holdPtr.clear();}ui.wireStart=null;ui.placing=null;const b=$('#bSim');b.classList.toggle('on',on);b.textContent=on?'■ Szimuláció leállítása':'▶ Szimuláció';recompute();renderLeft();}
 let msgTimer;function flashMsg(m){const s=$('#status');s.textContent=m;s.style.color='var(--err)';clearTimeout(msgTimer);msgTimer=setTimeout(()=>{s.style.color='';status();},1800);}
@@ -881,6 +888,8 @@ function renderLeft0(){
   const cats=[...new Set(Object.values(DEFS).map(d=>d.cat))];
   const libBtn=(id,d)=>`<button class="btn ${ui.placing===id?'on':''}" data-lib="${id}" ${ui.sim?'disabled':''}>${esc(d.name)}<span>${esc(d.fp)}</span></button>`;
   $('#lib').innerHTML=cats.map(c=>`<div class="libcat">${esc(c)}</div>`+Object.entries(DEFS).filter(([,d])=>d.cat===c).map(([id,d])=>id in PARTS?libBtn(id,d):`<div class="libitem">${libBtn(id,d)}<button class="btn" data-edit="${id}" title="Szerkesztés" aria-label="${esc(d.name)} szerkesztése" ${ui.sim?'disabled':''}>✎</button></div>`).join('')).join('');
+  $('#wireColorRow').hidden=ui.tool!=='wire'||!!ui.placing;
+  {const g=isGroup()?ui.sel:null,sp=selPart();$('#selSumm').textContent=sp?sp.label:g&&gSize(g)?`${gSize(g)} elem`:ui.sel&&ui.sel.kind==='wire'?'vezeték':ui.sel&&ui.sel.kind==='bridge'?'híd':'';}
   $('#swatches').innerHTML=WCOL.map(([c,l])=>`<button class="sw ${ui.wireColor===c?'on':''}" data-col="${c}" title="${l}" aria-label="${l}" style="background:${c}"></button>`).join('');
   const pr=$('#props');const p=selPart();
   if(p){const d=DEFS[p.type];const extra=paramUI(p);
@@ -1450,7 +1459,7 @@ window.pcb={
   toAuto(pid){return manualToAuto(pid||null);},
   defs(){return JSON.parse(JSON.stringify(PARTS));},
   // --- tesztekhez és szkripteléshez ---
-  select(labels){const ids=D.parts.filter(p=>labels.includes(p.label)).map(p=>p.id);ui.sel=ids.length?grp(ids):null;renderLeft();draw();return ids.length;},
+  select(labels){const ids=D.parts.filter(p=>labels.includes(p.label)).map(p=>p.id);ui.sel=ids.length?grp(ids):null;if(ids.length)ltab('edit');renderLeft();draw();return ids.length;},
   rotate(){rotate();},mirror(){mirror();},undo(){undo();},redo(){redo();},
   simInfo(){return SIM?{leds:SIM.leds.map(l=>({label:l.p.label,I:l.I,light:!!l.light})),fets:SIM.fets.map(f=>({label:f.p.label,on:f.on,vgs:f.vgs,I:f.I,floatGate:f.floatGate})),bats:SIM.bats.map(b=>({label:b.p.label,I:b.I,kind:b.kind})),picos:SIM.picos.map(x=>({label:x.p.label,powered:x.powered})),caps:SIM.caps.map(k=>({label:k.p.label,U:k.U,R:k.R,tau:k.tau})),bjts:SIM.bjts.map(t=>({label:t.p.label,st:t.st,ib:t.ib,ic:t.ic,vbe:t.vbe,vce:t.vce})),motors:SIM.motors.map(m=>({label:m.p.label,U:m.U,I:m.I,speed:m.speed})),logics:SIM.logics.map(L=>({label:L.p.label,vdd:L.vdd,ins:Object.fromEntries(L.ins.map(x=>[x.name,x.lv])),outs:Object.fromEntries(L.outs.map(o=>[o.name,o.st]))})),servos:SIM.servos.map(s=>({label:s.p.label,U:s.U,pulse:s.pulse,angle:s.angle}))}:null;},
   pins(label){const p=D.parts.find(x=>x.label===label);if(!p)return null;const m=A0.byPart.get(p.id).map;return gpins(p).map(q=>{const on=inb(q.r,q.c);return{id:q.id,name:q.name,r:q.r,c:q.c,net:on||isOff(p)?m[q.id].net:null};});},

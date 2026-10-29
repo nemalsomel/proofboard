@@ -90,6 +90,7 @@ test('PWM-mel hajtott LED: az átlagáram a kitöltéssel arányos', async ({ pa
 test('felület: a motor csak a panel mellé rakható, vezeték köthető a kivezetéséhez', async ({ page }) => {
   await pcb(page, `pcb.load({ board: { rows: 78, cols: 39, sec: 3 }, parts: [], bridges: [], wires: [], links: [], gpio: {}, settings: { usb: true, btnMode: 'hold', autoRoute: false }, seq: 10 });`);
   const at = async (r: number, c: number) => { const p = await pcb<{ x: number; y: number }>(page, `return pcb.reveal(${r}, ${c});`); await page.mouse.move(p.x, p.y); await page.mouse.click(p.x, p.y); };
+  await page.click('[data-ltab="lib"]');
   await page.click('[data-lib="motor"]');
   await at(50, 10); // a panelon: nem rakható le
   await at(56, -6); // mellette: igen

@@ -55,6 +55,7 @@ test('74HC00 NAND: táp nélkül nem hajt; a kimenet egy LED-et kapcsol', async 
 });
 
 test('Logika fül: kifejezés → igazságtábla → kapuk, kétirányú; a JSON-ban logic elem', async ({ page }) => {
+  await page.click('[data-ltab="lib"]');
   await page.click('#bNewPart');
   await page.fill('#pe_name', 'Saját kapu');
   await page.fill('#pe_gnames', 'GND,VCC,A,B,Y');

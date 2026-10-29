@@ -8,6 +8,7 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror', e => list.push(e.message));
   await page.goto('./');
   await page.waitForFunction(() => !!(window as any).pcb);
+  await page.click('[data-ltab="lib"]'); // az alkatrészkönyvtár és a szerkesztő gombja az Alkatrészek fülön van
 });
 test.afterEach(async ({ page }) => expect(errors.get(page), 'futásidejű hibák').toEqual([]));
 

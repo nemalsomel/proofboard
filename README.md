@@ -20,6 +20,7 @@ Próbanyák-tervező és -szimulátor a böngészőben: 1×3-as szekciós (tripa
 - **Saját alkatrészek:** alkatrész-szerkesztő űrlappal (lábsor-generátor, szerepek, test, villamos modell, nyomógomb-vezérlő) és JSON nézettel, élő előnézettel és ellenőrzéssel. A saját alkatrészek a tervvel együtt mentődnek, és könyvtárfájlként exportálhatók/importálhatók; beépített alkatrészből másolat is készíthető.
 - **Szimuláció:** egyenáramú csomóponti analízis (diódák, MOSFET, NPN lezárt/aktív/telített tartománnyal, kondenzátor feszültsége és τ = R·C időállandója, Pico táp és GPIO-módok), PWM (kitöltés, frekvencia; időszeletekre bontva, így a tranzisztoros/MOSFET-es kapcsolás is helyes), motorfordulat, szervószög, gombnyomás, csúszkák (pl. joystick-tengely), LED-fény és háttérvilágítás, GPIO-szintek és analóg feszültségek.
 
+- **Oldalsávok:** balra Szerkesztés (eszközök, a vezetékszín csak Vezeték eszköznél, Kijelölés és Jelmagyarázat harmonikában) és Alkatrészek (könyvtár, saját alkatrészek, import/export); jobbra Terv (Kapcsolatok, Panel, Terv harmonikában), Ellenőrzés (összegzés a fülön) és Szimuláció (indításkor erre vált).
 - **Mobilon:** a panel kitölti a képernyőt, az eszközök és az ellenőrzés alsó lapon nyílik; egy ujjal görgetés vagy alkatrész húzása, hosszan nyomva kijelölő keret, két ujjal nagyítás; lerakáskor az előnézet az ujj fölött jár; lebegő gombok a forgatáshoz, tükrözéshez, másoláshoz és törléshez.
 
 ## Fejlesztés
