@@ -123,6 +123,7 @@ test('a Pico tükrözése és forgatása a közepe körül történik', async ({
 
 test('panelméret váltása és visszavonása', async ({ page }) => {
   await pcb(page, `pcb.preset();`);
+  await page.click('#accBoard summary'); // a Panel harmonika alapból csukva
   await page.locator('#bdPreset').selectOption({ label: '5×7 cm pontraszter (18×24)' });
   await page.locator('#bdApply').click();
   expect(await pcb(page, `return pcb.get().board;`)).toEqual({ cols: 18, rows: 24, sec: 1 });
@@ -138,4 +139,27 @@ test('kapcsolat kiválasztása: kezdet, cél és útvonal', async ({ page }) => 
   expect(r.info.bridges).toBeGreaterThan(0);
   expect(r.status).toContain('kezdet');
   expect(r.status).toContain('cél');
+});
+
+test('jobb oldali sáv: fülek, a szimuláció indításakor a Szimuláció fül, leállításkor vissza; a harmonika állapota megmarad', async ({ page }) => {
+  await expect(page.locator('.rtab.on')).toHaveText('Terv');
+  await expect(page.locator('#accLinks')).toHaveAttribute('open', '');
+  await expect(page.locator('#accBoard')).not.toHaveAttribute('open', '');
+  await expect(page.locator('[data-rtab="check"] #issueSum')).toContainText('Rendben'); // az összegzés a fülön látszik
+  await page.click('[data-rtab="check"]');
+  await expect(page.locator('#issues')).toBeVisible();
+  await page.click('#bSim');
+  await expect(page.locator('.rtab.on')).toHaveText('Szimuláció');
+  await expect(page.locator('#simOut')).toBeVisible();
+  await page.click('[data-rtab="design"]'); // el lehet kapcsolni
+  await expect(page.locator('#simOut')).toBeHidden();
+  await page.click('[data-rtab="sim"]');
+  await page.click('#bSim');
+  await expect(page.locator('.rtab.on')).toHaveAttribute('data-rtab', 'check'); // vissza oda, ahonnan indult
+  await page.click('[data-rtab="design"]');
+  await page.click('#accBoard summary');
+  await page.reload();
+  await page.waitForFunction(() => !!(window as any).pcb);
+  await expect(page.locator('#accBoard')).toHaveAttribute('open', '');
+  await expect(page.locator('.rtab.on')).toHaveText('Terv');
 });

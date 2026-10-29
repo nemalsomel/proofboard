@@ -87,12 +87,14 @@
   <div class="gutter" id="gR" role="separator" aria-orientation="vertical" aria-label="Jobb oldalsáv szélessége" tabindex="0" title="Húzd a szélesség állításához, dupla kattintás: alapméret"></div>
 
   <aside class="right">
-    <section>
-      <div class="simbar" style="justify-content:space-between;margin-bottom:8px"><p class="h" style="margin:0">Ellenőrzés</p><span id="issueSum"></span></div>
-      <ul class="issues" id="issues"></ul>
-    </section>
-    <section>
-      <div class="simbar" style="justify-content:space-between;margin-bottom:8px"><p class="h" style="margin:0">Kapcsolatok</p><span id="linkSum"></span></div>
+    <div class="rtabs" role="tablist" aria-label="Jobb oldali panel">
+      <button class="rtab on" role="tab" data-rtab="design" aria-selected="true" aria-controls="rpDesign">Terv</button>
+      <button class="rtab" role="tab" data-rtab="check" aria-selected="false" aria-controls="rpCheck">Ellenőrzés <span id="issueSum"></span></button>
+      <button class="rtab" role="tab" data-rtab="sim" aria-selected="false" aria-controls="rpSim">Szimuláció</button>
+    </div>
+    <div class="rpane" id="rpDesign" data-rpane="design" role="tabpanel">
+      <details class="acc" id="accLinks" open>
+        <summary><span class="h">Kapcsolatok</span><span id="linkSum"></span></summary>
       <label class="check" style="margin-bottom:8px"><input type="checkbox" id="autoR"> Automatikus útvonaltervezés</label>
       <label class="check" style="margin-bottom:8px" title="Csíkos panelen a kapcsolatok szerint elvágja a csíkokat az eltérő hálózatú lábak között"><input type="checkbox" id="autoCut"> Automatikus csíkvágás</label>
       <div class="grp" style="margin-bottom:8px">
@@ -104,28 +106,18 @@
       <ul class="issues" id="links"></ul>
       <div class="lk" id="linkTotal" style="border-top:1px solid var(--line);margin-top:4px;padding-top:8px;justify-content:space-between;flex-wrap:wrap;gap:4px 10px"></div>
       <p class="help" style="margin-top:6px">Kapcsolat: <kbd>C</kbd> eszköz, vagy gomb kijelölésekor „A → GPIO, B → GND”. A kézi hidakat az útvonalkereső nem módosítja; a „Kézi → automatikus” kapcsolatokká alakítja őket, a „Rögzítés kézire” visszafelé.</p>
-    </section>
-    <section id="simSec">
-      <p class="h">Szimuláció</p>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <label class="check"><input type="checkbox" id="usb"> USB táp a Picón</label>
-        <div class="radio" role="group" aria-label="Gomb mód">
-          <button class="btn" id="mHold">Nyomva tartás</button>
-          <button class="btn" id="mToggle">Kapcsoló</button>
-        </div>
-        <div id="simCtl"></div>
-        <div id="simOut"></div>
-      </div>
-    </section>
-    <section>
-      <p class="h">Panel</p>
+      </details>
+      <details class="acc" id="accBoard">
+        <summary><span class="h">Panel</span><span class="muted small" id="boardSumm"></span></summary>
       <div class="props" style="margin-bottom:14px">
         <div class="row"><label for="bdPreset">Típus</label><select id="bdPreset" style="flex:1"></select></div>
         <div class="row nowrap"><label for="bdCols">Méret</label><input type="number" id="bdCols" min="4" max="120" aria-label="oszlopok"><span class="muted small">×</span><input type="number" id="bdRows" min="4" max="200" aria-label="sorok"><span class="muted small">lyuk</span></div>
         <div class="row"><label for="bdSec">Szekció</label><select id="bdSec" style="flex:1"><option value="1">nincs (pontraszter)</option><option value="2">1×2</option><option value="3">1×3</option><option value="4">1×4</option><option value="5">1×5</option><option value="0">teljes csík (stripboard)</option></select></div>
         <div class="row"><button class="btn" id="bdApply">Alkalmaz</button><span class="muted small" id="bdMm"></span></div>
       </div>
-      <p class="h">Terv</p>
+      </details>
+      <details class="acc" id="accPlan">
+        <summary><span class="h">Terv</span><span class="muted small">minták, export</span></summary>
       <div class="grp" style="margin-bottom:8px">
         <button class="btn" id="bPreset">Macropad (kézi hidak)</button>
         <button class="btn" id="bPreset2">Macropad (útvonalkereső)</button>
@@ -141,12 +133,29 @@
         <textarea id="json" spellcheck="false" aria-label="Terv JSON"></textarea>
         <p class="help" id="jsonMsg">Formátum: parts[{type,label,r,c,rot,mir,props}], bridges[[r1,c1,r2,c2]], wires[{a:[r,c],b:[r,c],color}], gpio{"partId.lábszám":"pullup|pulldown|float|out_high|out_low"}. Koordináta: sor:oszlop.</p>
       </details>
-    </section>
+      </details>
+    </div>
+    <div class="rpane" id="rpCheck" data-rpane="check" role="tabpanel" hidden>
+      <ul class="issues" id="issues"></ul>
+    </div>
+    <div class="rpane" id="rpSim" data-rpane="sim" role="tabpanel" hidden>
+      <section id="simSec">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <label class="check"><input type="checkbox" id="usb"> USB táp a Picón</label>
+        <div class="radio" role="group" aria-label="Gomb mód">
+          <button class="btn" id="mHold">Nyomva tartás</button>
+          <button class="btn" id="mToggle">Kapcsoló</button>
+        </div>
+        <div id="simCtl"></div>
+        <div id="simOut"></div>
+      </div>
+      </section>
+    </div>
   </aside>
   <nav class="tabbar" id="tabbar" aria-label="Panelek">
     <button class="tab on" data-sheet="" aria-pressed="true">Panel</button>
     <button class="tab" data-sheet="left" aria-pressed="false">Eszközök</button>
-    <button class="tab" data-sheet="right" aria-pressed="false">Ellenőrzés <span class="badge" id="tabIss"></span></button>
+    <button class="tab" data-sheet="right" aria-pressed="false">Részletek <span class="badge" id="tabIss"></span></button>
   </nav>
 </div>
 <script type="module" src="/src/app.ts"></script>

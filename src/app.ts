@@ -789,7 +789,20 @@ function redo(){if(!ui.redo.length)return;ui.undo.push(JSON.stringify(D));D=JSON
 function setTool(t){ui.tool=t;ui.wireStart=null;ui.linkStart=null;if(t!=='place')ui.placing=null;renderLeft();draw();}
 function setView(v){ui.view=v;$('#vComp').classList.toggle('on',v==='comp');$('#vCu').classList.toggle('on',v==='cu');draw();}
 function zoom(dz){ui.zoom=Math.max(0.6,Math.min(2.6,+(ui.zoom+dz).toFixed(2)));resize();}
-function setSim(on){ui.sim=on;if(!on){ui.pressed={};ui.holdPtr.clear();}ui.wireStart=null;ui.placing=null;const b=$('#bSim');b.classList.toggle('on',on);b.textContent=on?'■ Szimuláció leállítása':'▶ Szimuláció';recompute();renderLeft();}
+/* ---------- Jobb oldali sáv: fülek (Terv / Ellenőrzés / Szimuláció) és harmonika ---------- */
+const UIKEY='proofboard.ui.right';
+const uiPref=()=>{try{return JSON.parse(localStorage.getItem(UIKEY)||'{}')||{};}catch(e){return{};}};
+const uiPrefSet=o=>{try{localStorage.setItem(UIKEY,JSON.stringify({...uiPref(),...o}));}catch(e){}};
+function rtab(name,remember=true){ui.rtab=name;
+  document.querySelectorAll('.rtab').forEach(b=>{const on=b.dataset.rtab===name;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
+  document.querySelectorAll('.rpane').forEach(p=>{p.hidden=p.dataset.rpane!==name;});
+  if(remember&&name!=='sim')uiPrefSet({tab:name});}
+document.querySelector('.rtabs').addEventListener('click',e=>{const b=e.target.closest('[data-rtab]');if(b)rtab(b.dataset.rtab);});
+document.querySelector('.rtabs').addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;const ts=[...document.querySelectorAll('.rtab')],i=ts.findIndex(b=>b.classList.contains('on')),n=ts[(i+(e.key==='ArrowRight'?1:ts.length-1))%ts.length];rtab(n.dataset.rtab);n.focus();e.preventDefault();});
+document.querySelectorAll('details.acc').forEach(d=>{const st=(uiPref().acc||{})[d.id];if(st!=null)d.open=!!st;d.addEventListener('toggle',()=>uiPrefSet({acc:{...(uiPref().acc||{}),[d.id]:d.open}}));});
+rtab(['design','check'].includes(uiPref().tab)?uiPref().tab:'design',false);
+function setSim(on){if(on&&!ui.sim){ui.rtabBack=ui.rtab;rtab('sim',false);}else if(!on&&ui.sim&&ui.rtab==='sim')rtab(ui.rtabBack&&ui.rtabBack!=='sim'?ui.rtabBack:'design',false);
+  ui.sim=on;if(!on){ui.pressed={};ui.holdPtr.clear();}ui.wireStart=null;ui.placing=null;const b=$('#bSim');b.classList.toggle('on',on);b.textContent=on?'■ Szimuláció leállítása':'▶ Szimuláció';recompute();renderLeft();}
 let msgTimer;function flashMsg(m){const s=$('#status');s.textContent=m;s.style.color='var(--err)';clearTimeout(msgTimer);msgTimer=setTimeout(()=>{s.style.color='';status();},1800);}
 
 document.addEventListener('keydown',ev=>{
@@ -1404,7 +1417,7 @@ function boardUI(){
   const cur=BOARDS.findIndex(x=>x[1]===b.cols&&x[2]===b.rows&&(x[3]||x[2])===b.sec);
   sel.innerHTML=BOARDS.map((x,i)=>`<option value="${i}" ${i===cur?'selected':''}>${x[0]} (${x[1]}×${x[2]})</option>`).join('')+`<option value="-1" ${cur<0?'selected':''}>Egyedi</option>`;
   $('#bdCols').value=b.cols;$('#bdRows').value=b.rows;$('#bdSec').value=b.sec>=b.rows?'0':String(Math.min(b.sec,5));
-  bdMm();$('#boardInfo').textContent=`${b.cols}×${b.rows} lyuk · ${secLabel(b)}`;
+  bdMm();$('#boardInfo').textContent=`${b.cols}×${b.rows} lyuk · ${secLabel(b)}`;$('#boardSumm').textContent=`${b.cols}×${b.rows} · ${secLabel(b)}`;
 }
 function bdMm(){const c=+$('#bdCols').value||0,r=+$('#bdRows').value||0;$('#bdMm').textContent=`≈ ${(c*2.54).toFixed(0)} × ${(r*2.54).toFixed(0)} mm`;}
 $('#bdPreset').addEventListener('change',e=>{const x=BOARDS[+e.target.value];if(!x)return;$('#bdCols').value=x[1];$('#bdRows').value=x[2];$('#bdSec').value=String(x[3]);bdMm();});
