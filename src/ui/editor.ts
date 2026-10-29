@@ -3,6 +3,9 @@
  * vezérlő) vagy közvetlenül JSON-ban. Az eredmény szabályos PartDef, amit a többi rész ugyanúgy
  * használ, mint a beépített alkatrészeket.
  */
+import { pinLabelPositions } from '../core/labels';
+import { GATE_LABEL, LogicError, parseExpr, pinRef, printExpr, renameVars, toGates, varsOf, type GateKind, type GateNode } from '../core/logic';
+import { gateSvg, gatesToText, tableVars, toggleCell, truthTable, TABLE_MAX_VARS } from './logicview';
 import { fmtSI, parseSI } from '../core/expr';
 import { hasErrors, validatePartDef, type Problem } from '../core/validate';
 import type { ModelEl, PartDef, Prim } from '../core/schema';
@@ -22,7 +25,7 @@ export interface EditorHost {
 
 /** Saját alkatrészeknél választható lábszerepek. */
 export const ROLES: Array<[string, string]> = [
-  ['sig', 'jel / adat'], ['vin', 'tápbemenet'], ['gnd', 'föld (GND)'], ['adc', 'analóg jel'],
+  ['sig', 'jel / adat'], ['out', 'kimenet'], ['vin', 'tápbemenet'], ['gnd', 'föld (GND)'], ['adc', 'analóg jel'],
   ['an', 'anód / +'], ['ka', 'katód / −'], ['nc', 'nincs bekötve'], ['h', 'általános'],
 ];
 
@@ -37,13 +40,24 @@ const MODEL_UI: Record<ModelKind, { label: string; pins: Array<[string, string]>
   npn: { label: 'NPN tranzisztor', pins: [['c', 'kollektor'], ['b', 'bázis'], ['e', 'emitter']], vals: [['beta', 'Erősítés (β)', '', 200]] },
 };
 
+interface LogicOutRow { pin: string; expr: string; oe: string; type: 'pp' | 'od' }
+export interface LogicForm {
+  vcc: string; gnd: string; outs: LogicOutRow[];
+  /** A szerkesztő nézete: kifejezés, igazságtábla vagy kapuk. */
+  view?: 'expr' | 'table' | 'gates';
+  /** Az igazságtábla bemenetei (lábnevek) a kifejezésekben szereplőkön felül. */
+  tableVars?: string[];
+  vih?: number; vil?: number; rout?: number;
+}
 interface PinRow { id: string; name: string; lr: number; lc: number; role: string; group: string; volt?: string }
 interface ModelRow { el: ModelKind; pins: string[]; vals: string[] }
 interface Form {
   name: string; prefix: string; cat: string; bodyText: string;
-  pad: number; fill: string; showLabel: boolean; names: 'below' | 'above' | 'none';
+  pad: number; fill: string; showLabel: boolean; names: 'below' | 'above' | 'in' | 'out' | 'none';
   /** Külső alkatrész (motor, szenzor kábelen): a panel mellé kerül, a lábai kivezetések. */
   off?: boolean;
+  /** Digitális logika (Logika fül): táp, GND és kimenetenként egy kifejezés. */
+  logic?: LogicForm;
   /** A test kiterjesztése a lábakon túl (lyukban): fent, lent, balra, jobbra. */
   ext: { t: number; b: number; l: number; r: number };
   pins: PinRow[]; model: ModelRow[]; press: [string, string] | null;
@@ -136,7 +150,14 @@ export function formToDef(f: Form): PartDef {
   };
   if (groups.length) def.groups = groups;
   if (f.off) { def.mount = 'off'; def.fp = `külső · ${pins.length} kivezetés`; }
-  if (f.names !== 'none') def.pinLabels = { mode: 'name', off: f.names === 'below' ? 0.75 : -0.75 };
+  if (f.names === 'below' || f.names === 'above') def.pinLabels = { mode: 'name', off: f.names === 'below' ? 0.75 : -0.75 };
+  else if (f.names === 'in' || f.names === 'out') def.pinLabels = { mode: 'name', off: 0.75, side: f.names };
+  if (f.logic && f.logic.outs.length) {
+    const L = f.logic;
+    const el: ModelEl = { el: 'logic', vcc: L.vcc, gnd: L.gnd, outs: L.outs.map(o => ({ pin: o.pin, expr: o.expr.trim(), ...(o.oe.trim() ? { oe: o.oe.trim() } : {}), ...(o.type === 'od' ? { type: 'od' as const } : {}) })) };
+    if (L.vih != null) el.vih = L.vih; if (L.vil != null) el.vil = L.vil; if (L.rout != null) el.rout = L.rout;
+    model.push(el);
+  }
   if (model.length) def.model = model;
   if (f.press && f.press[0] && f.press[1]) def.controls = [{ kind: 'press', closes: [[f.press[0], f.press[1]]] }];
   return def;
@@ -178,7 +199,16 @@ export function defToForm(def: PartDef, base?: { form: Form; graphics: unknown; 
     f.pins.push({ id: String(p.id), name: p.name != null ? String(p.name) : String(p.id), lr: p.lr, lc: p.lc, role: p.role || 'sig', group: gOf.get(String(p.id)) || '', ...(volt ? { volt } : {}) });
   }
   f.model = [];
+  f.logic = undefined;
   for (const el of def.model || []) {
+    if (el.el === 'logic') {
+      if (f.logic || !Array.isArray(el.outs)) { lost.add('a villamos modell részletei'); continue; }
+      const view = meta && meta.logic ? meta.logic.view : undefined, tv = meta && meta.logic ? meta.logic.tableVars : undefined;
+      f.logic = { vcc: String(el.vcc ?? ''), gnd: String(el.gnd ?? ''), outs: el.outs.map(o => ({ pin: String(o.pin), expr: String(o.expr ?? ''), oe: String(o.oe ?? ''), type: o.type === 'od' ? 'od' : 'pp' })),
+        ...(view ? { view } : {}), ...(tv ? { tableVars: tv } : {}) };
+      for (const k of ['vih', 'vil', 'rout'] as const) { const v = el[k]; if (typeof v === 'number') f.logic[k] = v; else if (v != null) lost.add('a villamos modell részletei'); }
+      continue;
+    }
     const k = el.el as ModelKind, mf = MODEL_FIELDS[k];
     if (!mf) { lost.add('a villamos modell részletei'); continue; }
     const e = el as unknown as Record<string, unknown>;
@@ -192,7 +222,7 @@ export function defToForm(def: PartDef, base?: { form: Form; graphics: unknown; 
     const txt = (def.graphics || []).find(g => g.shape === 'text' && g.layer === 'detail');
     f.bodyText = txt && txt.text ? String(txt.text) : '';
     f.showLabel = (def.graphics || []).some(g => g.shape === 'text' && g.layer === 'label' && g.text === '{label}');
-    f.names = !def.pinLabels ? 'none' : (def.pinLabels.off ?? 0.75) < 0 ? 'above' : 'below';
+    f.names = !def.pinLabels ? 'none' : def.pinLabels.side ? def.pinLabels.side : (def.pinLabels.off ?? 0.75) < 0 ? 'above' : 'below';
   }
   if (def.params && def.params.length) lost.add('paraméterek');
   if (def.pinTable) lost.add('lábtábla');
@@ -222,7 +252,8 @@ const formOf = (def: PartDef): Form | null => {
 };
 
 /* Piszkozatok: a bezárt (nem mentett) szerkesztés állapota alkatrészenként; az Elvetés törli. */
-interface Draft { tab: 'form' | 'json'; form: Form | null; jsonText: string }
+type Tab = 'form' | 'logic' | 'json';
+interface Draft { tab: Tab; form: Form | null; jsonText: string }
 const DRAFT_KEY = 'proofboard.editor.drafts';
 function drafts(): Record<string, Draft> { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}') || {}; } catch { return {}; } }
 function putDraft(k: string, d: Draft | null): void {
@@ -235,7 +266,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   const existing = opts.type ? host.custom()[opts.type] : undefined;
   const start = existing || opts.from;
   const draftKey = opts.type ? 'type:' + opts.type : opts.from ? 'from:' + opts.from.name : 'new';
-  let form: Form | null = null, jsonDef: PartDef | null = null, tab: 'form' | 'json' = 'form';
+  let form: Form | null = null, jsonDef: PartDef | null = null, tab: Tab = 'form';
   /** Kiinduló állapot: űrlap, ha a leírás veszteség nélkül megjeleníthető rajta, különben JSON. */
   const initial = (): void => {
     jsonDef = null; jsonText = ''; jsonErr = ''; pending = null;
@@ -246,12 +277,12 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (conv.form && !conv.lost.length) { form = conv.form; if (opts.from && !existing) form.name = d.name; tab = 'form'; }
     else { form = null; jsonDef = d; tab = 'json'; }
   };
-  let sel = -1, selModel = -1;
+  let sel = -1, selModel = -1, selOut = -1, nameBefore: string | null = null;
   let jsonText = '';
   let jsonErr = '';
   let confirmDel = 0, confirmDiscard = 0;
   /** JSON → Űrlap váltáskor a veszteséggel járó átalakítás, megerősítésre várva. */
-  let pending: { form: Form; lost: string[] } | null = null;
+  let pending: { form: Form; lost: string[]; to: Tab } | null = null;
   /** Az utolsó űrlap → JSON váltáskor előállított rajz és test (ha a JSON-ban változatlan, az űrlapé marad). */
   let lastGen: { form: Form; graphics: unknown; bounds: unknown } | null = null;
   initial();
@@ -267,7 +298,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     <div class="pe" role="dialog" aria-modal="true" aria-label="Alkatrész-szerkesztő">
       <header class="pe-head">
         <b>Alkatrész-szerkesztő</b><span class="muted small" data-ref="sub"></span>
-        <div class="pe-tabs" role="tablist"><button class="btn" data-tab="form" role="tab">Űrlap</button><button class="btn" data-tab="json" role="tab">JSON</button></div>
+        <div class="pe-tabs" role="tablist"><button class="btn" data-tab="form" role="tab">Űrlap</button><button class="btn" data-tab="logic" role="tab" title="Digitális logika: kifejezés, igazságtábla, kapuk">Logika</button><button class="btn" data-tab="json" role="tab">JSON</button></div>
         <button class="btn" data-act="close" aria-label="Bezárás" title="Bezárás (Esc)">✕</button>
       </header>
       <div class="pe-body">
@@ -293,10 +324,11 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   const left = $('left'), cv = $<HTMLCanvasElement>('cv'), probsEl = $('probs');
   const prevFocus = document.activeElement as HTMLElement | null;
 
-  const currentDef = (): PartDef | null => (tab === 'form' && form ? formToDef(form) : jsonDef);
+  const currentDef = (): PartDef | null => (tab !== 'json' && form ? formToDef(form) : jsonDef);
   /** Váltás a fülek között: az aktuális állapot átkerül a másik nézetbe. */
-  function switchTab(t: 'form' | 'json'): void {
+  function switchTab(t: Tab): void {
     if (t === tab && !pending) return;
+    if (tab !== 'json' && t !== 'json') { tab = t; pending = null; render(); return; } // Űrlap ↔ Logika: ugyanaz az adat
     if (t === 'json') {
       if (form) { const d = formToDef(form); delete d.meta; jsonDef = d; jsonText = JSON.stringify(d, null, 2); jsonErr = ''; lastGen = { form: JSON.parse(JSON.stringify(form)), graphics: d.graphics, bounds: d.bounds }; }
       tab = 'json'; pending = null; render(); return;
@@ -307,15 +339,15 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     catch (e) { jsonErr = 'Hibás JSON: ' + (e instanceof Error ? e.message : String(e)) + ' – javítsd, mielőtt az űrlapra váltasz.'; render(); return; }
     const conv = defToForm(d, lastGen || undefined);
     if (!conv.form) { jsonErr = 'Az űrlapon legalább egy, fix helyű láb kell (számmal megadott sor és oszlop).'; render(); return; }
-    if (conv.lost.length) { pending = { form: conv.form, lost: conv.lost }; render(); return; }
-    form = conv.form; tab = 'form'; pending = null; render();
+    if (conv.lost.length) { pending = { form: conv.form, lost: conv.lost, to: t }; render(); return; }
+    form = conv.form; tab = t; pending = null; render();
   }
   const problems = (): Problem[] => {
     if (tab === 'json' && jsonErr) return [{ level: 'error', path: 'json', msg: jsonErr }];
     const d = currentDef();
     if (!d) return [{ level: 'error', path: '', msg: 'Nincs leírás.' }];
     const ps = validatePartDef(d);
-    if (form && tab === 'form' && !form.pins.length) return [{ level: 'error', path: 'pins', msg: 'Adj hozzá lábakat: kattints az előnézetre, vagy használd a lábsor-generátort.' }];
+    if (form && tab !== 'json' && !form.pins.length) return [{ level: 'error', path: 'pins', msg: 'Adj hozzá lábakat: kattints az előnézetre, vagy használd a lábsor-generátort.' }];
     return ps;
   };
 
@@ -337,7 +369,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       b.classList.toggle('on', b.dataset.tab === tab);
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
     });
-    left.innerHTML = tab === 'form' && form ? formHtml(form) : jsonHtml();
+    left.innerHTML = tab === 'form' && form ? formHtml(form) : tab === 'logic' && form ? logicHtml(form) : jsonHtml();
     refresh();
   }
   function refresh(): void {
@@ -385,7 +417,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
             <td><input type="number" data-pin="${i}" data-k="lc" value="${p.lc}" style="width:52px" aria-label="oszlop"></td>
             <td><select data-pin="${i}" data-k="role" aria-label="szerep">${ROLES.map(([v, l]) => opt(v, l, p.role)).join('')}</select></td>
             <td><input type="text" data-pin="${i}" data-k="group" value="${esc(p.group)}" style="width:52px" aria-label="csoport"></td>
-            <td><input type="text" data-pin="${i}" data-k="volt" value="${esc(p.volt || '')}" placeholder="${p.role === 'vin' ? 'pl. 3-5.5' : ''}" ${p.role === 'vin' ? '' : 'disabled'} style="width:64px" aria-label="tápfeszültség-tartomány"></td>
+            <td><input type="text" data-pin="${i}" data-k="volt" value="${esc(p.volt || '')}" placeholder="${p.role === 'vin' ? 'pl. 3-5.5' : '–'}" ${p.role === 'vin' ? '' : 'disabled title="Csak tápbemenetnél (vin) adható meg"'} style="width:64px" aria-label="tápfeszültség-tartomány"></td>
             <td><button class="btn" data-act="delpin" data-i="${i}" aria-label="Láb törlése" title="Láb törlése">×</button></td></tr>`).join('')}</tbody>
         </table></div>
         ${f.pins.length ? '<p class="help">Az első láb lesz a lerakási pont (0:0); mentéskor a többi ehhez igazodik.</p>' : ''}
@@ -399,7 +431,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
             ${(['t', 'b', 'l', 'r'] as const).map(k => `<label class="small">${{ t: 'fent', b: 'lent', l: 'balra', r: 'jobbra' }[k]}<input type="number" id="pe_ext_${k}" data-ext="${k}" value="${f.ext[k]}" min="0" max="40" step="0.5" style="width:58px"></label>`).join('')}
             <span class="help" style="flex:1 1 100%;margin:0">A test mérete a lábakon túl, lyukban (pl. egy kijelzőpanel nagyobb a lábsoránál).</span></div>
           <label for="pe_btext">Felirat a testen</label><input type="text" id="pe_btext" data-f="bodyText" value="${esc(f.bodyText)}" placeholder="pl. TP4056">
-          <label for="pe_names">Lábnevek</label><select id="pe_names" data-f="names">${opt('below', 'a lábak alatt', f.names)}${opt('above', 'a lábak felett', f.names)}${opt('none', 'nincsenek', f.names)}</select>
+          <label for="pe_names">Lábnevek</label><select id="pe_names" data-f="names">${opt('below', 'a lábak alatt', f.names)}${opt('above', 'a lábak felett', f.names)}${opt('in', 'befelé (a test közepe felé)', f.names)}${opt('out', 'kifelé (a test szélén túl)', f.names)}${opt('none', 'nincsenek', f.names)}</select>
           <label></label><label class="check small"><input type="checkbox" data-f="showLabel" ${f.showLabel ? 'checked' : ''}> Példánynév kiírása (pl. U1)</label>
           <label></label><label class="check small" title="A panel mellé kerül; a lábaihoz kábel (vezeték) köt be"><input type="checkbox" data-f="off" ${f.off ? 'checked' : ''}> Külső alkatrész (kábellel bekötve)</label>
         </div>
@@ -435,6 +467,160 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       </section>`;
   }
 
+  // ---------- Logika fül ----------
+  const pinName = (f: Form, id: string) => { const p = f.pins.find(x => x.id === id); return p ? p.name || p.id : id; };
+  const pinList = (f: Form) => f.pins.map(p => ({ id: p.id, name: p.name || p.id }));
+  function ensureLogic(f: Form): LogicForm {
+    if (!f.logic) f.logic = { vcc: f.pins.find(p => p.role === 'vin')?.id || '', gnd: f.pins.find(p => p.role === 'gnd')?.id || '', outs: [], view: 'expr' };
+    return f.logic;
+  }
+  /** Bemenetnek választható lábnevek: nem táp, nem GND, nem kimenet. */
+  const inputNames = (f: Form) => f.pins.filter(p => p.id !== f.logic?.vcc && p.id !== f.logic?.gnd && !f.logic?.outs.some(o => o.pin === p.id)).map(p => p.name || p.id);
+  /** A kijelölt kimenet és a kifejezésében szereplő bemenetek lábai (előnézeti kiemeléshez). */
+  function logicPins(f: Form, i: number): string[] {
+    const o = f.logic?.outs[i]; if (!o) return [];
+    const ids = [o.pin];
+    try { for (const v of varsOf(parseExpr(o.expr))) { const id = pinRef(v, pinList(f)); if (id && !ids.includes(id)) ids.push(id); } } catch { /* hibás kifejezés */ }
+    return ids;
+  }
+  function addOut(f: Form): void {
+    const L = ensureLogic(f), used = new Set([L.vcc, L.gnd, ...L.outs.map(o => o.pin)]);
+    const p = f.pins.find(x => x.role === 'out' && !used.has(x.id)) || [...f.pins].reverse().find(x => !used.has(x.id));
+    L.outs.push({ pin: p ? p.id : '', expr: '', oe: '', type: 'pp' });
+    selOut = L.outs.length - 1;
+  }
+  function exprMsg(f: Form, src: string): string {
+    if (!src.trim()) return '<span class="muted">Írd be, mikor legyen a kimenet 1, pl. <code>!(A &amp; B)</code>.</span>';
+    try {
+      const e = parseExpr(src), bad = varsOf(e).filter(v => !pinRef(v, pinList(f)));
+      if (bad.length) return `<span class="c-err">Nincs ilyen (vagy nem egyértelmű) láb: ${esc(bad.join(', '))}</span>`;
+      return `<span class="c-ok">✓</span> ${esc(printExpr(e))}`;
+    } catch (x) { return `<span class="c-err">${esc(x instanceof LogicError ? x.message : String(x))}</span>`; }
+  }
+  const GATES: GateKind[] = ['and', 'nand', 'or', 'nor', 'xor', 'xnor', 'not', 'buf'];
+  function treeHtml(f: Form, n: GateNode, i: number, path: string): string {
+    if ('g' in n) {
+      const many = n.g !== 'not' && n.g !== 'buf';
+      return `<div class="lg-g"><select data-lo="${i}" data-gp="${path}" data-gk="op" aria-label="kapu">${GATES.map(g => opt(g, GATE_LABEL[g], n.g)).join('')}<option value="__del">— kapu törlése (helyette az 1. bemenete)</option></select>
+        <div class="lg-ins">${n.ins.map((k, j) => treeHtml(f, k, i, path === '' ? String(j) : `${path}.${j}`)).join('')}${many ? `<button class="btn lg-add" data-act="lgin" data-i="${i}" data-gp="${path}">+ bemenet</button>` : ''}</div></div>`;
+    }
+    const cur = 'v' in n ? n.v : String(n.c), names = inputNames(f);
+    if ('v' in n && !names.includes(n.v)) names.unshift(n.v);
+    return `<div class="lg-leaf"><select data-lo="${i}" data-gp="${path}" data-gk="leaf" aria-label="bemenet">${names.map(v => opt(v, v, cur)).join('')}${opt('0', '0 (mindig 0)', cur)}${opt('1', '1 (mindig 1)', cur)}<option value="__gate">⊕ helyette kapu…</option></select>${path !== '' ? `<button class="btn" data-act="lgrm" data-i="${i}" data-gp="${path}" title="Bemenet törlése" aria-label="Bemenet törlése">×</button>` : ''}</div>`;
+  }
+  function logicHtml(f: Form): string {
+    if (!f.pins.length) return '<section class="pe-sec"><p class="help">Előbb adj lábakat az alkatrészhez az Űrlap fülön.</p></section>';
+    const L = f.logic;
+    const intro = `<p class="help">Digitális viselkedés: minden kimenethez egy logikai kifejezés tartozik a bemeneti lábak nevével. A szimuláció a bemenetek feszültségéből (a táp 70 %-a felett 1, 30 %-a alatt 0) kiszámolja a kimeneteket, és a táp felé vagy a föld felé hajtja őket. Három, egymásba váltható nézet: <b>Kifejezés</b>, <b>Igazságtábla</b>, <b>Kapuk</b>.</p>`;
+    if (!L || !L.outs.length) return `<section class="pe-sec">${intro}<button class="btn on" data-act="lgstart">+ Logika hozzáadása</button></section>`;
+    const view = L.view || 'expr';
+    const seg = (['expr', 'table', 'gates'] as const).map(v => `<button class="btn ${v === view ? 'on' : ''}" data-act="lgview" data-v="${v}" role="tab" aria-selected="${v === view}">${{ expr: 'Kifejezés', table: 'Igazságtábla', gates: 'Kapuk' }[v]}</button>`).join('');
+    const head = `<div class="pe-grid"><label for="pe_lvcc">Táp (VCC)</label><select id="pe_lvcc" data-lsup="vcc">${pinOpts(f, L.vcc)}</select>
+      <label for="pe_lgnd">Föld (GND)</label><select id="pe_lgnd" data-lsup="gnd">${pinOpts(f, L.gnd)}</select></div>
+      <div class="pe-seg" role="tablist" aria-label="Logika nézete">${seg}</div>`;
+    const card = (o: LogicOutRow, i: number, inner: string) => `<div class="lg-out ${i === selOut ? 'on' : ''}" data-lo="${i}">
+        <div class="lg-head"><label class="small" for="pe_lp_${i}">Kimenet</label><select id="pe_lp_${i}" data-lo="${i}" data-lk="pin">${pinOpts(f, o.pin)}</select>
+          <select data-lo="${i}" data-lk="type" aria-label="kimenet típusa" title="Push-pull: 1-nél a táp felé, 0-nál a föld felé hajt. Nyitott drain: csak a föld felé (felhúzó ellenállás kell).">${opt('pp', 'push-pull', o.type)}${opt('od', 'nyitott drain', o.type)}</select>
+          <span style="flex:1"></span><button class="btn" data-act="lgdel" data-i="${i}" title="Kimenet törlése" aria-label="Kimenet törlése">×</button></div>${inner}</div>`;
+    let body = '';
+    if (view === 'expr') {
+      body = `<p class="help">Jelek: <code>!</code> NEM, <code>&amp;</code> ÉS, <code>|</code> VAGY, <code>^</code> KIZÁRÓ VAGY, zárójel, <code>0</code>/<code>1</code>; szóval is írható (NOT, AND, OR, XOR). Példa: <code>!(A &amp; B)</code> = NAND.</p>` +
+        L.outs.map((o, i) => card(o, i, `<input type="text" class="lg-expr" id="pe_lx_${i}" data-lo="${i}" data-lk="expr" value="${esc(o.expr)}" placeholder="pl. !(A & B)" spellcheck="false" aria-label="${esc(pinName(f, o.pin))} kifejezése">
+          <div class="lg-msg" data-lmsg="${i}">${exprMsg(f, o.expr)}</div>
+          <div class="lg-oe"><label class="small" for="pe_lo_${i}">Engedélyezés</label><input type="text" id="pe_lo_${i}" data-lo="${i}" data-lk="oe" value="${esc(o.oe)}" placeholder="üres = mindig hajt; pl. !OE" spellcheck="false"></div>`)).join('');
+    } else if (view === 'gates') {
+      body = `<p class="help">Kapukból is összerakható: a legördülőkkel választható a kapu típusa és a bemenetei; a „⊕ helyette kapu” egy bemenetet újabb kapura cserél. A rajz és a kifejezés ugyanaz az adat.</p>` +
+        L.outs.map((o, i) => {
+          let inner: string;
+          if (!o.expr.trim()) inner = `<button class="btn" data-act="lgnewgate" data-i="${i}">+ Kapu</button>`;
+          else {
+            try { const t = toGates(parseExpr(o.expr)); inner = `<div class="lgv-wrap">${gateSvg(t, pinName(f, o.pin))}</div><div class="lg-tree">${treeHtml(f, t, i, '')}</div><div class="lg-msg">${exprMsg(f, o.expr)}</div>`; }
+            catch (x) { inner = `<div class="lg-msg"><span class="c-err">A kifejezés hibás (${esc(x instanceof Error ? x.message : String(x))}); javítsd a Kifejezés nézetben.</span></div>`; }
+          }
+          return card(o, i, inner);
+        }).join('');
+    } else {
+      const outsT = L.outs.map(o => ({ name: pinName(f, o.pin), expr: o.expr, oe: o.oe }));
+      const order = f.pins.map(p => p.name || p.id), vars = tableVars(outsT, (L.tableVars || []).filter(v => order.includes(v)), order);
+      const used = tableVars(outsT, [], order);
+      const chips = inputNames(f).map(v => `<label class="lg-chip"><input type="checkbox" data-lvar="${esc(v)}" ${vars.includes(v) ? 'checked' : ''} ${used.includes(v) ? 'disabled title="Szerepel egy kifejezésben"' : ''}> ${esc(v)}</label>`).join('');
+      const data = truthTable(outsT, vars);
+      let tbl = '';
+      if (data.tooMany) tbl = `<p class="c-err small">Legfeljebb ${TABLE_MAX_VARS} bemenet fér a táblázatba (most ${vars.length}); ennél több bemenetnél a Kifejezés nézetet használd.</p>`;
+      else tbl = `<div class="tablewrap"><table class="tbl lg-tt"><thead><tr>${vars.map(v => `<th>${esc(v)}</th>`).join('')}<th class="sep"></th>${outsT.map(o => `<th class="o">${esc(o.name)}</th>`).join('')}</tr></thead><tbody>` +
+        data.cells.map((row, r) => `<tr>${vars.map((_, j) => `<td>${(r >> (vars.length - 1 - j)) & 1}</td>`).join('')}<td class="sep"></td>${row.map((v, oi) => `<td><button class="lg-cell v${v}" data-act="lgcell" data-i="${oi}" data-r="${r}" ${v === 'Z' ? 'disabled title="Itt az engedélyezés 0: a kimenet nem hajt"' : ''} aria-label="${esc(outsT[oi].name)} a(z) ${r + 1}. sorban: ${v}">${v === 'X' ? '?' : v}</button></td>`).join('')}</tr>`).join('') + '</tbody></table></div>';
+      body = `<p class="help">Kattints egy kimeneti cellára: 0 ↔ 1. A program a táblázatból a legrövidebb kifejezést írja vissza (az ÉS-ek VAGY-a); a <b>Z</b> sorokban az engedélyezés 0, ott mindegy. A kifejezés eredeti alakja ilyenkor átíródik.</p>
+        <div class="lg-chips"><span class="small muted">Bemenetek a táblázatban:</span> ${chips || '<span class="small muted">–</span>'}</div>${data.errors.map(e => `<p class="c-err small">${esc(e)}</p>`).join('')}${tbl}`;
+    }
+    return `<section class="pe-sec">${intro}${head}${body}<button class="btn" data-act="lgaddout" style="margin-top:8px">+ Kimenet</button></section>`;
+  }
+  /** Kapufa-útvonal: '' a gyökér, '0.1' az első bemenet második bemenete. */
+  function treeEdit(i: number, path: string, fn: (n: GateNode) => GateNode): void {
+    const o = form!.logic!.outs[i];
+    const root = toGates(parseExpr(o.expr));
+    const rec = (n: GateNode, ps: number[]): GateNode => {
+      if (!ps.length) return fn(n);
+      if (!('g' in n)) return n;
+      const [h, ...t] = ps;
+      return { g: n.g, ins: n.ins.map((k, j) => (j === h ? rec(k, t) : k)) };
+    };
+    o.expr = gatesToText(rec(root, path === '' ? [] : path.split('.').map(Number)));
+  }
+  function removeAt(i: number, path: string): void {
+    const ps = path.split('.').map(Number), last = ps.pop()!;
+    treeEdit(i, ps.join('.'), n => ('g' in n ? { g: n.g, ins: n.ins.filter((_, j) => j !== last) } : n));
+  }
+  /** A Logika fül eseményei; true, ha kezelte. */
+  function logicEvent(kind: 'input' | 'change' | 'click', t: HTMLElement & { value?: string; checked?: boolean }): boolean {
+    if (!form || tab !== 'logic') return false;
+    const f = form, act = t.dataset.act;
+    if (kind === 'click') {
+      if (act === 'lgstart') { ensureLogic(f); addOut(f); render(); return true; }
+      if (act === 'lgaddout') { addOut(f); render(); return true; }
+      if (act === 'lgdel') { f.logic!.outs.splice(+t.dataset.i!, 1); selOut = -1; render(); return true; }
+      if (act === 'lgview') { ensureLogic(f).view = t.dataset.v as LogicForm['view']; render(); return true; }
+      if (act === 'lgcell') {
+        const L = f.logic!, outsT = L.outs.map(o => ({ name: pinName(f, o.pin), expr: o.expr, oe: o.oe }));
+        const order = f.pins.map(p => p.name || p.id), data = truthTable(outsT, tableVars(outsT, (L.tableVars || []).filter(v => order.includes(v)), order));
+        const i = +t.dataset.i!; L.outs[i].expr = toggleCell(data, i, +t.dataset.r!);
+        // a táblázat oszlopai ne tűnjenek el, ha egy bemenet kiesik a kifejezésből
+        L.tableVars = [...new Set([...(L.tableVars || []), ...data.vars])];
+        render(); return true;
+      }
+      if (act === 'lgnewgate') { const ns = inputNames(f); f.logic!.outs[+t.dataset.i!].expr = `${ns[0] || '0'} & ${ns[1] || ns[0] || '1'}`; render(); return true; }
+      if (act === 'lgin') { const ns = inputNames(f); treeEdit(+t.dataset.i!, t.dataset.gp!, n => ('g' in n ? { g: n.g, ins: [...n.ins, { v: ns[0] || '0' }] } : n)); render(); return true; }
+      if (act === 'lgrm') { removeAt(+t.dataset.i!, t.dataset.gp!); render(); return true; }
+      return false;
+    }
+    if (t.dataset.lsup) { const L = ensureLogic(f); L[t.dataset.lsup as 'vcc' | 'gnd'] = t.value || ''; if (kind === 'change') render(); else refresh(); return true; }
+    if (t.dataset.lvar != null && kind === 'change') {
+      const L = ensureLogic(f), v = t.dataset.lvar, cur = new Set(L.tableVars || []);
+      if (t.checked) cur.add(v); else cur.delete(v);
+      L.tableVars = [...cur]; render(); return true;
+    }
+    if (t.dataset.gk && kind === 'change') {
+      const i = +t.dataset.lo!, path = t.dataset.gp!, v = t.value || '';
+      if (t.dataset.gk === 'op') treeEdit(i, path, n => {
+        if (!('g' in n)) return n;
+        if (v === '__del') return n.ins[0] || { c: 0 };
+        const g = v as GateKind, one = g === 'not' || g === 'buf';
+        const ins = one ? n.ins.slice(0, 1) : n.ins.length >= 2 ? n.ins : [...n.ins, { v: inputNames(f)[0] || '0' }];
+        return { g, ins };
+      });
+      else treeEdit(i, path, n => (v === '__gate' ? { g: 'and', ins: [n, { v: inputNames(f).find(x => !('v' in n) || x !== n.v) || '0' }] } : v === '0' || v === '1' ? { c: +v as 0 | 1 } : { v }));
+      selOut = i; render(); return true;
+    }
+    if (t.dataset.lo != null && t.dataset.lk) {
+      const i = +t.dataset.lo, o = f.logic!.outs[i], k = t.dataset.lk as 'pin' | 'type' | 'expr' | 'oe';
+      if (k === 'type') o.type = t.value === 'od' ? 'od' : 'pp'; else o[k] = t.value || '';
+      selOut = i;
+      if (k === 'expr' && kind === 'input') { const m = left.querySelector(`[data-lmsg="${i}"]`); if (m) m.innerHTML = exprMsg(f, o.expr); refresh(); return true; }
+      if (kind === 'change' && (k === 'pin' || k === 'type')) { render(); return true; }
+      refresh(); return true;
+    }
+    return false;
+  }
+
   // ---------- előnézet ----------
   function drawPreview(): void {
     const ctx = cv.getContext('2d');
@@ -444,9 +630,9 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const d = currentDef();
-    const pts = (tab === 'form' && form ? form.pins.map(p => ({ id: p.id, name: p.name, lr: p.lr, lc: p.lc, role: p.role })) : pinsOfJson(d));
+    const pts = (tab !== 'json' && form ? form.pins.map(p => ({ id: p.id, name: p.name, lr: p.lr, lc: p.lc, role: p.role })) : pinsOfJson(d));
     const rs = pts.map(p => p.lr), cs = pts.map(p => p.lc);
-    const BB = pts.length && form && tab === 'form' ? bodyRect(form, pts) : null;
+    const BB = pts.length && form && tab !== 'json' ? bodyRect(form, pts) : null;
     const r0 = Math.floor(Math.min(0, ...rs, BB ? BB.r0 : 0)) - 1, r1 = Math.ceil(Math.max(0, ...rs, BB ? BB.r1 : 0)) + 1;
     const c0 = Math.floor(Math.min(0, ...cs, BB ? BB.c0 : 0)) - 1, c1 = Math.ceil(Math.max(0, ...cs, BB ? BB.c1 : 0)) + 1;
     const S = Math.max(10, Math.min(34, Math.floor(Math.min((W - 20) / (c1 - c0 + 1), (H - 20) / (r1 - r0 + 1)))));
@@ -457,10 +643,10 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     ctx.fillStyle = '#4a3c24';
     for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) { ctx.beginPath(); ctx.arc(X(c), Y(r), S * 0.14, 0, 7); ctx.fill(); }
     // test
-    const body = form && tab === 'form' ? { fill: form.fill, text: form.bodyText } : null;
+    const body = form && tab !== 'json' ? { fill: form.fill, text: form.bodyText } : null;
     if (pts.length) {
       const fill = body ? body.fill : '#7d8b84';
-      const B = bodyRect(form && tab === 'form' ? form : { pad: 0.6, ext: { t: 0, b: 0, l: 0, r: 0 }, bodyText: '' }, pts);
+      const B = bodyRect(form && tab !== 'json' ? form : { pad: 0.6, ext: { t: 0, b: 0, l: 0, r: 0 }, bodyText: '' }, pts);
       const br0 = B.r0 + 0.5, br1 = B.r1 - 0.5, bc0 = B.c0 + 0.5, bc1 = B.c1 - 0.5;
       ctx.fillStyle = fill; ctx.globalAlpha = body ? 0.92 : 0.35;
       ctx.fillRect(X(bc0) - S / 2, Y(br0) - S / 2, (bc1 - bc0 + 1) * S, (br1 - br0 + 1) * S);
@@ -470,8 +656,11 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         ctx.fillStyle = lightText(fill) ? '#f1f3f5' : '#1d231f'; ctx.font = `600 ${Math.max(9, S * 0.5)}px ui-monospace,monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(body.text, X((B.c0 + B.c1) / 2), Y(tr)); }
     }
     // lábak (a kijelölt modellelem kivezetései lilával, sorszámmal: 1. vég, 2. vég…)
-    const modelPins = form && tab === 'form' && selModel >= 0 && form.model[selModel] ? form.model[selModel].pins : [];
+    const modelPins = form && tab === 'form' && selModel >= 0 && form.model[selModel] ? form.model[selModel].pins : form && tab === 'logic' ? logicPins(form, selOut) : [];
     ctx.font = `600 ${Math.max(8, S * 0.36)}px ui-monospace,monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const nm = form && tab !== 'json' ? form.names : 'below';
+    const Bc = pts.length ? bodyRect(form && tab !== 'json' ? form : { pad: 0.6, ext: { t: 0, b: 0, l: 0, r: 0 }, bodyText: '' }, pts) : { r0: 0, r1: 0, c0: 0, c1: 0 };
+    const LP = nm === 'none' ? [] : pinLabelPositions(pts, nm, 0.62, { r: (Bc.r0 + Bc.r1) / 2, c: (Bc.c0 + Bc.c1) / 2 });
     pts.forEach((p, i) => {
       const x = X(p.lc), y = Y(p.lr);
       if (i === sel) { ctx.strokeStyle = '#a8571f'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, S * 0.48, 0, 7); ctx.stroke(); }
@@ -482,11 +671,11 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       ctx.fillStyle = host.roleColor(p.role); ctx.beginPath(); ctx.arc(x, y, S * 0.3, 0, 7); ctx.fill();
       ctx.fillStyle = '#e9ecef'; ctx.beginPath(); ctx.arc(x, y, S * 0.12, 0, 7); ctx.fill();
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,252,240,.9)'; ctx.fillStyle = '#1d231f';
-      const ty = y + (form && form.names === 'above' ? -S * 0.62 : S * 0.62);
-      ctx.strokeText(p.name || p.id, x, ty); ctx.fillText(p.name || p.id, x, ty);
+      const L = LP[i];
+      if (L) { ctx.textAlign = L.align; const tx = X(L.c), ty = Y(L.r); ctx.strokeText(p.name || p.id, tx, ty); ctx.fillText(p.name || p.id, tx, ty); ctx.textAlign = 'center'; }
     });
     if (pts.length) { ctx.strokeStyle = '#a8571f'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5; ctx.strokeRect(X(pts[0].lc) - S * 0.45, Y(pts[0].lr) - S * 0.45, S * 0.9, S * 0.9); ctx.setLineDash([]); }
-    $('cvhelp').textContent = tab === 'form' && form
+    $('cvhelp').textContent = tab === 'logic' && form ? 'A kijelölt kimenet lába (1) és a kifejezésében szereplő bemenetek (2, 3…) lilával kiemelve.' : tab === 'form' && form
       ? 'Kattints egy üres lyukra: új láb oda. Kattints egy lábra: kijelölés a táblázatban. A szaggatott keret a lerakási pont.'
       : 'JSON-nézetben az előnézet csak a lábakat mutatja (alapértékekkel).';
   }
@@ -528,6 +717,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       try { jsonDef = JSON.parse(jsonText); jsonErr = ''; } catch (err) { jsonErr = 'Hibás JSON: ' + (err instanceof Error ? err.message : String(err)); }
       refresh(); return;
     }
+    if (logicEvent('input', t)) return;
     if (!form || tab !== 'form') return;
     if (t.dataset.f) {
       const k = t.dataset.f as keyof Form;
@@ -546,6 +736,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         const old = p.id; p.id = t.value.trim();
         for (const m of form.model) m.pins = m.pins.map(x => (x === old ? p.id : x));
         if (form.press) form.press = form.press.map(x => (x === old ? p.id : x)) as [string, string];
+        if (form.logic) { const L = form.logic; if (L.vcc === old) L.vcc = p.id; if (L.gnd === old) L.gnd = p.id; for (const o of L.outs) if (o.pin === old) o.pin = p.id; }
       } else p[k] = t.value;
       sel = +t.dataset.pin; refresh(); return;
     }
@@ -557,11 +748,18 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       const d: PartDef = JSON.parse(JSON.stringify(host.builtin[t.value])); d.name += ' (másolat)'; delete d.meta;
       jsonDef = d; jsonText = ''; jsonErr = ''; tab = 'json'; pending = null; render(); return;
     }
+    if (logicEvent('change', t)) return;
     if (!form || tab !== 'form') return;
+    if (t.dataset.pin != null && t.dataset.k === 'name' && form.logic && nameBefore != null) {
+      // lábátnevezés: a logikai kifejezésekben is
+      const nw = t.value.trim(), old = nameBefore; nameBefore = nw;
+      if (nw && old && nw !== old && /^[A-Za-z0-9_]+$/.test(nw)) { for (const o of form.logic.outs) { o.expr = renameVars(o.expr, old, nw); o.oe = renameVars(o.oe, old, nw); } if (form.logic.tableVars) form.logic.tableVars = form.logic.tableVars.map(v => (v === old ? nw : v)); }
+      return;
+    }
     if (t.dataset.pin != null && t.dataset.k === 'role') {
       form.pins[+t.dataset.pin].role = t.value;
       const v = back.querySelector<HTMLInputElement>(`[data-pin="${t.dataset.pin}"][data-k="volt"]`);
-      if (v) { v.disabled = t.value !== 'vin'; v.placeholder = t.value === 'vin' ? 'pl. 3-5.5' : ''; }
+      if (v) { v.disabled = t.value !== 'vin'; v.placeholder = t.value === 'vin' ? 'pl. 3-5.5' : '–'; v.title = t.value === 'vin' ? '' : 'Csak tápbemenetnél (vin) adható meg'; }
       refresh(); return;
     }
     if (t.dataset.model != null) {
@@ -575,6 +773,8 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   });
   back.addEventListener('focusin', e => {
     const t = e.target as HTMLElement;
+    if (t.dataset.pin != null && t.dataset.k === 'name' && form) nameBefore = form.pins[+t.dataset.pin]?.name ?? null;
+    if (t.dataset.lo != null && tab === 'logic' && +t.dataset.lo !== selOut) { selOut = +t.dataset.lo; left.querySelectorAll('.lg-out').forEach(el => el.classList.toggle('on', (el as HTMLElement).dataset.lo === String(selOut))); drawPreview(); }
     const mi = t.dataset.model != null ? +t.dataset.model : -1;
     if (mi !== selModel) { selModel = mi; drawPreview(); }
     if (t.dataset.pin != null && +t.dataset.pin !== sel) {
@@ -586,11 +786,12 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   back.addEventListener('click', e => {
     const b = (e.target as HTMLElement).closest('button');
     if (!b) return;
-    if (b.dataset.tab) { switchTab(b.dataset.tab as 'form' | 'json'); return; }
+    if (logicEvent('click', b)) return;
+    if (b.dataset.tab) { switchTab(b.dataset.tab as Tab); return; }
     if (b.dataset.fill && form) { form.fill = b.dataset.fill; render(); return; }
     const act = b.dataset.act;
     if (act === 'close') return close();
-    if (act === 'toform' && pending) { form = pending.form; pending = null; tab = 'form'; render(); return; }
+    if (act === 'toform' && pending) { form = pending.form; tab = pending.to; pending = null; render(); return; }
     if (act === 'stayjson') { pending = null; render(); return; }
     if (act === 'discard') {
       if (Date.now() - confirmDiscard > 3000) { confirmDiscard = Date.now(); b.textContent = 'Biztos? Kattints újra'; setTimeout(() => { b.textContent = 'Elvetés'; }, 3000); return; }
@@ -608,6 +809,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       const i = +b.dataset.i!, id = form.pins[i].id; form.pins.splice(i, 1); sel = -1;
       for (const m of form.model) m.pins = m.pins.map(x => (x === id ? '' : x));
       if (form.press) form.press = form.press.map(x => (x === id ? '' : x)) as [string, string];
+      if (form.logic) { const L = form.logic; if (L.vcc === id) L.vcc = ''; if (L.gnd === id) L.gnd = ''; for (const o of L.outs) if (o.pin === id) o.pin = ''; }
       render(); return;
     }
     if (act === 'addmodel' && form) { form.model.push({ el: 'resistor', pins: [form.pins[0]?.id || '', form.pins[1]?.id || ''], vals: ['1k'] }); render(); return; }

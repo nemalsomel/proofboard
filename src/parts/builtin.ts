@@ -23,6 +23,39 @@ export const PICO_ADC = new Set(['GP26', 'GP27', 'GP28']);
 const PICO_TABLE: Record<string, readonly [string, string] | readonly [string, string, readonly string[]]> = {};
 for(const k in PICO_NAMES){const n=PICO_NAMES[k];PICO_TABLE[k]=PICO_ADC.has(n)?[n,picoRole(n),['adc']]:[n,picoRole(n)];}
 const TO92: Array<[number, number]> =Array.from({length:13},(_,k)=>{const a=Math.PI*k/12;return[+(0.35-1.25*Math.sin(a)).toFixed(3),+(1+1.45*Math.cos(a)).toFixed(3)];});
+/**
+ * DIP-tok (felülnézet, a bevágás balra): az 1. láb lent balra, a számozás az óramutatóval ellentétesen;
+ * a két lábsor 3 osztásra (7,62 mm) van. A lábnevek befelé, a testre kerülnek.
+ */
+function dip(n: number, name: string, fp: string, names: string[], roleOf: (nm: string) => string, outs: Array<[string, string]>, help: string): PartDef {
+  const h = n / 2;
+  return {
+    name, fp, prefix: 'U', cat: 'Logika',
+    pins: names.map((nm, i) => {
+      const k = i + 1, lr = k <= h ? 3 : 0, lc = k <= h ? k - 1 : n - k;
+      const role = roleOf(nm);
+      return role === 'vin' ? { id: String(k), name: nm, lr, lc, role, vmin: 2, vmax: 6 } : { id: String(k), name: nm, lr, lc, role };
+    }),
+    bounds: { r: [-0.4, 3.4], c: [-0.6, h - 0.4] },
+    graphics: [
+      { shape: 'rect', layer: 'body', r: [0.45, 2.55], c: [-0.6, h - 0.4], fill: '#202124', stroke: '#000', width: 1.2, xray: { stroke: '#333' } },
+      { shape: 'circle', layer: 'detail', at: [1.5, -0.6], rad: 0.32, fill: '#3c3f44' },
+      { shape: 'circle', layer: 'detail', at: [2.15, -0.1], rad: 0.1, fill: '#9aa0a6' },
+      { shape: 'text', layer: 'detail', at: [1.5, (h - 1) / 2], text: '{label} · ' + name.split(' ')[0], size: 0.42, min: 7, color: '#c8ccd0', xray: { color: '#1d231f' } },
+    ],
+    pinLabels: { mode: 'name', off: 0.62, side: 'in', minP: 15, colors: { sig: '#dee2e6', out: '#ffd8a8', vin: '#ffc9d6', gnd: '#adb5bd' } },
+    model: [{ el: 'logic', vcc: String(names.indexOf('VCC') + 1), gnd: String(names.indexOf('GND') + 1), outs: outs.map(([o, expr]) => ({ pin: String(names.indexOf(o) + 1), expr })), rout: 50 }],
+    meta: { help },
+  };
+}
+const hcRole = (outs: string[]) => (nm: string) => (nm === 'VCC' ? 'vin' : nm === 'GND' ? 'gnd' : outs.includes(nm) ? 'out' : 'sig');
+const N00 = ['1A', '1B', '1Y', '2A', '2B', '2Y', 'GND', '3Y', '3A', '3B', '4Y', '4A', '4B', 'VCC'];
+const O00 = ['1Y', '2Y', '3Y', '4Y'];
+const N139 = ['1E', '1A0', '1A1', '1Y0', '1Y1', '1Y2', '1Y3', 'GND', '2Y3', '2Y2', '2Y1', '2Y0', '2A1', '2A0', '2E', 'VCC'];
+const O139 = ['1Y0', '1Y1', '1Y2', '1Y3', '2Y0', '2Y1', '2Y2', '2Y3'];
+/** 74HC139 kimenetei: aktív alacsony, aktív alacsony engedélyezés (E). */
+const dec = (g: string) => [0, 1, 2, 3].map(k => [`${g}Y${k}`, `!(!${g}E & ${k & 2 ? '' : '!'}${g}A1 & ${k & 1 ? '' : '!'}${g}A0)`] as [string, string]);
+
 export const PARTS: Record<string, PartDef> = {
   pico:{name:'Raspberry Pi Pico W',fp:'2×20 láb, sortáv 6',prefix:'PICO',cat:'Vezérlő',
     params:[{key:'span',label:'Sortáv (osztás)',type:'int',default:6,min:3,max:16,step:1,geo:true,help:'A két lábsor távolsága lyukban (0 → {span}). Adatlap szerint 17,78 mm = 7 osztás, de tüskesorral, foglalatban vagy adapterlapon más is lehet (pl. 6 vagy 8). Vonalzóval mérd le a sajátodat.'}],
@@ -132,6 +165,8 @@ export const PARTS: Record<string, PartDef> = {
               {shape:'text',layer:'label',at:[-1.35,1],text:'{label} {kind}',size:0.36}],
     pinLabels:{mode:'name',off:0.78,colors:{col:'#5c666e',base:'#1d4ed8',emit:'#1f2328'}},
     model:[{el:'npn',c:'C',b:'B',e:'E',beta:'{kind.beta}',vbe:0.65,vcesat:0.1,imax:'{kind.imax}'}]},
+  hc00:dip(14,'74HC00 négy NAND kapu','DIP-14 · 4× NAND',N00,hcRole(O00),O00.map(o=>[o,`!(${o[0]}A & ${o[0]}B)`] as [string,string]),'Négy kétbemenetes NAND kapu (nY = NEM(nA ÉS nB)). Táp 2–6 V; a nem használt bemeneteket kösd GND-re.'),
+  hc139:dip(16,'74HC139 kettős 2→4 dekóder','DIP-16 · 2× (2→4)',N139,hcRole(O139),[...dec('1'),...dec('2')],'Két 2→4 dekóder: az A1 A0 bináris szám szerinti Y kimenet lesz 0 (aktív alacsony), a többi 1; ha E = 1, mind 1. Táp 2–6 V.'),
   motor:{name:'DC motor (130-as)',fp:'külső · + és − kivezetés',prefix:'M',cat:'Külső',mount:'off',
     params:[{key:'vnom',label:'Névleges feszültség',type:'value',unit:'V',default:3,min:1,max:24,step:0.5,help:'A motor a panel mellett áll; a kivezetéseit vezetékkel (kábellel) kösd a panelra. Induktív terhelés: GPIO-ról közvetlenül nem hajtható, tranzisztor vagy MOSFET és visszacsapó dióda kell.'},
             {key:'ohm',label:'Üzemi ellenállás',type:'value',unit:'Ω',default:20,min:0.5,max:1000,series:'E12',help:'Egyszerűsített modell: forgás közbeni áramfelvétel ≈ U / R. A fordulat a feszültséggel arányos.'}],

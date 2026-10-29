@@ -16,6 +16,7 @@ Próbanyák-tervező és -szimulátor a böngészőben: 1×3-as szekciós (tripa
   - külső alkatrészek (motor, szervó) a panel mellett, kábellel: a kábel a cél szekciójának legközelebbi szabad lyukába fut (föld fekete, táp piros, jel narancs).
 - **Ellenőrzés:** zárlat, összeérő jelek, rövidre zárt alkatrész, ütközés, átfedés, túláram, lebegő gate és bázis, telítésbe nem jutó tranzisztor, fordított vagy túlfeszültségű kondenzátor, motor visszacsapó dióda nélkül vagy közvetlenül GPIO-ról, szervó érvényes jel nélkül; a tápbemenetek feszültsége (pl. 5 V-ra kötött 3,3 V-os kijelző), analóg jel ADC nélküli GPIO-n, akkutöltés Schottky-dióda nélkül.
 - **Szerepek:** a lábak szerepe (föld, tápbemenet, jel, analóg jel…) vezérli az ellenőrzést és az útvonalkeresőt: az analóg jelek csak ADC-képes GPIO-ra (GP26–GP28) kerülnek, ezeket a többi kapcsolat elől tartogatja.
+- **Digitális logika:** a 74HC00 (4× NAND) és 74HC139 (2× 2→4 dekóder) beépítve; saját alkatrészhez a szerkesztő Logika fülén kimenetenként logikai kifejezés, három egymásba váltható nézettel: kifejezés, igazságtábla (cellára kattintva minimalizált kifejezést ír), kapuk (AND/NAND/OR/NOR/XOR/XNOR/NOT kapurajzzal). A szimuláció a táp arányában olvassa a bemeneti szinteket, a kimenet push-pull vagy nyitott drain, engedélyezéssel.
 - **Saját alkatrészek:** alkatrész-szerkesztő űrlappal (lábsor-generátor, szerepek, test, villamos modell, nyomógomb-vezérlő) és JSON nézettel, élő előnézettel és ellenőrzéssel. A saját alkatrészek a tervvel együtt mentődnek, és könyvtárfájlként exportálhatók/importálhatók; beépített alkatrészből másolat is készíthető.
 - **Szimuláció:** egyenáramú csomóponti analízis (diódák, MOSFET, NPN lezárt/aktív/telített tartománnyal, kondenzátor feszültsége és τ = R·C időállandója, Pico táp és GPIO-módok), PWM (kitöltés, frekvencia; időszeletekre bontva, így a tranzisztoros/MOSFET-es kapcsolás is helyes), motorfordulat, szervószög, gombnyomás, csúszkák (pl. joystick-tengely), LED-fény és háttérvilágítás, GPIO-szintek és analóg feszültségek.
 
@@ -35,7 +36,7 @@ npm run build:single # egyetlen önálló HTML-fájl (dist-single/index.html)
 ## Felépítés
 
 ```
-src/core/     séma (típusok), kifejezés-értelmező, alkatrész-fordító, leírás-ellenőrző, könyvtárformátum — tiszta, típusos
+src/core/     séma (típusok), kifejezés-értelmező, logikai kifejezések (értelmező, kapufa, igazságtábla, Quine–McCluskey), lábnév-elhelyezés, alkatrész-fordító, leírás-ellenőrző, könyvtárformátum — tiszta, típusos
 src/parts/    beépített alkatrészleírások (adat)
 src/engine/   egyenletmegoldó (csomóponti analízis), panel-elrendezés (csíkdarabok, vágások, vágásjavaslat)
 src/ui/       alkatrész-szerkesztő

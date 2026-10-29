@@ -1,3 +1,4 @@
+import { LogicError, parseExpr, pinRef, varsOf } from './logic';
 import { compilePart, penvD } from './compile';
 import { num } from './expr';
 import type { ModelEl, PartDef, PartInstance } from './schema';
@@ -21,10 +22,11 @@ export const MODEL_PINS: Record<ModelEl['el'], string[]> = {
   npn: ['c', 'b', 'e'],
   motor: ['a', 'b'],
   servo: ['vp', 'gnd', 'sig'],
+  logic: ['vcc', 'gnd'],
   pico: ['gnd', 'vbus', 'vsys', 'v33'],
 };
 const MODEL_NUMS: Record<ModelEl['el'], string[]> = {
-  resistor: ['ohm'], diode: ['vf', 'ron', 'imax'], source: ['v', 'rint'], nmos: ['vth', 'ron', 'imax'], capacitor: ['f', 'vmax'], npn: ['beta', 'vbe', 'vcesat', 'imax'], motor: ['ohm', 'vnom'], servo: ['ohm', 'pmin', 'pmax'], pico: [],
+  resistor: ['ohm'], diode: ['vf', 'ron', 'imax'], source: ['v', 'rint'], nmos: ['vth', 'ron', 'imax'], capacitor: ['f', 'vmax'], npn: ['beta', 'vbe', 'vcesat', 'imax'], motor: ['ohm', 'vnom'], servo: ['ohm', 'pmin', 'pmax'], logic: ['vih', 'vil', 'rout'], pico: [],
 };
 
 const isObj = (x: unknown): x is Record<string, any> => !!x && typeof x === 'object' && !Array.isArray(x);
@@ -114,6 +116,28 @@ export function validatePartDef(def: unknown): Problem[] {
       if (e[k] == null) continue;
       try { const v = num(e[k], env); if (!isFinite(v)) throw new Error('nem szám'); }
       catch { err(`${at}.${k}`, `${k}: nem értelmezhető érték.`); }
+    }
+    if (el.el === 'logic') {
+      const outs = Array.isArray(e.outs) ? (e.outs as Array<Record<string, unknown>>) : [];
+      if (!outs.length) err(`${at}.outs`, 'A logikához legalább egy kimenet kell.');
+      const seen = new Set<string>();
+      outs.forEach((o, j) => {
+        const oa = `${at}.outs[${j}]`;
+        const pid = String(o.pin ?? '');
+        if (!ids.has(pid)) { err(oa, `Nincs ilyen kimeneti láb: ${pid || '–'}`); return; }
+        const pn = pins.find(q => q.id === pid)!.name;
+        if (seen.has(pid)) err(oa, `${pn}: két kifejezés hajtja ugyanazt a kimenetet.`);
+        seen.add(pid);
+        if (pid === e.vcc || pid === e.gnd) err(oa, `${pn}: a táp- vagy GND-láb nem lehet kimenet.`);
+        for (const [k, label] of [['expr', 'kifejezés'], ['oe', 'engedélyezés']] as const) {
+          if (o[k] == null || (k === 'oe' && String(o[k]).trim() === '')) { if (k === 'expr') err(oa, `${pn}: hiányzik a kifejezés.`); continue; }
+          try {
+            const ast = parseExpr(String(o[k]));
+            for (const v of varsOf(ast)) if (!pinRef(v, pins)) err(oa, `${pn} ${label}: nincs ilyen (vagy nem egyértelmű) láb: ${v}`);
+          } catch (x) { err(oa, `${pn} ${label}: ${x instanceof LogicError ? x.message : String(x)}`); }
+        }
+        if (o.type != null && o.type !== 'pp' && o.type !== 'od') err(oa, `${pn}: a kimenet típusa pp vagy od lehet.`);
+      });
     }
   });
 

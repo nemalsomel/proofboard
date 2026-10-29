@@ -111,7 +111,15 @@ export type ModelEl =
   | { el: 'motor'; a: string; b: string; ohm: Num; vnom: Num }
   /** Szervó: tápfelvétel (vp–gnd), a szöget a sig lábon érkező PWM impulzusszélessége adja (min…max ms → 0…180°). */
   | { el: 'servo'; vp: string; gnd: string; sig: string; ohm: Num; pmin?: Num; pmax?: Num }
-  | { el: 'pico'; gnd: string; vbus: string; vsys: string; v33: string };
+  | { el: 'pico'; gnd: string; vbus: string; vsys: string; v33: string }
+  /**
+   * Digitális logika: a kimenetek logikai kifejezései a bemeneti lábnevekkel (lásd core/logic.ts).
+   * A bemeneti szint a VCC–GND közti feszültség aránya szerint: ≥ vih → 1, ≤ vil → 0, köztes/lebegő → X.
+   * A kimenet push-pull ('pp', alap) vagy nyitott drain ('od'); `oe`: engedélyező kifejezés (0 → nagyimpedanciás).
+   */
+  | { el: 'logic'; vcc: string; gnd: string; outs: LogicOut[]; vih?: Num; vil?: Num; rout?: Num };
+
+export interface LogicOut { pin: string; expr: string; oe?: string; type?: 'pp' | 'od' }
 
 /**
  * Szimuláció közbeni vezérlők.
@@ -134,6 +142,8 @@ export interface PinLabels {
   onBody?: boolean;
   minP?: number;
   rename?: Record<string, string>;
+  /** name módban: 'in' a test közepe felé, 'out' kifelé (alap: az `off` előjele szerint alá/fölé). */
+  side?: 'in' | 'out';
 }
 
 export interface Bounds {
