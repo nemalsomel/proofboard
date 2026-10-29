@@ -18,6 +18,7 @@
       <button class="btn" id="vCu" title="Rézoldal, tükrözve (F)">Rézoldal</button>
       <button class="btn" id="vRats" title="Kapcsolati vonalak mutatása (N)">Kapcsolati nézet</button>
       <button class="btn" id="vXray" title="Minden alkatrész röntgen nézetben: csak körvonal, lábak és lábnevek (X)">Röntgen</button>
+      <button class="btn" id="vStub" title="Hosszú vezetékek rövidítve: csak a két vég látszik szakadásjellel; rámutatva vagy kijelölve a teljes vonal">Vezeték: rövid</button>
       <button class="btn" id="vRot" title="A panel nézetének elforgatása 90°-kal (T)">⟳ Panel 90°</button>
     </div>
     <div class="grp">
@@ -121,12 +122,20 @@
       </div>
       </details>
       <details class="acc" id="accPlan">
-        <summary><span class="h">Terv</span><span class="muted small">minták, export</span></summary>
-      <div class="grp" style="margin-bottom:8px">
-        <button class="btn" id="bPreset">Macropad (kézi hidak)</button>
-        <button class="btn" id="bPreset2">Macropad (útvonalkereső)</button>
+        <summary><span class="h">Terv</span><span class="muted small">példák, mentés</span></summary>
+      <p class="h" style="margin:0 0 6px">Példák</p>
+      <div id="examples" class="examples"></div>
+      <p class="help" id="exMsg" aria-live="polite"></p>
+      <div class="grp" style="margin-top:8px">
         <button class="btn danger" id="bClear">Üres panel</button>
       </div>
+      <p class="h" style="margin:12px 0 6px">Mentés és megosztás</p>
+      <div class="grp">
+        <button class="btn" id="bSaveFile" title="A teljes terv (a benne használt saját alkatrészekkel együtt) fájlba">Terv mentése fájlba</button>
+        <button class="btn" id="bOpenFile" title="Terv betöltése fájlból; a saját alkatrészeid megmaradnak">Terv megnyitása</button>
+        <input type="file" id="planFile" accept=".json,application/json" hidden>
+      </div>
+      <p class="help" id="planMsg" aria-live="polite" style="margin-top:6px">A fájlban a terv saját alkatrészei is benne vannak, így máshol is ugyanígy betölthető.</p>
       <details id="jsonBox">
         <summary>JSON export / import</summary>
         <div class="grp" style="margin-top:8px">
@@ -151,6 +160,7 @@
           <button class="btn" id="mToggle">Kapcsoló</button>
         </div>
         <div id="simCtl"></div>
+        <div id="sigBox"></div>
         <div id="simOut"></div>
       </div>
       </section>

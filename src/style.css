@@ -239,3 +239,29 @@ input:disabled::placeholder{color:var(--muted)}
 .acc>.props{border:0;padding:0;background:none;box-shadow:none}
 .lg-rgrid{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;align-items:center}
 .lg-reg{border-style:dashed}
+.note-text{width:100%;font:13px/1.4 var(--display);resize:vertical;margin-top:6px}
+
+/* Jelsorozat (GPIO-léptető) */
+details.sig{border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
+details.sig>summary{cursor:pointer;font-weight:600;font-size:13px;}
+details.sig .row{display:flex;gap:6px;align-items:center;margin:6px 0;}
+details.sig .row label{min-width:44px;font-size:12px;}
+details.sig .row select,details.sig .row input{flex:1;min-width:0;}
+.sig-ch{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 8px;margin:6px 0;}
+.sig-ch label{display:flex;gap:4px;align-items:center;font-size:12px;}
+.sig-ch select{flex:1;min-width:0;}
+.sig-ctl{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0;}
+.sig-rows{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;}
+.sig-row{display:inline-flex;gap:1px;padding:2px 3px;border:1px solid var(--line);border-radius:6px;background:transparent;cursor:pointer;}
+.sig-row.on{border-color:var(--accent,#1c7ed6);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent,#1c7ed6) 30%,transparent);}
+.sig-row:disabled{cursor:default;opacity:.7;}
+.sig-row .lv{min-width:12px;font-size:11px;}
+
+/* Példák */
+.ex-cats{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;}
+.ex-cat{cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--fg);font:inherit;font-size:12px;padding:2px 8px;border-radius:999px;}
+.ex-cat.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);}
+.ex-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;}
+.ex-item{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;cursor:pointer;font:inherit;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
+.ex-item:hover,.ex-item:focus-visible{border-color:var(--accent);}
+.ex-item b{font-size:13px;}

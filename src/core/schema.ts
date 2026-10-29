@@ -117,7 +117,9 @@ export type ModelEl =
    * A bemeneti szint a VCC–GND közti feszültség aránya szerint: ≥ vih → 1, ≤ vil → 0, köztes/lebegő → X.
    * A kimenet push-pull ('pp', alap) vagy nyitott drain ('od'); `oe`: engedélyező kifejezés (0 → nagyimpedanciás).
    */
-  | { el: 'logic'; vcc: string; gnd: string; outs: LogicOut[]; regs?: LogicReg[]; vih?: Num; vil?: Num; rout?: Num };
+  /** Unipoláris léptetőmotor: négy tekercs a közös (com) és a/b/c/d között; a gerjesztési sorrendből lép (félléptetés). */
+  | { el: 'stepper'; com: string; a: string; b: string; c: string; d: string; ohm: Num; steps?: Num; rotor?: Num }
+  | { el: 'logic'; vcc: string; /** kimenetenként megengedett áram (A), alapból 25 mA */ imax?: Num; gnd: string; outs: LogicOut[]; regs?: LogicReg[]; vih?: Num; vil?: Num; rout?: Num };
 
 export interface LogicOut { pin: string; expr: string; oe?: string; type?: 'pp' | 'od' }
 /**

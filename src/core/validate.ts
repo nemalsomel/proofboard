@@ -23,10 +23,11 @@ export const MODEL_PINS: Record<ModelEl['el'], string[]> = {
   motor: ['a', 'b'],
   servo: ['vp', 'gnd', 'sig'],
   logic: ['vcc', 'gnd'],
+  stepper: ['com', 'a', 'b', 'c', 'd'],
   pico: ['gnd', 'vbus', 'vsys', 'v33'],
 };
 const MODEL_NUMS: Record<ModelEl['el'], string[]> = {
-  resistor: ['ohm'], diode: ['vf', 'ron', 'imax'], source: ['v', 'rint'], nmos: ['vth', 'ron', 'imax'], capacitor: ['f', 'vmax'], npn: ['beta', 'vbe', 'vcesat', 'imax'], motor: ['ohm', 'vnom'], servo: ['ohm', 'pmin', 'pmax'], logic: ['vih', 'vil', 'rout'], pico: [],
+  resistor: ['ohm'], diode: ['vf', 'ron', 'imax'], source: ['v', 'rint'], nmos: ['vth', 'ron', 'imax'], capacitor: ['f', 'vmax'], npn: ['beta', 'vbe', 'vcesat', 'imax'], motor: ['ohm', 'vnom'], servo: ['ohm', 'pmin', 'pmax'], logic: ['vih', 'vil', 'rout', 'imax'], stepper: ['ohm', 'steps', 'rotor'], pico: [],
 };
 
 const isObj = (x: unknown): x is Record<string, any> => !!x && typeof x === 'object' && !Array.isArray(x);
