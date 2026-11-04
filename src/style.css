@@ -618,5 +618,5 @@ details.sig .row select,details.sig .row input{flex:1;min-width:0;}
   .sheet-close .ic{width:22px;height:22px}
 }
 /* keskenyebb asztali képernyőn a nézetmódok csak ikonnal (a súgó megmondja, melyik mi) */
-@media (max-width:1500px){.vmodes .btn{font-size:0;gap:0;padding:6px}.vmodes .btn .ic{width:16px;height:16px}.board-info{display:none}}
+@media (max-width:1500px){.vmodes .btn{font-size:0;gap:0;padding:6px}.vmodes .btn .ic{width:16px;height:16px}}
 @media (max-width:1000px){#pwSwap,#pwUndock{display:none}}
