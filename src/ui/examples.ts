@@ -24,9 +24,11 @@ export interface Example {
   freeze?: boolean;
   /** Jelsorozat: a csatornák azok a GPIO-k, amelyekre a megadott lábak kapcsolata került. */
   signal?: { preset: string; custom?: string; from: string[]; rate?: number };
+  /** GPIO-módok a kiosztás után: a megadott lábról induló GPIO-kapcsolat GPIO-ja kapja (pl. LED → „out_high”). */
+  gpioFrom?: Record<string, string>;
 }
 
-export const EX_CATS = ['Alapok', 'Bemenet', 'Félvezető', 'Passzív', 'Motor', 'Logika', 'Modul'] as const;
+export const EX_CATS = ['Alapok', 'Vezérlő', 'Bemenet', 'Félvezető', 'Passzív', 'Motor', 'Logika', 'Modul'] as const;
 
 const YEL = '#fff3bf', GRN = '#d3f9d8', BLU = '#d0ebff';
 const PICO: ExPart = { id: 'p1', type: 'pico', label: 'PICO', r: 12, c: 32, rot: 2, props: { span: 6 } };
@@ -77,6 +79,31 @@ export const EXAMPLES: Example[] = [
       links: [['p1.+', 'p2.1'], ['p2.2', 'p3.A'], ['p3.K', 'p1.-']], settings: { autoCut: true },
       notes: [note(1, 12, 13, 9, 'Csíkos panel\nMinden oszlop egyetlen hosszú rézcsík. Ha egy csíkon több hálózat lába van, a csíkot el kell vágni közöttük.\nAz „Automatikus csíkvágás” ezt a kapcsolatokból megteszi.'),
         note(12, 12, 13, 8, 'Próbáld ki\nCsíkvágás eszköz (K): kattints két lyuk közé (rés) vagy egy lyuk közepére (kifúrás).', GRN)],
+    },
+  },
+  /* ---------- Vezérlő ---------- */
+  {
+    id: 'esp32', cat: 'Vezérlő', title: 'ESP32 DevKit V1 – gomb, LED, joystick',
+    desc: 'A 30 lábas DOIT lap: ADC1, csak bemeneti és indítási lábak; az útvonalkereső ezeket figyelembe veszi.',
+    gpioFrom: { 'p3.1': 'out_high' },
+    design: {
+      board: { ...B }, parts: [{ id: 'p1', type: 'esp32', label: 'ESP1', r: 12, c: 30, rot: 2 },
+        { id: 'p2', type: 'button', label: 'SW1', r: 20, c: 8 }, res('p3', 'R1', 20, 26, 330), led('p4', 'LED1', 26, 30), { id: 'p5', type: 'joystick', label: 'JS1', r: 30, c: 14 }],
+      links: [['p2.A1', 'GPIO'], ['p2.B1', 'GND'], ['p3.1', 'GPIO'], ['p3.2', 'p4.A'], ['p4.K', 'GND'], ['p5.GND', 'GND'], ['p5.5V', 'p1.3V3'], ['p5.VRX', 'GPIO'], ['p5.VRY', 'GPIO'], ['p5.SW', 'GPIO']],
+      notes: [note(37, 2, 17, 10, 'ESP32 lábai\nGPIO34–39: csak bemenet, belső felhúzás nélkül. ADC1: GPIO32–39 (az ADC2 WiFi mellett nem mér). Indítási lábak: GPIO0, 2, 5, 12, 15; TX0/RX0 a soros port.\nAz útvonalkereső ezeket kerüli, használatukra az Ellenőrzés figyelmeztet.', YEL, 'p1'),
+        note(37, 21, 15, 10, 'Próbáld ki\nJelöld ki a lapot, és a Csere gombbal tedd át Picóra vagy C3-ra: a kapcsolatok megmaradnak, a GPIO-k újra kiosztódnak.\nA LED GPIO-ja „ki: 1” módban van (Szimuláció fül).', GRN)],
+    },
+  },
+  {
+    id: 'esp32c3', cat: 'Vezérlő', title: 'ESP32-C3 SuperMini – LED és gomb',
+    desc: 'A kis C3 lap: 5V láb közvetlenül az USB-n, ADC a GPIO0–4-en, indítási láb a 2, 8, 9.',
+    gpioFrom: { 'p3.1': 'out_high' },
+    design: {
+      board: { rows: 36, cols: 30, sec: 3 }, parts: [{ id: 'p1', type: 'esp32c3', label: 'ESP1', r: 10, c: 22, rot: 2 },
+        { id: 'p2', type: 'button', label: 'SW1', r: 17, c: 4 }, res('p3', 'R1', 17, 16, 330), led('p4', 'LED1', 22, 20, 'green')],
+      links: [['p2.A1', 'GPIO'], ['p2.B1', 'GND'], ['p3.1', 'GPIO'], ['p3.2', 'p4.A'], ['p4.K', 'GND']],
+      notes: [note(26, 1, 14, 9, 'C3 SuperMini\nAz 5V láb az USB-re csatlakozik, dióda nélkül: akkut USB mellett ne köss rá. A GPIO8-on a beépített LED, a GPIO9-en a BOOT gomb van; mindkettő indítási láb.', YEL, 'p1'),
+        note(26, 16, 13, 9, 'Próbáld ki\nIndítsd a szimulációt: a LED világít. Kösd át a gombot a GPIO9-re (Kapcsolat eszköz): az Ellenőrzés figyelmeztet.', GRN)],
     },
   },
   /* ---------- Bemenet ---------- */

@@ -24,10 +24,10 @@ export const MODEL_PINS: Record<ModelEl['el'], string[]> = {
   servo: ['vp', 'gnd', 'sig'],
   logic: ['vcc', 'gnd'],
   stepper: ['com', 'a', 'b', 'c', 'd'],
-  pico: ['gnd', 'vbus', 'vsys', 'v33'],
+  mcu: ['gnd', 'vsys', 'v33'],
 };
 const MODEL_NUMS: Record<ModelEl['el'], string[]> = {
-  resistor: ['ohm'], diode: ['vf', 'ron', 'imax'], source: ['v', 'rint'], nmos: ['vth', 'ron', 'imax'], capacitor: ['f', 'vmax'], npn: ['beta', 'vbe', 'vcesat', 'imax'], motor: ['ohm', 'vnom'], servo: ['ohm', 'pmin', 'pmax'], logic: ['vih', 'vil', 'rout', 'imax'], stepper: ['ohm', 'steps', 'rotor'], pico: [],
+  resistor: ['ohm'], diode: ['vf', 'ron', 'imax'], source: ['v', 'rint'], nmos: ['vth', 'ron', 'imax'], capacitor: ['f', 'vmax'], npn: ['beta', 'vbe', 'vcesat', 'imax'], motor: ['ohm', 'vnom'], servo: ['ohm', 'pmin', 'pmax'], logic: ['vih', 'vil', 'rout', 'imax'], stepper: ['ohm', 'steps', 'rotor'], mcu: ['vreg', 'vmax', 'igpio'],
 };
 
 const isObj = (x: unknown): x is Record<string, any> => !!x && typeof x === 'object' && !Array.isArray(x);
@@ -111,6 +111,7 @@ export function validatePartDef(def: unknown): Problem[] {
       if (typeof e[k] !== 'string') err(`${at}.${k}`, `Hiányzik a(z) ${k} láb.`);
       else if (!ids.has(e[k] as string)) err(`${at}.${k}`, `Nincs ilyen láb: ${e[k]}`);
     }
+    if (el.el === 'mcu' && e.vbus != null && (typeof e.vbus !== 'string' || !ids.has(e.vbus))) err(`${at}.vbus`, `Nincs ilyen láb: ${String(e.vbus)}`);
     const used = MODEL_PINS[el.el].map(k => e[k]);
     if (new Set(used).size !== used.length) err(at, 'Egy elem két kivezetése nem lehet ugyanaz a láb.');
     for (const k of MODEL_NUMS[el.el]) {

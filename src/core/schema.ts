@@ -111,7 +111,13 @@ export type ModelEl =
   | { el: 'motor'; a: string; b: string; ohm: Num; vnom: Num }
   /** Szervó: tápfelvétel (vp–gnd), a szöget a sig lábon érkező PWM impulzusszélessége adja (min…max ms → 0…180°). */
   | { el: 'servo'; vp: string; gnd: string; sig: string; ohm: Num; pmin?: Num; pmax?: Num }
-  | { el: 'pico'; gnd: string; vbus: string; vsys: string; v33: string }
+  /**
+   * Mikrovezérlő-lap (Pico, ESP32…): a GPIO-k a `gpio` szerepű lábak (képességeik a `caps`-ben).
+   * Táp: USB 5 V a `vbus` lábon (ha nincs kivezetve, belső csomópont), onnan dióda a `vsys` tápbemenetre
+   * (ha a kettő ugyanaz a láb, nincs dióda), a stabilizátor `vreg` V felett adja a 3,3 V-ot a `v33` lábon.
+   * `vmax`: a tápbemenet megengedett feszültsége; `igpio`: GPIO-nként ajánlott legnagyobb áram (A).
+   */
+  | { el: 'mcu'; gnd: string; vsys: string; v33: string; vbus?: string; vreg?: Num; vmax?: Num; igpio?: Num }
   /**
    * Digitális logika: a kimenetek logikai kifejezései a bemeneti lábnevekkel (lásd core/logic.ts).
    * A bemeneti szint a VCC–GND közti feszültség aránya szerint: ≥ vih → 1, ≤ vil → 0, köztes/lebegő → X.
@@ -226,6 +232,8 @@ export interface CompiledPart {
   pins(p: PartInstance): LocalPin[];
   internal(p?: PartInstance): Array<[string, string]>;
   bounds(p: PartInstance): Rect;
+  /** Mikrovezérlő-lap (van `mcu` modell-eleme). */
+  mcu: boolean;
 }
 
 /** Kiértékelési környezet: paraméterértékek, `$opt` a kiválasztott opciók, `label`, ismétlésnél `i`. */

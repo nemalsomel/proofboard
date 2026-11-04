@@ -13,7 +13,7 @@ export const LEDC: Record<string, { vf: number; c: string; l: string }> = {red:{
    graphics rajzelemek rétegekben: body (körvonal, röntgenben is), detail (díszítés), label (felirat),
             lead (láb, drót – mindig), xray (csak röntgenben). Alakok: rect, circle, poly, line, text,
             axial (test két láb között), radial (LED-test), link (drótátkötés).
-   model    villamos elemek: resistor, diode, source, nmos, pico. A lábak azonosítóival hivatkoznak.
+   model    villamos elemek: resistor, diode, source, nmos, mcu (mikrovezérlő-lap) stb. A lábak azonosítóival hivatkoznak.
    controls szimuláció közbeni vezérlés: press = lenyomva a megadott lábpárok összeérnek,
             slider = csúszka a szimulációs panelen egy számparaméterhez.
    Szerepek: gnd föld, vin tápbemenet (vmin/vmax: megengedett feszültség a saját GND-hez),
@@ -67,6 +67,30 @@ const R595: LogicReg[] = [
 /** 74HC139 kimenetei: aktív alacsony, aktív alacsony engedélyezés (E). */
 const dec = (g: string) => [0, 1, 2, 3].map(k => [`${g}Y${k}`, `!(!${g}E & ${k & 2 ? '' : '!'}${g}A1 & ${k & 1 ? '' : '!'}${g}A0)`] as [string, string]);
 
+
+/* ---------- ESP32 lapok ----------
+   A lap az USB-vel balra fekszik (mint a Pico): az lr=0 sor és az lr={span} sor lábai balról jobbra
+   az USB felőli végtől. Képességek: adc (ADC1), adc2 (WiFi mellett nem mér), in (csak bemenet),
+   nopull (nincs belső felhúzás), strap (indítási láb), uart0 (soros port), led (beépített LED). */
+type McuPin = readonly [string, string, string, (readonly string[])?];
+const gp = (n: number, ...caps: string[]): McuPin => ['GPIO' + n, 'GPIO' + n, 'gpio', caps];
+const mcuPins = (top: McuPin[], bottom: McuPin[]) => [
+  ...top.map(([id, name, role, caps], i) => ({ id, name, role, lr: 0, lc: i, ...(caps && caps.length ? { caps: [...caps] } : {}) })),
+  ...bottom.map(([id, name, role, caps], i) => ({ id, name, role, lr: '{span}', lc: i, ...(caps && caps.length ? { caps: [...caps] } : {}) })),
+];
+/** DOIT ESP32 DevKit V1, 30 láb (felülről nézve, antenna jobbra): felső sor = a lap bal oldali lábsora, alsó sor = jobb oldali. */
+const ESP32_TOP: McuPin[] = [['VIN', 'VIN', 'pwr'], ['GND', 'GND', 'gnd'], gp(13, 'adc2'), gp(12, 'adc2', 'strap'), gp(14, 'adc2'), gp(27, 'adc2'), gp(26, 'adc2'), gp(25, 'adc2'), gp(33, 'adc'), gp(32, 'adc'),
+  gp(35, 'adc', 'in', 'nopull'), gp(34, 'adc', 'in', 'nopull'), gp(39, 'adc', 'in', 'nopull'), gp(36, 'adc', 'in', 'nopull'), ['EN', 'EN', 'misc']];
+const ESP32_BOTTOM: McuPin[] = [['3V3', '3V3', 'p33'], ['GND2', 'GND', 'gnd'], gp(15, 'adc2', 'strap'), gp(2, 'adc2', 'strap', 'led'), gp(4, 'adc2'), gp(16), gp(17), gp(5, 'strap'), gp(18), gp(19), gp(21), gp(3, 'uart0'), gp(1, 'uart0'), gp(22), gp(23)];
+const ESP32_RENAME: Record<string, string> = { GPIO36: 'VP', GPIO39: 'VN', GPIO1: 'TX0', GPIO3: 'RX0', GPIO16: 'RX2', GPIO17: 'TX2' };
+for (const [, n] of [...ESP32_TOP, ...ESP32_BOTTOM]) if (/^GPIO\d+$/.test(n) && !(n in ESP32_RENAME)) ESP32_RENAME[n] = 'D' + n.slice(4);
+/** ESP32-C3 SuperMini (alkatrészoldal felül): felső sor 5V…GPIO0, alsó sor GPIO5…GPIO21. */
+const C3_TOP: McuPin[] = [['5V', '5V', 'pwr'], ['GND', 'GND', 'gnd'], ['3V3', '3V3', 'p33'], gp(4, 'adc'), gp(3, 'adc'), gp(2, 'adc', 'strap'), gp(1, 'adc'), gp(0, 'adc')];
+const C3_BOTTOM: McuPin[] = [gp(5, 'adc2'), gp(6), gp(7), gp(8, 'strap', 'led'), gp(9, 'strap'), gp(10), gp(20, 'uart0'), gp(21, 'uart0')];
+const C3_RENAME: Record<string, string> = {};
+for (const [, n] of [...C3_TOP, ...C3_BOTTOM]) if (/^GPIO\d+$/.test(n)) C3_RENAME[n] = n.slice(4);
+const SPAN_HELP = 'A két lábsor távolsága lyukban (0 → {span}). Vonalzóval mérd le a sajátodat: a lapok gyártónként eltérhetnek.';
+
 export const PARTS: Record<string, PartDef> = {
   pico:{name:'Raspberry Pi Pico W',fp:'2×20 láb, sortáv 6',prefix:'PICO',cat:'Vezérlő',
     params:[{key:'span',label:'Sortáv (osztás)',type:'int',default:6,min:3,max:16,step:1,geo:true,help:'A két lábsor távolsága lyukban (0 → {span}). Adatlap szerint 17,78 mm = 7 osztás, de tüskesorral, foglalatban vagy adapterlapon más is lehet (pl. 6 vagy 8). Vonalzóval mérd le a sajátodat.'}],
@@ -84,7 +108,54 @@ export const PARTS: Record<string, PartDef> = {
       {shape:'text',layer:'xray',at:['{span}/2',-1.0],text:'USB',size:0.4,color:'#4d5a52'},
       {shape:'text',layer:'xray',at:['{span}/2',9.5],text:'{label} · Pico W',size:0.55,min:8,color:'#1f6b4a'}],
     pinLabels:{mode:'name',inward:true,onBody:true,minP:13,rename:{ADC_VREF:'VREF'}},
-    model:[{el:'pico',gnd:'38',vbus:'40',vsys:'39',v33:'36'}]},
+    model:[{el:'mcu',gnd:'38',vbus:'40',vsys:'39',v33:'36',vreg:1.8,vmax:5.5,igpio:0.012}]},
+  esp32:{name:'ESP32 DevKit V1 (DOIT, 30 láb)',fp:'2×15 láb, sortáv 10',prefix:'ESP',cat:'Vezérlő',
+    params:[{key:'span',label:'Sortáv (osztás)',type:'int',default:10,min:3,max:16,step:1,geo:true,help:'Általában 25,4 mm = 10 osztás (a lap 28 mm széles). '+SPAN_HELP}],
+    pins:mcuPins(ESP32_TOP,ESP32_BOTTOM),
+    groups:[['GND','GND2']],
+    bounds:{r:[-0.65,'{span}+0.65'],c:[-1.7,19.5]},
+    graphics:[
+      {shape:'rect',layer:'body',r:[-0.65,'{span}+0.65'],c:[-1.2,19.5],fill:'#16365c',stroke:'#0c2038',width:1.5,xray:{stroke:'#16365c'}},
+      {shape:'rect',layer:'detail',r:['{span}/2-0.9','{span}/2+0.9'],c:[-1.7,0.4],fill:'#b5bcc3',xray:{fill:null,stroke:'#6b7a72',dash:true}},
+      {shape:'rect',layer:'detail',r:[0.9,1.9],c:[1.2,2.4],fill:'#2b2f33'},
+      {shape:'rect',layer:'detail',r:['{span}-1.9','{span}-0.9'],c:[1.2,2.4],fill:'#2b2f33'},
+      {shape:'rect',layer:'detail',r:[0.7,'{span}-0.7'],c:[9.6,19.3],fill:'#262a2e'},
+      {shape:'rect',layer:'detail',r:[1.0,'{span}-1.0'],c:[9.9,16.6],fill:'#c9ced3',stroke:'#9aa1a8'},
+      {shape:'text',layer:'detail',at:['{span}/2-0.6',13.2],text:'ESP32',size:0.62,min:8,color:'#343a40'},
+      {shape:'text',layer:'detail',at:['{span}/2+0.6',13.2],text:'WROOM-32',size:0.36,min:6,color:'#495057'},
+      {shape:'text',layer:'detail',at:['{span}/2',5.8],text:'{label}',size:0.42,color:'#c5d6ea'},
+      {shape:'text',layer:'xray',at:['{span}/2',-1.0],text:'USB',size:0.4,color:'#4d5a52'},
+      {shape:'text',layer:'xray',at:['{span}/2',9.0],text:'{label} · ESP32',size:0.55,min:8,color:'#16365c'}],
+    pinLabels:{mode:'name',inward:true,onBody:true,minP:13,rename:ESP32_RENAME},
+    meta:{help:'ESP32-WROOM-32 modul USB-soros átalakítóval. Táp: USB (diódán át a VIN-re) vagy VIN 5–12 V (AMS1117 stabilizátor, legalább kb. 4,2 V kell), vagy közvetlenül 3,3 V a 3V3 lábon. A GPIO34–39 csak bemenet, belső felhúzás nélkül; az ADC2-lábak bekapcsolt WiFi mellett nem mérnek.',
+      pinNotes:{GPIO12:'indítási (strapping) láb (MTDI): ha bekapcsoláskor magas, a modul 1,8 V-os flasht feltételez, és nem indul el. Ne tegyél rá felhúzást.',
+        GPIO15:'indítási (strapping) láb (MTDO): bekapcsoláskor magasnak kell lennie (belső felhúzás). Ne húzd le gombbal vagy terheléssel.',
+        GPIO2:'indítási (strapping) láb, és a beépített kék LED is ezen van: a feltöltéshez bekapcsoláskor alacsony vagy lebegő kell legyen. Ne tegyél rá felhúzást.',
+        GPIO5:'indítási (strapping) láb: bekapcsoláskor magasnak kell lennie (belső felhúzás). Ne húzd le.',
+        GPIO1:'TX0: a soros port (USB-soros átalakító) használja, feltöltéskor és soros kiíráskor zavarhat. Ha lehet, válassz másik GPIO-t.',
+        GPIO3:'RX0: a soros port (USB-soros átalakító) használja, feltöltéskor és soros kiíráskor zavarhat. Ha lehet, válassz másik GPIO-t.'}},
+    model:[{el:'mcu',gnd:'GND',vsys:'VIN',v33:'3V3',vreg:4.2,vmax:12,igpio:0.02}]},
+  esp32c3:{name:'ESP32-C3 SuperMini',fp:'2×8 láb, sortáv 6',prefix:'ESP',cat:'Vezérlő',
+    params:[{key:'span',label:'Sortáv (osztás)',type:'int',default:6,min:3,max:16,step:1,geo:true,help:'Általában 15,24 mm = 6 osztás (a lap 18 mm széles). '+SPAN_HELP}],
+    pins:mcuPins(C3_TOP,C3_BOTTOM),
+    bounds:{r:[-0.6,'{span}+0.6'],c:[-1.1,8.2]},
+    graphics:[
+      {shape:'rect',layer:'body',r:[-0.6,'{span}+0.6'],c:[-0.7,8.2],fill:'#1d1f22',stroke:'#000',width:1.5,xray:{stroke:'#1d1f22'}},
+      {shape:'rect',layer:'detail',r:['{span}/2-1.25','{span}/2+1.25'],c:[-1.1,0.9],fill:'#c3c8cd',xray:{fill:null,stroke:'#6b7a72',dash:true}},
+      {shape:'rect',layer:'detail',r:['{span}/2-1.1','{span}/2+1.1'],c:[2.9,5.1],fill:'#3a3d41',stroke:'#55595e'},
+      {shape:'rect',layer:'detail',r:['{span}/2-0.5','{span}/2+0.5'],c:[6.6,7.8],fill:'#e9ecef'},
+      {shape:'circle',layer:'detail',at:['{span}/2+1.7',1.9],rad:0.28,fill:'#4dabf7'},
+      {shape:'text',layer:'detail',at:['{span}/2',4.0],text:'C3',size:0.5,min:7,color:'#ced4da'},
+      {shape:'text',layer:'label',at:['{span}+1.3',3.5],text:'{label} · C3 SuperMini',size:0.42},
+      {shape:'text',layer:'xray',at:['{span}/2',-1.5],text:'USB',size:0.4,color:'#4d5a52'}],
+    pinLabels:{mode:'name',inward:true,onBody:true,minP:13,rename:C3_RENAME},
+    meta:{help:'ESP32-C3 (RISC-V, WiFi, BLE), natív USB-C. Táp: USB vagy az 5V láb (kb. 3,5–6 V, kis feszültségesésű stabilizátor), vagy 3,3 V a 3V3 lábon. Az 5V láb közvetlenül az USB-hez csatlakozik, nincs dióda: akkut ne köss rá USB mellett. ADC: GPIO0–4 (ADC1), GPIO5 (ADC2).',
+      pinNotes:{GPIO2:'indítási (strapping) láb: bekapcsoláskor magasnak kell lennie. Ne húzd le gombbal vagy terheléssel.',
+        GPIO8:'indítási (strapping) láb, és a beépített kék LED is ezen van (alacsony szintre világít): bekapcsoláskor magasnak kell lennie. Ne húzd le.',
+        GPIO9:'a lap BOOT gombja is ezen van (lenyomva a földre húz), és indítási láb: ha bekapcsoláskor alacsony, a lap letöltő módba kerül. Gombnak jó, ha induláskor nincs lenyomva.',
+        GPIO20:'RX (UART0): ha a soros kiírás nem a natív USB-n megy, a soros port használja.',
+        GPIO21:'TX (UART0): ha a soros kiírás nem a natív USB-n megy, a soros port használja.'}},
+    model:[{el:'mcu',gnd:'GND',vbus:'5V',vsys:'5V',v33:'3V3',vreg:3.5,vmax:6,igpio:0.02}]},
   button:{name:'Nyomógomb 12 mm',fp:'A 0:0, 0:5 · B 2:0, 2:5',prefix:'S',cat:'Bemenet',
     pins:[{id:'A1',lr:0,lc:0,role:'A'},{id:'A2',lr:0,lc:5,role:'A'},{id:'B1',lr:2,lc:0,role:'B'},{id:'B2',lr:2,lc:5,role:'B'}],
     groups:[['A1','A2'],['B1','B2']],

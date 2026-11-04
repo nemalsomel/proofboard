@@ -25,6 +25,24 @@ describe('beépített alkatrészek', () => {
     for (const q of pins) { expect(q.lr).toBeGreaterThanOrEqual(b.r0); expect(q.lr).toBeLessThanOrEqual(b.r1); expect(q.lc).toBeGreaterThanOrEqual(b.c0); expect(q.lc).toBeLessThanOrEqual(b.c1); }
   });
 
+  it('ESP32 lapok: lábszám, vezérlő-modell, képességek', () => {
+    const e = DEFS.esp32, c3 = DEFS.esp32c3, pe = e.pins(inst('esp32')), pc = c3.pins(inst('esp32c3'));
+    expect([e.mcu, c3.mcu, DEFS.pico.mcu, DEFS.button.mcu]).toEqual([true, true, true, false]);
+    expect(pe).toHaveLength(30);
+    expect(pc).toHaveLength(16);
+    const cap = (ps: typeof pe, c: string) => ps.filter(q => q.caps?.includes(c)).map(q => q.name).sort();
+    expect(cap(pe, 'in')).toEqual(['GPIO34', 'GPIO35', 'GPIO36', 'GPIO39']);
+    expect(cap(pe, 'adc')).toEqual(['GPIO32', 'GPIO33', 'GPIO34', 'GPIO35', 'GPIO36', 'GPIO39']);
+    expect(cap(pe, 'strap')).toEqual(['GPIO12', 'GPIO15', 'GPIO2', 'GPIO5']);
+    expect(cap(pc, 'adc')).toEqual(['GPIO0', 'GPIO1', 'GPIO2', 'GPIO3', 'GPIO4']);
+    expect(cap(pc, 'strap')).toEqual(['GPIO2', 'GPIO8', 'GPIO9']);
+    expect(pe.filter(q => q.role === 'gpio')).toHaveLength(25);
+    expect(pc.filter(q => q.role === 'gpio')).toHaveLength(13);
+    // sortáv: alapból 10, illetve 6 osztás
+    expect(Math.max(...pe.map(q => q.lr))).toBe(10);
+    expect(Math.max(...pc.map(q => q.lr))).toBe(6);
+  });
+
   it('Pico W: 40 láb, 8 közös GND, a sortáv paraméterezhető', () => {
     const p = inst('pico');
     const pins = DEFS.pico.pins(p);

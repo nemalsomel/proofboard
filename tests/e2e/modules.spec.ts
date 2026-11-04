@@ -92,7 +92,7 @@ test('TP4056: a saját USB-ről tölti az akkut és táplálja a Picót; a Pico 
     return { iss: pcb.issues().map(i => i.msg), pico: s.picos[0].powered };`);
   expect(batOnly).toEqual({ iss: [], pico: true }); // akkuról megy, a bedugatlan USB-bemenet nem hiba
   const both = await pcb<string[]>(page, design([TP, BAT], tpLinks, true) + `return pcb.issues().map(i => i.msg);`);
-  expect(both).toContainEqual(expect.stringContaining('BAT1: a Pico USB-je a VSYS-en át közvetlenül tölti az akkut'));
+  expect(both).toContainEqual(expect.stringContaining('BAT1: a PICO USB-je a tápbemeneten (VSYS) át közvetlenül tölti az akkut'));
 });
 
 test('Pico sortáv szabadon állítható (pl. 8), a lábak és a GPIO-k követik', async ({ page }) => {

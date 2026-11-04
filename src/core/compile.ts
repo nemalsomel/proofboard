@@ -88,7 +88,8 @@ export function compilePart(type: string, def: PartDef): CompiledPart {
     }
     return { r0, r1, c0, c1 };
   };
-  return { type, def, name: def.name, fp: def.fp, prefix: def.prefix, cat: def.cat || 'Egyéb', props: defaults, pins, internal, bounds };
+  const mcu = (def.model || []).some(e => e.el === 'mcu');
+  return { type, def, name: def.name, fp: def.fp, prefix: def.prefix, cat: def.cat || 'Egyéb', props: defaults, pins, internal, bounds, mcu };
 }
 
 export function compileAll(parts: Record<string, PartDef>): Record<string, CompiledPart> {

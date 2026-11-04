@@ -96,3 +96,13 @@ describe('szerkesztő: leírás → űrlap', () => {
     expect(defToForm(PARTS.pico).lost).toEqual(expect.arrayContaining(['paraméterek', 'lábtábla']));
   });
 });
+
+describe('mcu modell-elem', () => {
+  const base = (model: unknown): unknown => ({ ...PARTS.esp32c3, model });
+  it('a vbus elhagyható vagy azonos lehet a vsys-szel; nem létező láb hiba', () => {
+    expect(hasErrors(validatePartDef(PARTS.esp32c3))).toBe(false);
+    expect(hasErrors(validatePartDef(base([{ el: 'mcu', gnd: 'GND', vsys: '5V', v33: '3V3' }])))).toBe(false);
+    expect(validatePartDef(base([{ el: 'mcu', gnd: 'GND', vsys: '5V', v33: '3V3', vbus: 'NINCS' }])).map(p => p.msg)).toContain('Nincs ilyen láb: NINCS');
+    expect(hasErrors(validatePartDef(base([{ el: 'mcu', gnd: 'GND', vsys: '5V' }])))).toBe(true);
+  });
+});
