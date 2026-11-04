@@ -13,6 +13,11 @@
 <div class="app">
   <header class="top">
     <div class="brand">Proofboard<small id="boardInfo"></small></div>
+    <div class="grp seg" role="group" aria-label="Munkaterület" id="workSw">
+      <button class="btn on" data-work="board" aria-pressed="true" title="A panel (alkatrészek, bekötés)">Panel</button>
+      <button class="btn" data-work="prog" aria-pressed="false" title="A program: csomópontok, amelyek futás közben a GPIO-kat vezérlik">Vezérlés</button>
+      <button class="btn desk-only" data-work="split" aria-pressed="false" title="A panel és a vezérlés egymás mellett">Mindkettő</button>
+    </div>
     <div class="grp" role="group" aria-label="Nézet">
       <button class="btn" id="vComp" title="Alkatrészoldal (F)">Alkatrészoldal</button>
       <button class="btn" id="vCu" title="Rézoldal, tükrözve (F)">Rézoldal</button>
@@ -95,6 +100,7 @@
   <main class="stage">
     <div class="scroll" id="scroll"><canvas id="cv"></canvas></div>
     <div class="fab" id="fab" role="toolbar" aria-label="Műveletek a kijelöléssel" hidden></div>
+    <section class="progview" id="progView" aria-label="Vezérlés: program" hidden></section>
     <div class="status" id="status">—</div>
   </main>
   <div class="gutter" id="gR" role="separator" aria-orientation="vertical" aria-label="Jobb oldalsáv szélessége" tabindex="0" title="Húzd a szélesség állításához, dupla kattintás: alapméret"></div>

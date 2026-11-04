@@ -22,7 +22,8 @@ import { matchingSocket, plugOf, pluggedInto, plugPairs, plugRedundantLinks, plu
 import { xf, xv, ixf, placedPins as gpins } from './engine/geometry';
 import { analyze as analyzeNet, layoutOf, pinLabel } from './engine/netlist';
 import { checkAll as checkAllOf } from './engine/check';
-import { evalProgram, newRuntime, normProgram, withProgram } from './engine/program';
+import { evalProgram, gpioOf, newRuntime, normProgram, withProgram } from './engine/program';
+import { mountProgEditor } from './ui/progedit';
 import { emptyDesign, normalize, normCutList, rekeyAgainstLibrary, NOTE_COL } from './engine/design';
 import { SIG_PRESETS, SIG_NAMES, sigCfg as sigCfgOf, sigRows, sigApplyTo } from './engine/signal';
 import { swapMcu as swapMcuOf } from './engine/swap';
@@ -185,6 +186,7 @@ function draw0(){
   drawLinkSel();
   if(ui.linkStart){const q=findPin(ui.linkStart);if(q){ring(q.r,q.c,css('--accent'),P*0.55,3);if(hv){ctx.setLineDash([4,4]);ctx.strokeStyle=css('--accent');ctx.lineWidth=2;line(hx(q.c),hy(q.r),hx(hv.c),hy(hv.r));ctx.setLineDash([]);}}}
   if(hv&&inb(hv.r,hv.c)&&!ui.placing&&ui.tool!=='pan'){ctx.strokeStyle=css('--accent');ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(hx(hv.c),hy(hv.r),P*0.42,0,7);ctx.stroke();}
+  if(ui.progHi){const q=findPin(ui.progHi);if(q){ring(q.r,q.c,css('--accent'),P*0.62,3.5);ring(q.r,q.c,'rgba(255,255,255,.8)',P*0.78,1.5);}} // a programban kijelölt csomópont lába
   if(ui.flash&&performance.now()<ui.flash.until){for(const [r,c] of ui.flash.holes)ring(r,c,'#e03131',P*0.62,3);}
   if(ui.drag&&ui.drag.kind==='box'){const a=ui.drag.h0,b2=ui.drag.h1;const x1=hx(Math.min(a.cf,b2.cf)),x2=hx(Math.max(a.cf,b2.cf)),y1=hy(Math.min(a.rf,b2.rf)),y2=hy(Math.max(a.rf,b2.rf));ctx.save();ctx.setLineDash([6,4]);ctx.strokeStyle=css('--accent');ctx.lineWidth=1.5;ctx.fillStyle='rgba(168,87,31,.08)';ctx.beginPath();ctx.rect(Math.min(x1,x2),y1,Math.abs(x2-x1),y2-y1);ctx.fill();ctx.stroke();ctx.restore();}
   ctx.restore();
@@ -325,7 +327,7 @@ function hitBridge(rf,cf){let best=-1,bd=ui.coarse?0.45:0.3;D.bridges.forEach((b
 const snap=()=>JSON.stringify({D,L:LIB});
 function restoreSnap(s){const o=JSON.parse(s);if(o&&o.D&&o.L){D=o.D;setLib(o.L);}else D=o;}
 function pushUndo(){ui.undo.push(snap());if(ui.undo.length>150)ui.undo.shift();ui.redo=[];}
-function commit(noRoute){syncDefs(D.customParts);const bk=JSON.stringify(D.board);if(!noRoute&&D.settings.autoRoute&&D.links.length)route({moved:ui.moved});ui.moved=null;save();if(bk!==ui.lastBoard){ui.lastBoard=bk;resize();boardUI();}recompute();renderLeft();}
+function commit(noRoute){queueMicrotask(progRefresh);syncDefs(D.customParts);const bk=JSON.stringify(D.board);if(!noRoute&&D.settings.autoRoute&&D.links.length)route({moved:ui.moved});ui.moved=null;save();if(bk!==ui.lastBoard){ui.lastBoard=bk;resize();boardUI();}recompute();renderLeft();}
 function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(D));}catch(e){}}
 function sameSec(r1,c1,r2,c2){const L=LAY();return L.cell(r1,c1)===L.cell(r2,c2);}
 function addBridge(r1,c1,r2,c2){if(!inb(r1,c1)||!inb(r2,c2))return false;if(LAY().drilled(r1,c1)||LAY().drilled(r2,c2))return false;if(Math.abs(r1-r2)+Math.abs(c1-c2)!==1)return false;if(sameSec(r1,c1,r2,c2))return false;
@@ -563,13 +565,36 @@ ltab(uiPref().ltab==='lib'?'lib':'edit',false);
 function setSim(on){if(!on)sigPlay(false);if(on&&!ui.sim){LSTATE.clear();STSTATE.clear();ui.rtabBack=ui.rtab;rtab('sim',false);}else if(!on&&ui.sim&&ui.rtab==='sim')rtab(ui.rtabBack&&ui.rtabBack!=='sim'?ui.rtabBack:'design',false);
   ui.sim=on;if(!on){ui.pressed={};ui.holdPtr.clear();}ui.wireStart=null;ui.placing=null;const b=$('#bSim');b.classList.toggle('on',on);b.textContent=on?'■ Szimuláció leállítása':'▶ Szimuláció';
   progStart(on);
-  if(on&&D.signal&&(D.signal.pins||[]).some(Boolean))sigApply();else recompute();if(on&&ui.prog)progTick(0);renderLeft();}
+  if(on&&D.signal&&(D.signal.pins||[]).some(Boolean))sigApply();else recompute();if(on&&ui.prog)progTick(0);renderLeft();if(PE&&ui.work!=='board'){progLiveAt=0;PE.live();}}
 /* ---------- Program futtatása: ütemenként kiértékel, és ha a GPIO-beállítások változnak, újraszámol ---------- */
 const PROG_MS=20;
+/* ---------- Munkaterület: Panel / Vezérlés / Mindkettő; a programszerkesztő (ui/progedit.ts) ---------- */
+let PE=null,progLiveAt=0;
+function progRefresh(){if(PE&&ui.work&&ui.work!=='board')PE.refresh();}
+function progLive(){if(!PE||!ui.work||ui.work==='board')return;const n=performance.now();if(n-progLiveAt<100)return;progLiveAt=n;PE.live();}
+function setWork(v,remember=true){if(!['board','prog','split'].includes(v))v='board';ui.work=v;const a=$('.app').classList;
+  a.toggle('work-prog',v==='prog');a.toggle('work-split',v==='split');$('#progView').hidden=v==='board';
+  document.querySelectorAll('[data-work]').forEach(b=>{const on=b.dataset.work===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});
+  if(v!=='board'){if(!PE)PE=mountProgEditor($('#progView'),progHost);PE.refresh();}else{ui.progHi=null;}
+  if(remember)uiPrefSet({work:v});resize();draw();}
+const progHost={
+  get:()=>D.program||null,
+  set(p,layoutOnly){pushUndo();const n=normProgram(p);if(n&&n.nodes.length)D.program=n;else delete D.program;
+    if(layoutOnly){save();return;}if(ui.sim)progStart(true);commit(true);if(ui.sim&&ui.prog)progTick(0);},
+  pins(){const A=A0||analyze(false),out=[];const ps=[...D.parts].sort((a,b)=>(isMcu(a)?1:0)-(isMcu(b)?1:0));
+    for(const p of ps)for(const q of gpins(p)){if(isMcu(p)&&q.role!=='gpio')continue;const ref=p.id+'.'+q.id,g=gpioOf(D,A,ref),gq=g&&findPin(g);
+      out.push({ref,part:p.label,name:q.name!==q.id&&!isMcu(p)?`${q.name} (${q.id})`:q.name,gpio:gq?gq.name:null});}
+    return out;},
+  live(){const P=ui.prog;return P&&P.out?{running:!!ui.sim,vals:Object.fromEntries(P.rt.vals),errors:Object.fromEntries(P.out.errors)}:null;},
+  running:()=>!!ui.sim,
+  sim(on){setSim(on);},
+  highlight(ref){ui.progHi=ref||null;draw();},
+};
+document.querySelectorAll('[data-work]').forEach(b=>b.addEventListener('click',()=>setWork(b.dataset.work)));
 function progStart(on){if(ui.progTimer){clearInterval(ui.progTimer);ui.progTimer=null;}
   ui.prog=on&&D.program&&D.program.nodes.length?{rt:newRuntime(),t:0,out:null,key:''}:null;
   if(ui.prog&&ui.progAuto!==false){let last=performance.now();ui.progTimer=setInterval(()=>{const n=performance.now(),dt=Math.min(200,n-last);last=n;progTick(dt);},PROG_MS);}}
-function progTick(dt){const P=ui.prog;if(!P||!ui.sim)return;P.t+=dt;
+function progTick(dt){const P=ui.prog;if(!P||!ui.sim)return;P.t+=dt;progLive();
   const lv=new Map((SIM?SIM.gpios:[]).map(g=>[g.p.id+'.'+g.q.id,{level:!g.powered||g.float?null:g.V>=2?1:g.V<=0.8?0:null,V:g.V}]));
   P.out=evalProgram(D,A0||analyze(false),D.program,P.rt,P.t,k=>lv.get(k)||null);
   const key=JSON.stringify([P.out.gpio,P.out.pwm]);if(key!==P.key){P.key=key;recompute();}}
@@ -580,6 +605,7 @@ document.addEventListener('keydown',ev=>{
   const k=ev.key.toLowerCase();
   if((ev.ctrlKey||ev.metaKey)&&k==='z'){ev.preventDefault();ev.shiftKey?redo():undo();return;}
   if((ev.ctrlKey||ev.metaKey)&&k==='y'){ev.preventDefault();redo();return;}
+  if(t&&t.closest&&t.closest('#progView'))return; // a programszerkesztő saját billentyűi
   if((ev.ctrlKey||ev.metaKey)&&k==='a'&&!ui.sim){ev.preventDefault();ui.sel=grp(D.parts.map(p=>p.id),D.bridges.map((b,i)=>i),D.wires.map((w,i)=>i));setTool('select');return;}
   if(ev.ctrlKey||ev.metaKey||ev.altKey)return;
   if(k==='escape'){ui.placing=null;ui.wireStart=null;ui.sel=null;if(ui.selLink){ui.selLink=null;renderLinks();}renderLeft();draw();status();return;}
@@ -873,6 +899,7 @@ function loadExample(id){const ex=EXAMPLES.find(e=>e.id===id);if(!ex)return fals
   if(D.links.length){route({full:true});}
   if(ex.freeze){D.cuts=[...(D.cuts||[]),...(D.auto.cuts||[])];D.bridges.push(...D.auto.bridges.map(b=>b.slice(0,4)));D.wires.push(...D.auto.wires.map(w=>({a:w.a,b:w.b,color:w.color})));
     D.auto={bridges:[],wires:[],cuts:[]};D.links=[];D.settings.autoRoute=false;}
+  if(ex.design.program&&(!ui.work||ui.work==='board'))setWork(window.innerWidth>1000?'split':'prog');
   for(const [a,m] of Object.entries(ex.gpioFrom||{})){const l=D.links.find(x=>x.a===a);if(l&&l.gpio)D.gpio[l.gpio]=m;}
   if(ex.signal){const s=ex.signal;D.signal={preset:s.preset,custom:s.custom||'',step:0,rate:s.rate||4,dir:1,pins:s.from.map(a=>{const l=D.links.find(x=>x.a===a);return l&&l.gpio||null;})};}
   commit(true);resize();boardUI();$('#scroll').scrollTo(0,0);
@@ -1164,6 +1191,8 @@ window.pcb={
   /** Program léptetése kézzel: ms idővel előre (a valós idejű futás a progAuto(false)-szal állítható le). */
   progStep(ms=PROG_MS){progTick(ms);return pcb.progState();},
   progAuto(on){ui.progAuto=!!on;if(ui.sim)progStart(true);},
+  /** Munkaterület: 'board' | 'prog' | 'split' (elhagyva: a mostani). */
+  work(v){if(v)setWork(v);return ui.work||'board';},
   /** A program állapota: csomópont-kimenetek, hibák, a beállított GPIO-módok (lábnévvel). */
   progState(){const P=ui.prog;if(!P||!P.out)return null;const nm=k=>{const q=findPin(k);return q?q.name:k;};
     return{t:P.t,vals:Object.fromEntries(P.rt.vals),errors:Object.fromEntries(P.out.errors),gpio:Object.fromEntries(Object.entries(P.out.gpio).map(([k,v])=>[nm(k),v])),pwm:Object.fromEntries(Object.entries(P.out.pwm).map(([k,v])=>[nm(k),v]))};},
@@ -1231,4 +1260,5 @@ function statusText(){return $('#status').textContent;}
   const sc=$('#scroll');const fit=(sc.clientWidth-2*M)/(D.board.cols*14);ui.zoom=Math.max(0.8,Math.min(1.6,Math.floor(fit*5)/5||1));
   if(MOB.matches){ui.zoom=1.2;resize();const [x,y]=toScreen(M-30,M-28);sc.scrollTo(x,y);}else resize();
   window.addEventListener('resize',()=>draw());
+  {const w=uiPref().work;if(w&&w!=='board')setWork(MOB.matches&&w==='split'?'prog':w,false);}
 })();

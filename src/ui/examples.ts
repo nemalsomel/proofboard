@@ -13,6 +13,8 @@ export interface ExDesign {
   gpio?: Record<string, string>;
   pwm?: Record<string, { duty: number; freq: number }>;
   settings?: Record<string, unknown>;
+  /** Program (csomópontok, élek; a lábhivatkozások a példa alkatrész-azonosítóival). */
+  program?: { nodes: Array<{ id: string; type: string; x: number; y: number; props?: Record<string, unknown> }>; edges: Array<{ id: string; from: string; to: string }> };
 }
 export interface Example {
   id: string;
@@ -28,7 +30,7 @@ export interface Example {
   gpioFrom?: Record<string, string>;
 }
 
-export const EX_CATS = ['Alapok', 'Vezérlő', 'Bemenet', 'Félvezető', 'Passzív', 'Motor', 'Logika', 'Modul'] as const;
+export const EX_CATS = ['Alapok', 'Vezérlő', 'Bemenet', 'Program', 'Félvezető', 'Passzív', 'Motor', 'Logika', 'Modul'] as const;
 
 const YEL = '#fff3bf', GRN = '#d3f9d8', BLU = '#d0ebff';
 const PICO: ExPart = { id: 'p1', type: 'pico', label: 'PICO', r: 12, c: 32, rot: 2, props: { span: 6 } };
@@ -126,6 +128,46 @@ export const EXAMPLES: Example[] = [
         note(31, 2, 17, 9, 'ADC\nA VRx és VRy feszültsége a kar állásától függ. Csak a GP26–28 tud analóg értéket mérni: az útvonalkereső ezekre köti őket.\nA tápot a 3V3 adja (nem 5 V!), különben túllépnénk az ADC tartományát.', YEL, 'p2'),
         note(31, 21, 15, 9, 'Próbáld ki\nSzimulációban a Vezérlők csúszkáival mozgasd a kart: a GPIO táblában változik a mért feszültség.', GRN),
       ]),
+  },
+  /* ---------- Program: csomópontos vezérlés, a szimuláció futás közben ebből kapja a GPIO-kat ---------- */
+  {
+    id: 'prog-blink', cat: 'Program', title: 'Villogó LED – ütemadó',
+    desc: 'Az első program: egy ütemadó csomópont fél másodpercenként ki-be kapcsolja a LED-et.',
+    design: pico([res('p2', 'R1', 20, 26, 330), led('p3', 'LED1', 26, 30)],
+      [['p2.1', 'GPIO'], ['p2.2', 'p3.A'], ['p3.K', 'GND']], [
+        note(31, 2, 17, 9, 'Program\nA Vezérlés nézetben (fent: Vezérlés vagy Mindkettő) két csomópont van: Ütemadó → Digitális kimenet. A kimenet az R1 lábára hivatkozik; hogy ez melyik GPIO, azt a bekötés dönti el.', YEL),
+        note(31, 21, 15, 9, 'Próbáld ki\nIndítsd a szimulációt: a LED villog. Az Ütemadó periódusát vagy kitöltését átírva gyorsabb vagy lassabb lesz.', GRN, 'p3'),
+      ], { program: { nodes: [
+        { id: 'n1', type: 'blink', x: 40, y: 60, props: { period: 1000, duty: 50 } },
+        { id: 'n2', type: 'out', x: 320, y: 60, props: { pin: 'p2.1' } },
+      ], edges: [{ id: 'e1', from: 'n1.v', to: 'n2.a' }] } }),
+  },
+  {
+    id: 'prog-toggle', cat: 'Program', title: 'Gomb kapcsolja a LED-et – váltókapcsoló',
+    desc: 'Minden gombnyomás átváltja a LED-et: bemenet → váltókapcsoló → kimenet.',
+    design: pico([{ id: 'p2', type: 'button', label: 'SW1', r: 20, c: 8 }, res('p3', 'R1', 20, 26, 330), led('p4', 'LED1', 26, 30)],
+      [['p2.A1', 'GPIO'], ['p2.B1', 'GND'], ['p3.1', 'GPIO'], ['p3.2', 'p4.A'], ['p4.K', 'GND']], [
+        note(31, 2, 17, 9, 'Élre vált\nA gomb felhúzott bemenet: lenyomva alacsony, ezért a bemenet csomópont „aktív alacsony”. A váltókapcsoló csak a lenyomás pillanatában (felfutó élen) vált, nyomva tartva nem.', YEL, 'p2'),
+        note(31, 21, 15, 9, 'Próbáld ki\nSzimulációban kattints a gombra: a LED be-, majd újra kattintva kikapcsol. A Vezérlés nézetben látszik az élek értéke.', GRN, 'p4'),
+      ], { program: { nodes: [
+        { id: 'n1', type: 'in', x: 40, y: 60, props: { pin: 'p2.A1', pull: 'pullup', active: 'low' } },
+        { id: 'n2', type: 'toggle', x: 300, y: 60 },
+        { id: 'n3', type: 'out', x: 540, y: 60, props: { pin: 'p3.1' } },
+      ], edges: [{ id: 'e1', from: 'n1.v', to: 'n2.a' }, { id: 'e2', from: 'n2.v', to: 'n3.a' }] } }),
+  },
+  {
+    id: 'prog-dimmer', cat: 'Program', title: 'Joystick szabályozza a fényerőt – ADC → PWM',
+    desc: 'A joystick X tengelye (analóg bemenet) adja a LED PWM-kitöltését; félnél tovább tolva egy második LED is kigyullad.',
+    design: pico([{ id: 'p2', type: 'joystick', label: 'JS1', r: 22, c: 4 }, res('p3', 'R1', 20, 26, 330), led('p4', 'LED1', 26, 30), res('p5', 'R2', 30, 26, 330), led('p6', 'LED2', 36, 30, 'green')],
+      [['p2.GND', 'GND'], ['p2.5V', 'p1.36'], ['p2.VRX', 'GPIO'], ['p3.1', 'GPIO'], ['p3.2', 'p4.A'], ['p4.K', 'GND'], ['p5.1', 'GPIO'], ['p5.2', 'p6.A'], ['p6.K', 'GND']], [
+        note(40, 2, 17, 7, 'Analóg → PWM\nAz analóg bemenet 0…1 közötti számot ad (0 V … 3,3 V), ez közvetlenül a PWM kitöltése. Az összehasonlítás igazat ad, ha az érték 0,75 fölött van.', YEL, 'p2'),
+        note(40, 21, 15, 7, 'Próbáld ki\nSzimulációban a Szimuláció fül X csúszkájával mozgasd a kart.', GRN),
+      ], { program: { nodes: [
+        { id: 'n1', type: 'adc', x: 40, y: 60, props: { pin: 'p2.VRX' } },
+        { id: 'n2', type: 'pwm', x: 340, y: 20, props: { pin: 'p3.1', freq: 1000 } },
+        { id: 'n3', type: 'compare', x: 300, y: 170, props: { op: '>', value: 0.75 } },
+        { id: 'n4', type: 'out', x: 560, y: 170, props: { pin: 'p5.1' } },
+      ], edges: [{ id: 'e1', from: 'n1.v', to: 'n2.a' }, { id: 'e2', from: 'n1.v', to: 'n3.a' }, { id: 'e3', from: 'n3.v', to: 'n4.a' }] } }),
   },
   /* ---------- Félvezető ---------- */
   {
