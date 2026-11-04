@@ -20,6 +20,8 @@ export interface ProgHost {
   sim(on: boolean): void;
   /** Láb kiemelése a panelon (vagy null). */
   highlight(ref: string | null): void;
+  /** A kijelölt csomópont változott (pl. a kód fül kiemeléséhez). */
+  onSelect?(id: string | null): void;
 }
 export interface ProgEditor { refresh(): void; live(): void; select(id: string | null): void; fit(): void }
 
@@ -178,6 +180,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
   }
   function select(s: typeof sel) {
     sel = s; const n = s && s.kind === 'node' ? node(s.id) : null;
+    if (host.onSelect) host.onSelect(n ? n.id : null);
     const pin = n && NODE_DEFS[n.type].params.find(p => p.type === 'pin');
     host.highlight(pin ? String(n!.props[pin.key] || '') || null : null);
     renderNodes(); renderEdges(); renderProps();

@@ -24,6 +24,8 @@ import { analyze as analyzeNet, layoutOf, pinLabel } from './engine/netlist';
 import { checkAll as checkAllOf } from './engine/check';
 import { evalProgram, gpioOf, newRuntime, normProgram, withProgram } from './engine/program';
 import { mountProgEditor } from './ui/progedit';
+import { mountCodeView } from './ui/progcode';
+import { generateCode } from './engine/codegen';
 import { emptyDesign, normalize, normCutList, rekeyAgainstLibrary, NOTE_COL } from './engine/design';
 import { SIG_PRESETS, SIG_NAMES, sigCfg as sigCfgOf, sigRows, sigApplyTo } from './engine/signal';
 import { swapMcu as swapMcuOf } from './engine/swap';
@@ -565,17 +567,34 @@ ltab(uiPref().ltab==='lib'?'lib':'edit',false);
 function setSim(on){if(!on)sigPlay(false);if(on&&!ui.sim){LSTATE.clear();STSTATE.clear();ui.rtabBack=ui.rtab;rtab('sim',false);}else if(!on&&ui.sim&&ui.rtab==='sim')rtab(ui.rtabBack&&ui.rtabBack!=='sim'?ui.rtabBack:'design',false);
   ui.sim=on;if(!on){ui.pressed={};ui.holdPtr.clear();}ui.wireStart=null;ui.placing=null;const b=$('#bSim');b.classList.toggle('on',on);b.textContent=on?'■ Szimuláció leállítása':'▶ Szimuláció';
   progStart(on);
-  if(on&&D.signal&&(D.signal.pins||[]).some(Boolean))sigApply();else recompute();if(on&&ui.prog)progTick(0);renderLeft();if(PE&&ui.work!=='board'){progLiveAt=0;PE.live();}}
+  if(on&&D.signal&&(D.signal.pins||[]).some(Boolean))sigApply();else recompute();if(on&&ui.prog)progTick(0);renderLeft();if(PE&&ui.work!=='board'&&ui.pvTab!=='code'){progLiveAt=0;PE.live();}}
 /* ---------- Program futtatása: ütemenként kiértékel, és ha a GPIO-beállítások változnak, újraszámol ---------- */
 const PROG_MS=20;
 /* ---------- Munkaterület: Panel / Vezérlés / Mindkettő; a programszerkesztő (ui/progedit.ts) ---------- */
-let PE=null,progLiveAt=0;
-function progRefresh(){if(PE&&ui.work&&ui.work!=='board')PE.refresh();}
-function progLive(){if(!PE||!ui.work||ui.work==='board')return;const n=performance.now();if(n-progLiveAt<100)return;progLiveAt=n;PE.live();}
+let PE=null,PC=null,progLiveAt=0;
+function progRefresh(){if(!PE||!ui.work||ui.work==='board')return;if(ui.pvTab==='code')PC.refresh();else PE.refresh();}
+/** A Vezérlés nézet felépítése: Csomópontok és Kód fül, a két önálló komponenssel. */
+function progMount(){if(PE)return;const v=$('#progView');
+  v.innerHTML=`<div class="pv-tabs" role="tablist" aria-label="Vezérlés"><button class="rtab" role="tab" data-pvtab="nodes">Csomópontok</button><button class="rtab" role="tab" data-pvtab="code">Kód</button></div>
+    <div class="pv-pane" id="pvNodes" role="tabpanel"></div><div class="pv-pane" id="pvCode" role="tabpanel" hidden></div>`;
+  PE=mountProgEditor($('#pvNodes'),progHost);PC=mountCodeView($('#pvCode'),codeHost);
+  v.querySelector('.pv-tabs').addEventListener('click',e=>{const b=e.target.closest('[data-pvtab]');if(b)pvTab(b.dataset.pvtab);});
+  pvTab(uiPref().pvTab==='code'?'code':'nodes',false);}
+function pvTab(t,remember=true){ui.pvTab=t;document.querySelectorAll('[data-pvtab]').forEach(b=>{const on=b.dataset.pvtab===t;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
+  $('#pvNodes').hidden=t!=='nodes';$('#pvCode').hidden=t!=='code';if(remember)uiPrefSet({pvTab:t});if(t==='code')PC.refresh();else PE.refresh();}
+const codeHost={
+  code(lang){return D.program&&D.program.nodes.length?generateCode(D,A0||analyze(false),D.program,lang):null;},
+  selected:()=>ui.progSel||null,
+  select(id){ui.progSel=id;if(PE)PE.select(id);},
+  download(name,blob){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);},
+  lang:()=>uiPref().codeLang==='arduino'?'arduino':'micropython',
+  setLang(l){uiPrefSet({codeLang:l});},
+};
+function progLive(){if(!PE||!ui.work||ui.work==='board'||ui.pvTab==='code')return;const n=performance.now();if(n-progLiveAt<100)return;progLiveAt=n;PE.live();}
 function setWork(v,remember=true){if(!['board','prog','split'].includes(v))v='board';ui.work=v;const a=$('.app').classList;
   a.toggle('work-prog',v==='prog');a.toggle('work-split',v==='split');$('#progView').hidden=v==='board';
   document.querySelectorAll('[data-work]').forEach(b=>{const on=b.dataset.work===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});
-  if(v!=='board'){if(!PE)PE=mountProgEditor($('#progView'),progHost);PE.refresh();}else{ui.progHi=null;}
+  if(v!=='board'){progMount();progRefresh();}else{ui.progHi=null;}
   if(remember)uiPrefSet({work:v});resize();draw();}
 const progHost={
   get:()=>D.program||null,
@@ -589,6 +608,7 @@ const progHost={
   running:()=>!!ui.sim,
   sim(on){setSim(on);},
   highlight(ref){ui.progHi=ref||null;draw();},
+  onSelect(id){ui.progSel=id;},
 };
 document.querySelectorAll('[data-work]').forEach(b=>b.addEventListener('click',()=>setWork(b.dataset.work)));
 function progStart(on){if(ui.progTimer){clearInterval(ui.progTimer);ui.progTimer=null;}
@@ -1193,6 +1213,10 @@ window.pcb={
   progAuto(on){ui.progAuto=!!on;if(ui.sim)progStart(true);},
   /** Munkaterület: 'board' | 'prog' | 'split' (elhagyva: a mostani). */
   work(v){if(v)setWork(v);return ui.work||'board';},
+  /** A Vezérlés nézet füle: 'nodes' | 'code'. */
+  pvTab(t){if(!PE)setWork('prog');if(t)pvTab(t);return ui.pvTab;},
+  /** Generált kód: lang = 'micropython' | 'arduino'. */
+  code(lang='micropython'){const c=codeHost.code(lang);return c?{file:c.file,code:c.code,warnings:c.warnings,lines:c.lines}:null;},
   /** A program állapota: csomópont-kimenetek, hibák, a beállított GPIO-módok (lábnévvel). */
   progState(){const P=ui.prog;if(!P||!P.out)return null;const nm=k=>{const q=findPin(k);return q?q.name:k;};
     return{t:P.t,vals:Object.fromEntries(P.rt.vals),errors:Object.fromEntries(P.out.errors),gpio:Object.fromEntries(Object.entries(P.out.gpio).map(([k,v])=>[nm(k),v])),pwm:Object.fromEntries(Object.entries(P.out.pwm).map(([k,v])=>[nm(k),v]))};},

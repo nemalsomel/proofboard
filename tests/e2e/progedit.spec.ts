@@ -81,3 +81,24 @@ test('a kijelölt csomópont lába a panelon is kiemelődik; hibás láb a csom�
   await expect(page.locator('[data-node="n1"]')).toHaveClass(/err/);
   await expect(page.locator('[data-node="n1"] .pg-err')).toHaveText('Nincs kiválasztva láb');
 });
+
+test('Kód fül: MicroPython és Arduino, a kijelölt csomópont sorai kiemelve, sorra kattintva kijelöl; letöltés és PlatformIO-zip', async ({ page }) => {
+  await pcb(page, `pcb.example('prog-toggle');`);
+  await page.click('[data-node="n2"] .pg-head');
+  await page.click('[data-pvtab="code"]');
+  await expect(page.locator('#pvNodes')).toBeHidden();
+  await expect(page.locator('.pc-code')).toContainText('from machine import Pin');
+  await expect(page.locator('.pc-ln.on').first()).toContainText('n2');
+  const [py] = await Promise.all([page.waitForEvent('download'), page.click('[data-pc="dl"]')]);
+  expect(py.suggestedFilename()).toBe('main.py');
+  await page.click('[data-lang="arduino"]');
+  await expect(page.locator('.pc-code')).toContainText('void loop() {');
+  await expect(page.locator('.pc-info')).toContainText('rp2040:rp2040:rpipicow');
+  const [z] = await Promise.all([page.waitForEvent('download'), page.click('[data-pc="pio"]')]);
+  expect(z.suggestedFilename()).toBe('proofboard-platformio.zip');
+  // sorra kattintva a hozzá tartozó csomópont lesz kijelölve
+  await page.locator('.pc-ln[data-node="n3"]').first().click();
+  await page.click('[data-pvtab="nodes"]');
+  await expect(page.locator('.pg-node[data-node="n3"]')).toHaveClass(/sel/);
+  expect((await pcb<any>(page, `return pcb.code('arduino');`)).file).toBe('proofboard.ino');
+});

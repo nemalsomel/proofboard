@@ -347,3 +347,17 @@ details.sig .row select,details.sig .row input{flex:1;min-width:0;}
 @media (max-width:1000px){.pg-props{left:0;right:0;top:auto;bottom:0;width:auto;max-height:50%;border-radius:14px 14px 0 0}.pg-port{width:18px;height:18px;margin-left:-9px}.pg-port.out{margin-left:-9px}}
 @media (min-width:1001px) and (max-width:1700px){.brand small{display:none}.top{gap:8px 10px}}
 .pg.wiring .pg-props{pointer-events:none;opacity:.35} /* élhúzás közben a tulajdonságpanel nem takar */
+/* ---------- Vezérlés: Csomópontok / Kód fül ---------- */
+.pv-tabs{display:flex;gap:2px;padding:6px 10px 0;border-bottom:1px solid var(--line);background:var(--panel);flex:0 0 auto}
+.pv-pane{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
+.pv-pane[hidden]{display:none}
+.pc-info{padding:6px 12px 0}.pc-info code{font-size:11px}
+.pc-warn{margin:4px 0 0;padding-left:18px;color:var(--warn);font-size:12px}
+.pc-scroll{flex:1;min-height:0;overflow:auto;padding:8px 0 16px}
+.pc-code{margin:0;font:12.5px/1.55 var(--mono);tab-size:4;color:var(--fg);outline:none}
+.pc-ln{display:block;padding:0 12px 0 0;white-space:pre}
+.pc-ln i{display:inline-block;width:3.2em;padding-right:1em;text-align:right;color:var(--muted);font-style:normal;user-select:none;opacity:.7}
+.pc-ln.own{cursor:pointer}.pc-ln.own:hover{background:var(--accent-soft)}
+.pc-ln.on{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.tk-c{color:#5c7a5f;font-style:italic}.tk-k{color:#7048e8;font-weight:600}.tk-n{color:#c2410c}.tk-s{color:#2b8a3e}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .tk-c{color:#8fb996}:root:not([data-theme="light"]) .tk-k{color:#b197fc}:root:not([data-theme="light"]) .tk-n{color:#ffa94d}}
