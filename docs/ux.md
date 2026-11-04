@@ -31,6 +31,7 @@ mi került a felületre, hova, és milyen kérdést hagyott nyitva. A felülvizs
 | Példatár | Példák a Terv harmonikában, kategóriákkal | Első indításkor is ajánlani? |
 | Vezérlők | Vezérlőcsere a tulajdonságpanelen | A csere nem látszik, amíg nincs kijelölve a vezérlő |
 | Lezáró kör | Összecsukható sávok, lábfunkciók az állapotsorban és a GPIO-táblában | Kell-e láb-súgó buborék a vásznon? |
+| Alkatrész-kör | Keresőmező, Kedvencek / Legutóbb használt / Projekt / Saját könyvtár csoportok (összecsukhatók), tervtől független könyvtár; szerkesztőben MCU-modell, képességek, buszfunkció | Húzással is lehessen lerakni? Kell-e a kategóriákra szűrő gomb a keresés mellé? |
 
 ## Felülvizsgálati szempontlista
 

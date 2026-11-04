@@ -9,7 +9,7 @@ import './style.css';
 import { evx, fmtSI, num, parseSI, stepE12, tpl } from './core/expr';
 import { compileAll, compilePart, penvD } from './core/compile';
 import { hasErrors, validatePartDef } from './core/validate';
-import { exportLibrary, importLibrary, typeKeyFor } from './core/library';
+import { exportLibrary, importLibrary, typeKeyFor, matchPart } from './core/library';
 import { EXAMPLES, EX_CATS } from './ui/examples';
 import { openEditor } from './ui/editor';
 import { LEDC, PARTS, PICO_NAMES, picoRole } from './parts/builtin';
@@ -17,11 +17,11 @@ import { solve } from './engine/solve';
 import { buildLayout, planCuts } from './engine/board';
 import { pinLabelPositions } from './core/labels';
 import { evalExpr, parseExpr, pinRef, varsOf } from './core/logic';
-import { DEFS, syncDefs, penv, hasPress, isOff, isMcu } from './engine/defs';
+import { DEFS, syncDefs, setLibrary, penv, hasPress, isOff, isMcu } from './engine/defs';
 import { xf, xv, ixf, placedPins as gpins } from './engine/geometry';
 import { analyze as analyzeNet, layoutOf, pinLabel } from './engine/netlist';
 import { checkAll as checkAllOf } from './engine/check';
-import { emptyDesign, normalize, normCutList, mergeCustomParts, NOTE_COL } from './engine/design';
+import { emptyDesign, normalize, normCutList, rekeyAgainstLibrary, NOTE_COL } from './engine/design';
 import { SIG_PRESETS, SIG_NAMES, sigCfg as sigCfgOf, sigRows, sigApplyTo } from './engine/signal';
 import { swapMcu as swapMcuOf } from './engine/swap';
 import { presetMacropad, presetRouted } from './engine/presets';
@@ -316,7 +316,10 @@ function hitWire(rf,cf){let best=-1,bd=ui.coarse?0.5:0.32;D.wires.forEach((w,i)=
   if(sb&&!wireFull(w,i,false)){const ar=w.a[0]+(w.b[0]-w.a[0])*sb.k,ac=w.a[1]+(w.b[1]-w.a[1])*sb.k,br=w.b[0]-(w.b[0]-w.a[0])*sb.k,bc=w.b[1]-(w.b[1]-w.a[1])*sb.k;d=Math.min(segDist(rf,cf,w.a[0],w.a[1],ar,ac),segDist(rf,cf,br,bc,w.b[0],w.b[1]));}
   else d=segDist(rf,cf,w.a[0],w.a[1],w.b[0],w.b[1]);if(d<bd){bd=d;best=i;}});return best;}
 function hitBridge(rf,cf){let best=-1,bd=ui.coarse?0.45:0.3;D.bridges.forEach((b,i)=>{const d=segDist(rf,cf,b[0],b[1],b[2],b[3]);if(d<bd){bd=d;best=i;}});return best;}
-function pushUndo(){ui.undo.push(JSON.stringify(D));if(ui.undo.length>150)ui.undo.shift();ui.redo=[];}
+/* Visszavonás: a terv és a saját könyvtár együtt (a könyvtár szerkesztése is visszavonható). */
+const snap=()=>JSON.stringify({D,L:LIB});
+function restoreSnap(s){const o=JSON.parse(s);if(o&&o.D&&o.L){D=o.D;setLib(o.L);}else D=o;}
+function pushUndo(){ui.undo.push(snap());if(ui.undo.length>150)ui.undo.shift();ui.redo=[];}
 function commit(noRoute){syncDefs(D.customParts);const bk=JSON.stringify(D.board);if(!noRoute&&D.settings.autoRoute&&D.links.length)route({moved:ui.moved});ui.moved=null;save();if(bk!==ui.lastBoard){ui.lastBoard=bk;resize();boardUI();}recompute();renderLeft();}
 function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(D));}catch(e){}}
 function sameSec(r1,c1,r2,c2){const L=LAY();return L.cell(r1,c1)===L.cell(r2,c2);}
@@ -327,7 +330,7 @@ function onDown(ev,hAt){
   const h=hAt||toHole(ev);ui.hover=h;
   if(ui.tool==='pan'){ui.drag={kind:'pan',x:ev.clientX,y:ev.clientY};cv.setPointerCapture(ev.pointerId);return;}
   if(ui.sim){const p=hitPart(h.rf,h.cf);if(p&&hasPress(p)){if(D.settings.btnMode==='toggle')ui.pressed[p.id]=!ui.pressed[p.id];else{ui.pressed[p.id]=true;ui.holdPtr.set(ev.pointerId,p.id);cv.setPointerCapture(ev.pointerId);}recompute();}return;}
-  if(ui.placing){const g=ghostPart(h);if(!partFits(g))return;pushUndo();const p={...g,id:'p'+(D.seq++),label:nextLabel(ui.placing)};if(!p.xray)delete p.xray;D.parts.push(p);
+  if(ui.placing){const g=ghostPart(h);if(!partFits(g))return;pushUndo();useInProject(ui.placing);libRecent(ui.placing);const p={...g,id:'p'+(D.seq++),label:nextLabel(ui.placing)};if(!p.xray)delete p.xray;D.parts.push(p);
     if(ev.shiftKey){commit();return;} // Shift: további példányok
     ui.sel=grp([p.id]);ui.placing=null;setTool('select');commit();return;}
   if(ui.tool==='note'){addNote(h);return;}
@@ -447,7 +450,7 @@ function holeAt(x,y){return toHole({clientX:x,clientY:y});}
 const liftHole=ev=>holeAt(ev.clientX,ev.clientY-PLACE_LIFT);
 function tCancel(){clearTimeout(T.timer);
   if(T.mode==='active'&&ui.drag){const d=ui.drag;ui.drag=null;
-    if((d.kind==='gmove'&&d.pushed)||d.kind==='bridge'||d.kind==='erase'){D=JSON.parse(ui.undo.pop());ui.hideAuto=null;commit(true);}else draw();}
+    if((d.kind==='gmove'&&d.pushed)||d.kind==='bridge'||d.kind==='erase'){restoreSnap(ui.undo.pop());ui.hideAuto=null;commit(true);}else draw();}
   if(T.mode==='direct'){for(const [id,pid] of ui.holdPtr){ui.pressed[pid]=false;ui.holdPtr.delete(id);}recompute();}
   if(T.mode==='place'){ui.hover=null;draw();}
   T.mode=null;T.start=null;}
@@ -524,8 +527,8 @@ function groupTransform(kind){ // kind: 'rot' | 'mir'
 function rotate(){if(ui.placing){ui.ghost.rot=(ui.ghost.rot+1)&3;draw();return;}if(isGroup()&&gSize(ui.sel))groupTransform('rot');}
 function mirror(){if(ui.placing){ui.ghost.rot=(4-ui.ghost.rot)&3;ui.ghost.mir=!ui.ghost.mir;draw();return;}if(isGroup()&&gSize(ui.sel))groupTransform('mir');}
 function delSel(){if(!ui.sel)return;pushUndo();if(ui.sel.kind==='group'){const g=ui.sel;D.parts=D.parts.filter(p=>!g.parts.has(p.id));g.parts.forEach(dropLinks);D.bridges=D.bridges.filter((b,i)=>!g.bridges.has(i));D.wires=D.wires.filter((w,i)=>!g.wires.has(i));}else if(ui.sel.kind==='wire')D.wires.splice(ui.sel.i,1);else if(ui.sel.kind==='bridge')D.bridges.splice(ui.sel.i,1);else if(ui.sel.kind==='note')D.notes=D.notes.filter(n=>n.id!==ui.sel.id);ui.sel=null;commit();}
-function undo(){if(!ui.undo.length)return;ui.redo.push(JSON.stringify(D));D=JSON.parse(ui.undo.pop());ui.sel=null;commit();}
-function redo(){if(!ui.redo.length)return;ui.undo.push(JSON.stringify(D));D=JSON.parse(ui.redo.pop());ui.sel=null;commit();}
+function undo(){if(!ui.undo.length)return;ui.redo.push(snap());restoreSnap(ui.undo.pop());ui.sel=null;commit();}
+function redo(){if(!ui.redo.length)return;ui.undo.push(snap());restoreSnap(ui.redo.pop());ui.sel=null;commit();}
 function setTool(t){ui.tool=t;ui.wireStart=null;ui.linkStart=null;if(t!=='place')ui.placing=null;renderLeft();draw();}
 function setView(v){ui.view=v;$('#vComp').classList.toggle('on',v==='comp');$('#vCu').classList.toggle('on',v==='cu');draw();}
 function zoom(dz){ui.zoom=Math.max(0.6,Math.min(2.6,+(ui.zoom+dz).toFixed(2)));resize();}
@@ -630,9 +633,7 @@ function bindParams(root,p){
 }
 function renderLeft0(){
   $('#tools').innerHTML=TOOLS.map(([id,l,k])=>`<button class="btn ${ui.tool===id&&!ui.placing?'on':''}" data-tool="${id}" ${ui.sim?'disabled':''}>${l}<kbd>${k}</kbd></button>`).join('');
-  const cats=[...new Set(Object.values(DEFS).map(d=>d.cat))];
-  const libBtn=(id,d)=>`<button class="btn ${ui.placing===id?'on':''}" data-lib="${id}" ${ui.sim?'disabled':''}>${esc(d.name)}<span>${esc(d.fp)}</span></button>`;
-  $('#lib').innerHTML=cats.map(c=>`<div class="libcat">${esc(c)}</div>`+Object.entries(DEFS).filter(([,d])=>d.cat===c).map(([id,d])=>id in PARTS?libBtn(id,d):`<div class="libitem">${libBtn(id,d)}<button class="btn" data-edit="${id}" title="Szerkesztés" aria-label="${esc(d.name)} szerkesztése" ${ui.sim?'disabled':''}>✎</button></div>`).join('')).join('');
+  renderLib();
   $('#wireColorRow').hidden=ui.tool!=='wire'||!!ui.placing;
   {const g=isGroup()?ui.sel:null,sp=selPart();$('#selSumm').textContent=sp?sp.label:g&&gSize(g)?`${gSize(g)} elem`:ui.sel&&ui.sel.kind==='wire'?'vezeték':ui.sel&&ui.sel.kind==='bridge'?'híd':ui.sel&&ui.sel.kind==='note'?'jegyzet':'';}
   $('#swatches').innerHTML=WCOL.map(([c,l])=>`<button class="sw ${ui.wireColor===c?'on':''}" data-col="${c}" title="${l}" aria-label="${l}" style="background:${c}"></button>`).join('');
@@ -689,7 +690,9 @@ function renderLeft0(){
   } else pr.innerHTML=`<span class="muted small">${ui.tool==='link'&&!ui.placing?'Kattints egy lábra, majd a cél lábra (vagy GND / szabad GPIO).':''}${ui.placing?`Lerakás: <b>${DEFS[ui.placing].name}</b>${ui.ghost.from?` (${esc(ui.ghost.from)} másolata)`:''}. Kattints a panelra; Shift+kattintással több példány.`:ui.tool==='bridge'?'Húzd az egeret szomszédos lyukakon át: minden szekcióhatárnál híd keletkezik.':ui.tool==='wire'?'Kattints a kezdő, majd a cél lyukra.':ui.tool==='erase'?'Kattints vagy húzz a törlendő elemen.':'Kattints egy alkatrészre, vezetékre vagy hídra. Shift+kattintás vagy keret húzása üres helyen: több elem. Ctrl+A: minden.'}</span>`;
 }
 $('#tools').addEventListener('click',e=>{const b=e.target.closest('[data-tool]');if(b){setTool(b.dataset.tool);if(MOB.matches)sheet('');}});
-$('#lib').addEventListener('click',e=>{const ed=e.target.closest('[data-edit]');if(ed){openEditor(editorHost,{type:ed.dataset.edit});return;}const b=e.target.closest('[data-lib]');if(!b)return;const t=b.dataset.lib;ui.placing=ui.placing===t?null:t;ui.ghost={rot:0,mir:false};ui.sel=null;ui.wireStart=null;renderLeft();draw();if(MOB.matches&&ui.placing){sheet('');flashHint('Érintsd meg a panelt, húzd a helyére, és engedd fel');}});
+$('#lib').addEventListener('click',e=>{const ed=e.target.closest('[data-edit]');if(ed){openEditor(editorHost,{type:ed.dataset.edit});return;}
+  const fv=e.target.closest('[data-fav]');if(fv){libFavToggle(fv.dataset.fav);renderLib();return;}
+  const tl=e.target.closest('[data-tolib]');if(tl){toLibrary(tl.dataset.tolib);return;}const b=e.target.closest('[data-lib]');if(!b)return;const t=b.dataset.lib;ui.placing=ui.placing===t?null:t;ui.ghost={rot:0,mir:false};ui.sel=null;ui.wireStart=null;renderLeft();draw();if(MOB.matches&&ui.placing){sheet('');flashHint('Érintsd meg a panelt, húzd a helyére, és engedd fel');}});
 $('#swatches').addEventListener('click',e=>{const b=e.target.closest('[data-col]');if(b){ui.wireColor=b.dataset.col;renderLeft();}});
 
 function renderRight(){const fk=focusKey();renderRight0();restoreFocus(fk);}
@@ -836,7 +839,7 @@ function loadExample(id){const ex=EXAMPLES.find(e=>e.id===id);if(!ex)return fals
     links:raw.links.map(([a,b],i)=>({id:'l'+(10+i),a,b,gpio:null})),notes:raw.notes.map((n,i)=>({id:'n'+(80+i),...n})),
     settings:{usb:true,btnMode:'hold',autoRoute:true,...(raw.settings||{})}};
   if(ui.sim)setSim(false);pushUndo();sigPlay(false);
-  D=keepLib(normalize(d));syncDefs(D.customParts);ui.sel=null;ui.selLink=null;LSTATE.clear();STSTATE.clear();
+  D=(normalize(d));syncDefs(D.customParts);ui.sel=null;ui.selLink=null;LSTATE.clear();STSTATE.clear();
   if(D.links.length){route({full:true});}
   if(ex.freeze){D.cuts=[...(D.cuts||[]),...(D.auto.cuts||[])];D.bridges.push(...D.auto.bridges.map(b=>b.slice(0,4)));D.wires.push(...D.auto.wires.map(w=>({a:w.a,b:w.b,color:w.color})));
     D.auto={bridges:[],wires:[],cuts:[]};D.links=[];D.settings.autoRoute=false;}
@@ -860,16 +863,16 @@ $('#bUnroute').onclick=()=>{pushUndo();D.auto={bridges:[],wires:[],cuts:[]};D.se
 $('#links').addEventListener('click',e=>{const b=e.target.closest('[data-dl]');if(b){pushUndo();D.links=D.links.filter(l=>l.id!==b.dataset.dl);commit();return;}
   const li=e.target.closest('[data-li]');if(li){const id=li.dataset.li;ui.selLink=ui.selLink===id?null:id;renderLinks();draw();status();
     if(ui.selLink){const g=linkGeom(D.links.find(x=>x.id===id));if(g){const sc=$('#scroll'),pts=[g.start,g.end].filter(Boolean).map(([r,c])=>toScreen(hx(c),hy(r)));const vx=pts.reduce((t,p)=>t+p[0],0)/pts.length,vy=pts.reduce((t,p)=>t+p[1],0)/pts.length;sc.scrollTo({left:vx-sc.clientWidth/2,top:vy-sc.clientHeight/2,behavior:'smooth'});}}}});
-$('#bClear').onclick=()=>{const b=$('#bClear');if(Date.now()-ui.confirmClear<3000){pushUndo();D=keepLib(emptyDesign());ui.sel=null;commit();b.textContent='Üres panel';ui.confirmClear=0;return;}ui.confirmClear=Date.now();b.textContent='Biztos? Kattints újra';setTimeout(()=>{b.textContent='Üres panel';},3000);};
+$('#bClear').onclick=()=>{const b=$('#bClear');if(Date.now()-ui.confirmClear<3000){pushUndo();D=(emptyDesign());ui.sel=null;commit();b.textContent='Üres panel';ui.confirmClear=0;return;}ui.confirmClear=Date.now();b.textContent='Biztos? Kattints újra';setTimeout(()=>{b.textContent='Üres panel';},3000);};
 $('#bExport').onclick=()=>{$('#json').value=JSON.stringify(D,null,1);$('#jsonMsg').textContent='A terv JSON-ja a mezőben.';};
 $('#bCopy').onclick=()=>{const ta=$('#json');if(!ta.value)ta.value=JSON.stringify(D,null,1);navigator.clipboard.writeText(ta.value).then(()=>$('#jsonMsg').textContent='Vágólapra másolva.').catch(()=>{ta.focus();ta.select();$('#jsonMsg').textContent='Kijelöltem a szöveget, másold Ctrl+C-vel.';});};
 /** Terv betöltése: a tervvel érkező saját alkatrészek mellé a meglévők megmaradnak; azonos kulcsnál, eltérő tartalommal a meglévőt átnevezi. */
 function importPlan(raw){
-  const inc=(raw&&raw.customParts&&typeof raw.customParts==='object')?raw.customParts:{},{parts:merged,renamed}=mergeCustomParts(D.customParts||{},inc);
-  const d=normalize({...raw,customParts:merged});
+  const {raw:r2,renamed}=rekeyAgainstLibrary(raw,LIB),inc=(r2&&r2.customParts&&typeof r2.customParts==='object')?r2.customParts:{};
+  const d=normalize(r2);
   pushUndo();D=d;ui.sel=null;LSTATE.clear();STSTATE.clear();sigPlay(false);commit();
   const nIn=Object.keys(inc).filter(k=>k in (d.customParts||{})).length;
-  return `Betöltve: ${d.parts.length} alkatrész, ${d.bridges.length+d.auto.bridges.length} híd, ${d.wires.length+d.auto.wires.length} vezeték`+(nIn?`; a tervvel ${nIn} saját alkatrész jött`:'')+(renamed.length?` (a saját, azonos nevű változatod megmaradt: ${renamed.join(', ')})`:'')+'.';
+  return `Betöltve: ${d.parts.length} alkatrész, ${d.bridges.length+d.auto.bridges.length} híd, ${d.wires.length+d.auto.wires.length} vezeték`+(nIn?`; a tervvel ${nIn} saját alkatrész jött (a terv része, a könyvtáradat nem változtatta)`:'')+(renamed.length?`; a könyvtáradban más azonos nevű alkatrész van, ezért a terv változata új néven: ${renamed.map(x=>x.name+' → '+x.to).join(', ')}`:'')+'.';
 }
 $('#bImport').onclick=()=>{try{$('#jsonMsg').textContent=importPlan(JSON.parse($('#json').value));}catch(e){$('#jsonMsg').textContent='Hibás JSON: '+e.message;}};
 $('#bSaveFile').onclick=()=>{const blob=new Blob([JSON.stringify(D,null,1)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
@@ -969,26 +972,70 @@ function suggestCuts(){return suggestCutsOf(D);}
 function route(opts){routeOf(D,opts||{});}
 function manualToAuto(pid){const keep=ui.hideAuto;ui.hideAuto='all';const A=analyze(false);ui.hideAuto=keep;const n=manualToAutoOf(D,A,pid,pushUndo);if(n)commit();return n;}
 /* ---------- Saját alkatrészek ---------- */
-function keepLib(nd){nd.customParts={...(D&&D.customParts||{})};return nd;}
+/* ---------- Saját könyvtár: a tervtől független alkatrészek (böngészőben), a terv csak a használtakat hordozza ---------- */
+const LIBKEY='proofboard.library.v1';
+let LIB={};
+function setLib(parts){LIB={...(parts||{})};setLibrary(LIB);}
+function saveLib(){try{localStorage.setItem(LIBKEY,JSON.stringify(exportLibrary(LIB)));}catch(e){}}
+function loadLib(){try{const s=localStorage.getItem(LIBKEY);if(s==null)return null;const r=importLibrary(JSON.parse(s),()=>false);return r.parts;}catch(e){return {};}}
+/** A tervbe lerakott könyvtári alkatrész leírása a terv része lesz (így a tervfájllal együtt utazik). */
+function useInProject(t){if(t in PARTS||(D.customParts||{})[t]||!LIB[t])return;D.customParts={...D.customParts,[t]:LIB[t]};}
+/** Projekt alkatrész → saját könyvtár (ütköző kulcsnál új kulccsal, a tervben is átírva). */
+function toLibrary(t){const def=(D.customParts||{})[t];if(!def)return;pushUndo();
+  if(LIB[t]&&JSON.stringify(LIB[t])!==JSON.stringify(def)){const nk=typeKeyFor(def.name,k=>k in DEFS||k in LIB);D.customParts={...D.customParts,[nk]:def};delete D.customParts[t];for(const p of D.parts)if(p.type===t)p.type=nk;t=nk;}
+  setLib({...LIB,[t]:def});saveLib();commit(true);libMsg(`A saját könyvtárba került: ${def.name}`);}
+const LPREF='proofboard.lib.ui';
+const libPref=()=>{try{return JSON.parse(localStorage.getItem(LPREF)||'{}')||{};}catch(e){return{};}};
+const libPrefSet=o=>{try{localStorage.setItem(LPREF,JSON.stringify({...libPref(),...o}));}catch(e){}};
+function libFavToggle(t){const f=new Set(libPref().fav||[]);if(f.has(t))f.delete(t);else f.add(t);libPrefSet({fav:[...f]});}
+function libRecent(t){const r=(libPref().recent||[]).filter(x=>x!==t);r.unshift(t);libPrefSet({recent:r.slice(0,6)});}
+/** Alkatrészlista: keresés, kedvencek, legutóbb használtak, a terv saját alkatrészei, a saját könyvtár, majd a beépített kategóriák (összecsukhatók). */
+function renderLib(){const q=(ui.libQ||'').trim(),pref=libPref(),fav=new Set(pref.fav||[]),closed=new Set(pref.closed||[]);
+  const ok=t=>DEFS[t]&&matchPart(DEFS[t].def,q);
+  const item=t=>{const d=DEFS[t],own=!(t in PARTS),projOnly=own&&!(t in LIB);
+    return `<div class="libitem"><button class="btn ${ui.placing===t?'on':''}" data-lib="${t}" ${ui.sim?'disabled':''}>${esc(d.name)}<span>${esc(d.fp)}</span></button>`+
+      `<button class="btn libfav ${fav.has(t)?'on':''}" data-fav="${t}" title="${fav.has(t)?'Kedvenc (kattintásra kiveszi)':'Kedvencekhez'}" aria-label="${esc(d.name)} kedvenc" aria-pressed="${fav.has(t)}">${fav.has(t)?'★':'☆'}</button>`+
+      (own?`<button class="btn" data-edit="${t}" title="Szerkesztés" aria-label="${esc(d.name)} szerkesztése" ${ui.sim?'disabled':''}>✎</button>`:'')+
+      (projOnly?`<button class="btn" data-tolib="${t}" title="Hozzáadás a saját könyvtárhoz (más tervekben is elérhető lesz)" aria-label="${esc(d.name)} a könyvtárba" ${ui.sim?'disabled':''}>＋</button>`:'')+`</div>`;};
+  const group=(id,title,ts,hint)=>{ts=ts.filter(ok);if(!ts.length)return'';const open=q||!closed.has(id);
+    return `<details class="libgrp" data-grp="${esc(id)}" ${open?'open':''}><summary><span>${esc(title)}</span><span class="muted small">${ts.length}</span></summary>${hint?`<p class="help" style="margin:2px 0 4px">${hint}</p>`:''}${ts.map(item).join('')}</details>`;};
+  const all=Object.keys(DEFS),proj=Object.keys(D.customParts||{}).filter(t=>!(t in LIB)),libT=Object.keys(LIB),cats=[...new Set(all.filter(t=>t in PARTS).map(t=>DEFS[t].cat))];
+  let h='';
+  if(!q){h+=group('fav','Kedvencek',[...fav].filter(t=>DEFS[t]));h+=group('recent','Legutóbb használt',(pref.recent||[]).filter(t=>DEFS[t]));}
+  h+=group('proj','Projekt',proj,'A megnyitott terv saját alkatrészei, amelyek nincsenek a könyvtáradban. ＋: hozzáadás a saját könyvtárhoz.');
+  h+=group('lib','Saját könyvtár',libT);
+  for(const c of cats)h+=group('cat:'+c,c,all.filter(t=>t in PARTS&&DEFS[t].cat===c));
+  $('#lib').innerHTML=h||'<p class="help">Nincs találat.</p>';}
+$('#libSearch').addEventListener('input',e=>{ui.libQ=e.target.value;renderLib();});
+$('#lib').addEventListener('toggle',e=>{const d=e.target.closest&&e.target.closest('details[data-grp]');if(!d||(ui.libQ||'').trim())return;const c=new Set(libPref().closed||[]);if(d.open)c.delete(d.dataset.grp);else c.add(d.dataset.grp);libPrefSet({closed:[...c]});},true);
 const editorHost={
   builtin:PARTS,
-  custom:()=>D.customParts||{},
-  save(type,def){pushUndo();const t=type||typeKeyFor(def.name,k=>k in DEFS);D.customParts={...D.customParts,[t]:def};commit();libMsg(`Mentve: ${def.name}`);return t;},
-  remove(type){pushUndo();const rest={...D.customParts};delete rest[type];D.customParts=rest;const gone=D.parts.filter(p=>p.type===type).map(p=>p.id);D.parts=D.parts.filter(p=>p.type!==type);gone.forEach(dropLinks);ui.sel=null;commit();libMsg('Alkatrész törölve');},
-  usage:t=>D.parts.filter(p=>p.type===t).length,
+  custom:()=>({...LIB,...(D.customParts||{})}),
+  /** Mentés: a saját könyvtárba (új vagy könyvtári alkatrész), és ha a terv is tartalmazza, oda is; csak a tervben lévőt csak a tervbe. */
+  save(type,def){pushUndo();const t=type||typeKeyFor(def.name,k=>k in DEFS);const inLib=!type||t in LIB;
+    if(inLib){setLib({...LIB,[t]:def});saveLib();}
+    if(!inLib||(D.customParts||{})[t])D.customParts={...D.customParts,[t]:def};
+    commit();libMsg(`Mentve: ${def.name}`);return t;},
+  /** Törlés: a könyvtárból (a tervben lerakott példányok maradnak, a terv leírásával); csak a tervben lévőnél a tervből a példányaival együtt. */
+  remove(type){pushUndo();
+    if(type in LIB){const rest={...LIB};delete rest[type];setLib(rest);saveLib();if(!D.parts.some(p=>p.type===type)){const r={...D.customParts};delete r[type];D.customParts=r;}}
+    else{const rest={...D.customParts};delete rest[type];D.customParts=rest;const gone=D.parts.filter(p=>p.type===type).map(p=>p.id);D.parts=D.parts.filter(p=>p.type!==type);gone.forEach(dropLinks);}
+    ui.sel=null;commit();libMsg('Alkatrész törölve');},
+  /** Törléskor vele törlődő példányok száma (könyvtári alkatrésznél 0: a lerakottak a terv leírásával maradnak). */
+  usage:t=>t in LIB?0:D.parts.filter(p=>p.type===t).length,
   place(t){if(!DEFS[t])return;ui.placing=t;ui.ghost={rot:0,mir:false};ui.sel=null;ui.wireStart=null;renderLeft();draw();flashMsg('Kattints a panelra a lerakáshoz');},
   roleColor:r=>ROLEC[r]||'#868e96'
 };
 function libMsg(t){const e=$('#libMsg');if(e)e.textContent=t;}
 $('#bNewPart').onclick=()=>openEditor(editorHost,{});
-$('#bLibExp').onclick=()=>{const n=Object.keys(D.customParts||{}).length;if(!n){libMsg('Még nincs saját alkatrész.');return;}
-  const url=URL.createObjectURL(new Blob([JSON.stringify(exportLibrary(D.customParts),null,2)],{type:'application/json'}));
+$('#bLibExp').onclick=()=>{const n=Object.keys(LIB).length;if(!n){libMsg('A saját könyvtárad még üres.');return;}
+  const url=URL.createObjectURL(new Blob([JSON.stringify(exportLibrary(LIB),null,2)],{type:'application/json'}));
   const a=document.createElement('a');a.href=url;a.download='proofboard-alkatreszek.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);libMsg(`${n} alkatrész exportálva.`);};
 $('#bLibImp').onclick=()=>$('#libFile').click();
 $('#libFile').addEventListener('change',async e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(!f)return;
   try{const res=importLibrary(JSON.parse(await f.text()),k=>k in DEFS);const n=Object.keys(res.parts).length;
-    if(n){pushUndo();D.customParts={...D.customParts,...res.parts};commit();}
-    libMsg(`${n} alkatrész betöltve${res.rejected.length?`, ${res.rejected.length} hibás kihagyva (${res.rejected.map(r=>r.key).join(', ')})`:''}.`);}
+    if(n){pushUndo();setLib({...LIB,...res.parts});saveLib();commit();}
+    libMsg(`${n} alkatrész betöltve a saját könyvtárba${res.rejected.length?`, ${res.rejected.length} hibás kihagyva (${res.rejected.map(r=>r.key).join(', ')})`:''}.`);}
   catch(err){libMsg('Nem sikerült betölteni: '+err.message);}});
 
 /* ---------- Oldalsávok méretezése és összecsukása ---------- */
@@ -1051,7 +1098,7 @@ $('#bdApply').onclick=()=>{
 window.pcb={
   load(d){D=normalize(typeof d==='string'?JSON.parse(d):d);ui.sel=null;commit();return true;},
   get(){return JSON.parse(JSON.stringify(D));},
-  preset(){D=keepLib(presetMacropad());commit();},
+  preset(){D=(presetMacropad());commit();},
   /** Vezérlőcsere: a címkéjű vezérlőlapot a megadott típusra cseréli. */
   swapMcu(label,type){const p=D.parts.find(x=>x.label===label);return p?swapMcu(p.id,type):null;},
   /** Oldalsáv összecsukása: k = 'l' | 'r', on = true/false (elhagyva: vált). */
@@ -1065,7 +1112,7 @@ window.pcb={
   route(){route({full:true});commit(true);return pcb.links();},
   move(label,dr,dc){const p=D.parts.find(x=>x.label===label);if(!p)return false;const t={...p,r:p.r+dr,c:p.c+dc};if(!partFits(t))return false;pushUndo();p.r=t.r;p.c=t.c;ui.moved=new Set([p.id]);commit();return true;},
   links(){return D.links.map(l=>({...l,text:linkText(l),...(ui.linkState.get(l.id)||{})}));},
-  presetRouted(){D=keepLib(presetRouted());commit();},
+  presetRouted(){D=(presetRouted());commit();},
   toAuto(pid){return manualToAuto(pid||null);},
   defs(){return JSON.parse(JSON.stringify(PARTS));},
   // --- tesztekhez és szkripteléshez ---
@@ -1082,7 +1129,11 @@ window.pcb={
   linkInfo(){return D.links.map(l=>{const g=linkGeom(l);return{text:linkText(l),start:g&&g.start,end:g&&g.end,endPin:g&&g.endPin?pinLabel(g.endPin):null,bridges:g?g.bridges.length:0};});},
   selectLink(i){const l=D.links[i];ui.selLink=l?l.id:null;renderLinks();draw();status();return statusText();},
   reveal(r,c){const sc=$('#scroll'),[vx,vy]=toScreen(hx(c),hy(r));sc.scrollTo(vx-sc.clientWidth/2,vy-sc.clientHeight/2);const rc=cv.getBoundingClientRect();return{x:rc.left+vx,y:rc.top+vy};},
-  customParts(){return JSON.parse(JSON.stringify(D.customParts||{}));},
+  /** Minden saját alkatrész (könyvtár + a terv saját alkatrészei). */
+  customParts(){return JSON.parse(JSON.stringify({...LIB,...(D.customParts||{})}));},
+  library(){return JSON.parse(JSON.stringify(LIB));},
+  projectParts(){return JSON.parse(JSON.stringify(D.customParts||{}));},
+  libSearch(q){ui.libQ=q;$('#libSearch').value=q;ltab('lib');renderLib();return[...document.querySelectorAll('#lib [data-lib]')].map(b=>b.dataset.lib);},
   addPart(def){const problems=validatePartDef(def);if(hasErrors(problems))return{type:null,problems};return{type:editorHost.save(null,def),problems};},
   openEditor(type){openEditor(editorHost,type?{type}:{});},
   notes(){return JSON.parse(JSON.stringify(D.notes||[]));},
@@ -1098,6 +1149,7 @@ function statusText(){return $('#status').textContent;}
 
 /* ---------- Indulás ---------- */
 (function init(){
+  {const l=loadLib();if(l)setLib(l);else{try{const s=localStorage.getItem(STORE_KEY);const cp=s&&JSON.parse(s).customParts;if(cp&&typeof cp==='object'){const r=importLibrary(exportLibrary(cp),()=>false);setLib(r.parts);}}catch(e){}saveLib();}} // első indításkor a tervben lévő saját alkatrészek lesznek a könyvtár
   let d=null;try{const s=localStorage.getItem(STORE_KEY);if(s)d=normalize(JSON.parse(s));}catch(e){d=null;}
   D=d||presetMacropad();syncDefs(D.customParts);
   boardUI();

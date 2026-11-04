@@ -7,7 +7,7 @@ import { pinLabelPositions } from '../core/labels';
 import { GATE_LABEL, LogicError, parseExpr, pinRef, printExpr, renameVars, toGates, varsOf, type GateKind, type GateNode } from '../core/logic';
 import { gateSvg, gatesToText, tableVars, toggleCell, truthTable, TABLE_MAX_VARS } from './logicview';
 import { fmtSI, parseSI } from '../core/expr';
-import { hasErrors, validatePartDef, type Problem } from '../core/validate';
+import { BUS_FNS, hasErrors, validatePartDef, type Problem } from '../core/validate';
 import type { ModelEl, PartDef, Prim } from '../core/schema';
 
 export interface EditorHost {
@@ -16,7 +16,7 @@ export interface EditorHost {
   /** Mentés; `type` null új alkatrésznél. Visszaadja a típuskulcsot. */
   save(type: string | null, def: PartDef): string;
   remove(type: string): void;
-  /** Hány példány van a tervben. */
+  /** Hány lerakott példány törlődik az alkatrésszel együtt. */
   usage(type: string): number;
   /** Lerakás indítása a panelon. */
   place(type: string): void;
@@ -27,9 +27,12 @@ export interface EditorHost {
 export const ROLES: Array<[string, string]> = [
   ['sig', 'jel / adat'], ['out', 'kimenet'], ['vin', 'tápbemenet'], ['gnd', 'föld (GND)'], ['adc', 'analóg jel'],
   ['an', 'anód / +'], ['ka', 'katód / −'], ['nc', 'nincs bekötve'], ['h', 'általános'],
+  ['gpio', 'GPIO (vezérlőlap)'], ['p33', '3,3 V kimenet'], ['pwr', 'táp (VSYS, 5V…)'], ['misc', 'egyéb (RUN, EN…)'],
 ];
+/** A GPIO-képességek magyarázata a szerkesztőben (a buszfunkciók pl. i2c0.sda, spi1.mosi, uart0.tx, pwm3.a). */
+const CAP_HELP = 'adc, adc2, in (csak bemenet), nopull, strap, uart0, led, valamint buszfunkciók: i2c0.sda, spi1.mosi, uart0.tx, pwm3.a…';
 
-type ModelKind = 'resistor' | 'diode' | 'source' | 'nmos' | 'capacitor' | 'npn' | 'motor';
+type ModelKind = 'resistor' | 'diode' | 'source' | 'nmos' | 'capacitor' | 'npn' | 'motor' | 'mcu';
 const MODEL_UI: Record<ModelKind, { label: string; pins: Array<[string, string]>; vals: Array<[string, string, string, number]> }> = {
   resistor: { label: 'Ellenállás', pins: [['a', '1. vég'], ['b', '2. vég']], vals: [['ohm', 'Érték', 'Ω', 1000]] },
   diode: { label: 'Dióda', pins: [['a', 'anód'], ['k', 'katód']], vals: [['vf', 'Nyitófesz.', 'V', 0.7]] },
@@ -38,6 +41,8 @@ const MODEL_UI: Record<ModelKind, { label: string; pins: Array<[string, string]>
   capacitor: { label: 'Kondenzátor', pins: [['a', '1. vég (+)'], ['b', '2. vég']], vals: [['f', 'Kapacitás', 'F', 100e-9], ['vmax', 'Névleges fesz.', 'V', 16]] },
   motor: { label: 'DC motor', pins: [['a', '+'], ['b', '−']], vals: [['ohm', 'Üzemi ell.', 'Ω', 20], ['vnom', 'Névleges fesz.', 'V', 3]] },
   npn: { label: 'NPN tranzisztor', pins: [['c', 'kollektor'], ['b', 'bázis'], ['e', 'emitter']], vals: [['beta', 'Erősítés (β)', '', 200]] },
+  mcu: { label: 'Vezérlőlap (MCU)', pins: [['gnd', 'GND'], ['vsys', 'táp be'], ['v33', '3,3 V'], ['vbus', 'USB 5V (ha van)']],
+    vals: [['vreg', 'Stab. min.', 'V', 3.5], ['vmax', 'Táp max.', 'V', 5.5], ['igpio', 'GPIO max.', 'A', 0.012]] },
 };
 
 interface LogicOutRow { pin: string; expr: string; oe: string; type: 'pp' | 'od' }
@@ -52,8 +57,8 @@ export interface LogicForm {
   tableVars?: string[];
   vih?: number; vil?: number; rout?: number;
 }
-interface PinRow { id: string; name: string; lr: number; lc: number; role: string; group: string; volt?: string }
-interface ModelRow { el: ModelKind; pins: string[]; vals: string[] }
+interface PinRow { id: string; name: string; lr: number; lc: number; role: string; group: string; volt?: string; /** GPIO-nál: képességek szóközzel/vesszővel */ caps?: string; /** perifériánál: buszfunkció */ fn?: string }
+interface ModelRow { el: ModelKind; pins: string[]; vals: string[]; /** MCU: 'matrix' = bármely GPIO bármely buszfunkcióra kiosztható */ mux?: 'fixed' | 'matrix' }
 interface Form {
   name: string; prefix: string; cat: string; bodyText: string;
   pad: number; fill: string; showLabel: boolean; names: 'below' | 'above' | 'in' | 'out' | 'none';
@@ -140,13 +145,15 @@ export function formToDef(f: Form): PartDef {
       case 'capacitor': return { el: 'capacitor', a: m.pins[0], b: m.pins[1], f: v(0), vmax: v(1) };
       case 'motor': return { el: 'motor', a: m.pins[0], b: m.pins[1], ohm: v(0), vnom: v(1) };
       case 'npn': return { el: 'npn', c: m.pins[0], b: m.pins[1], e: m.pins[2], beta: v(0) };
+      case 'mcu': return { el: 'mcu', gnd: m.pins[0], vsys: m.pins[1], v33: m.pins[2], ...(m.pins[3] ? { vbus: m.pins[3] } : {}), vreg: v(0), vmax: v(1), igpio: v(2), ...(m.mux === 'matrix' ? { mux: 'matrix' as const } : {}) };
     }
   });
   const oneRow = new Set(rs).size === 1 || new Set(cs).size === 1;
   const def: PartDef = {
     name: f.name.trim(), prefix: f.prefix.trim(), cat: f.cat.trim() || 'Saját',
     fp: `${pins.length} láb${oneRow && pins.length > 1 ? ' egy sorban' : ''}`,
-    pins: pins.map(p => Object.assign({ id: p.id, name: p.name || p.id, lr: p.lr, lc: p.lc, role: p.role }, p.role === 'vin' ? parseRange(p.volt) : {})),
+    pins: pins.map(p => Object.assign({ id: p.id, name: p.name || p.id, lr: p.lr, lc: p.lc, role: p.role }, p.role === 'vin' ? parseRange(p.volt) : {},
+      p.role === 'gpio' && splitCaps(p.caps).length ? { caps: splitCaps(p.caps) } : {}, p.role !== 'gpio' && p.fn ? { fn: p.fn } : {})),
     bounds: { r: [B.r0, B.r1], c: [B.c0, B.c1] },
     graphics,
     meta: { editor: 1, form: JSON.parse(JSON.stringify(f)) },
@@ -177,7 +184,10 @@ const MODEL_FIELDS: Record<ModelKind, { pins: string[]; vals: string[] }> = {
   resistor: { pins: ['a', 'b'], vals: ['ohm'] }, diode: { pins: ['a', 'k'], vals: ['vf'] }, source: { pins: ['p', 'n'], vals: ['v'] },
   nmos: { pins: ['d', 'g', 's'], vals: ['vth', 'ron'] }, capacitor: { pins: ['a', 'b'], vals: ['f', 'vmax'] },
   motor: { pins: ['a', 'b'], vals: ['ohm', 'vnom'] }, npn: { pins: ['c', 'b', 'e'], vals: ['beta'] },
+  mcu: { pins: ['gnd', 'vsys', 'v33', 'vbus'], vals: ['vreg', 'vmax', 'igpio'] },
 };
+/** Képességlista szövegből: szóköz, vessző vagy pontosvessző választja el. */
+export const splitCaps = (s?: string): string[] => [...new Set(String(s || '').split(/[\s,;]+/).map(x => x.trim()).filter(Boolean))];
 
 /**
  * Leírásból űrlap (a JSON → Űrlap váltáshoz). `lost`: mi az, amit az űrlap nem tud visszaadni
@@ -200,7 +210,8 @@ export function defToForm(def: PartDef, base?: { form: Form; graphics: unknown; 
   for (const p of def.pins) {
     if (!p || p.repeat != null || typeof p.lr !== 'number' || typeof p.lc !== 'number') { lost.add('lábak (kifejezések, ismétlés vagy extra mezők)'); continue; }
     const volt = p.vmin != null || p.vmax != null ? `${p.vmin ?? ''}-${p.vmax ?? ''}` : '';
-    f.pins.push({ id: String(p.id), name: p.name != null ? String(p.name) : String(p.id), lr: p.lr, lc: p.lc, role: p.role || 'sig', group: gOf.get(String(p.id)) || '', ...(volt ? { volt } : {}) });
+    f.pins.push({ id: String(p.id), name: p.name != null ? String(p.name) : String(p.id), lr: p.lr, lc: p.lc, role: p.role || 'sig', group: gOf.get(String(p.id)) || '', ...(volt ? { volt } : {}),
+      ...(Array.isArray(p.caps) && p.caps.length ? { caps: p.caps.join(' ') } : {}), ...(p.fn ? { fn: String(p.fn) } : {}) });
   }
   f.model = [];
   f.logic = undefined;
@@ -218,7 +229,7 @@ export function defToForm(def: PartDef, base?: { form: Form; graphics: unknown; 
     const k = el.el as ModelKind, mf = MODEL_FIELDS[k];
     if (!mf) { lost.add('a villamos modell részletei'); continue; }
     const e = el as unknown as Record<string, unknown>;
-    f.model.push({ el: k, pins: mf.pins.map(x => String(e[x] ?? '')), vals: mf.vals.map((x, i) => (typeof e[x] === 'number' ? fmtSI(e[x] as number) : e[x] != null ? String(e[x]) : fmtSI(MODEL_UI[k].vals[i][3]))) });
+    f.model.push({ el: k, pins: mf.pins.map(x => String(e[x] ?? '')), vals: mf.vals.map((x, i) => (typeof e[x] === 'number' ? fmtSI(e[x] as number) : e[x] != null ? String(e[x]) : fmtSI(MODEL_UI[k].vals[i][3]))), ...(e.mux === 'matrix' ? { mux: 'matrix' as const } : {}) });
   }
   const press = (def.controls || []).find(c => c.kind === 'press') as { closes: string[][] } | undefined;
   f.press = press && press.closes[0] ? [press.closes[0][0], press.closes[0][1]] : null;
@@ -416,7 +427,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
           <span class="help" style="flex:1 1 100%;margin:0">A szerepet a névből tippeli (GND, VCC, VIN…), utána a táblázatban állítható.</span>
         </div>
         <div class="tablewrap"><table class="tbl pe-pins">
-          <thead><tr><th>Azon.</th><th>Név</th><th>Sor</th><th>Oszl.</th><th>Szerep</th><th title="Az azonos csoportú lábak gyárilag össze vannak kötve">Csoport</th><th title="Tápbemenetnél a megengedett feszültség, pl. 2.7-3.6">Táp (V)</th><th></th></tr></thead>
+          <thead><tr><th>Azon.</th><th>Név</th><th>Sor</th><th>Oszl.</th><th>Szerep</th><th title="Az azonos csoportú lábak gyárilag össze vannak kötve">Csoport</th><th title="Tápbemenetnél a megengedett feszültség, pl. 2.7-3.6">Táp (V)</th><th title="GPIO-nál a képességek (${CAP_HELP}); perifériánál a buszfunkció, amire a láb vár">Funkció</th><th></th></tr></thead>
           <tbody>${f.pins.map((p, i) => `<tr class="${i === sel ? 'on' : ''}" data-row="${i}">
             <td><input type="text" data-pin="${i}" data-k="id" value="${esc(p.id)}" style="width:48px" aria-label="azonosító"></td>
             <td><input type="text" data-pin="${i}" data-k="name" value="${esc(p.name)}" style="width:84px" aria-label="név"></td>
@@ -425,6 +436,8 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
             <td><select data-pin="${i}" data-k="role" aria-label="szerep">${ROLES.map(([v, l]) => opt(v, l, p.role)).join('')}</select></td>
             <td><input type="text" data-pin="${i}" data-k="group" value="${esc(p.group)}" style="width:52px" aria-label="csoport"></td>
             <td><input type="text" data-pin="${i}" data-k="volt" value="${esc(p.volt || '')}" placeholder="${p.role === 'vin' ? 'pl. 3-5.5' : '–'}" ${p.role === 'vin' ? '' : 'disabled title="Csak tápbemenetnél (vin) adható meg"'} style="width:64px" aria-label="tápfeszültség-tartomány"></td>
+            <td>${p.role === 'gpio' ? `<input type="text" data-pin="${i}" data-k="caps" value="${esc(p.caps || '')}" placeholder="pl. adc i2c0.sda" title="${CAP_HELP}" style="width:96px" aria-label="képességek">`
+              : `<select data-pin="${i}" data-k="fn" aria-label="buszfunkció">${opt('', '–', p.fn || '')}${BUS_FNS.map(x => opt(x, x.toUpperCase().replace('.', ' '), p.fn || '')).join('')}</select>`}</td>
             <td><button class="btn" data-act="delpin" data-i="${i}" aria-label="Láb törlése" title="Láb törlése">×</button></td></tr>`).join('')}</tbody>
         </table></div>
         ${f.pins.length ? '<p class="help">Az első láb lesz a lerakási pont (0:0); mentéskor a többi ehhez igazodik.</p>' : ''}
@@ -450,6 +463,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
           <select data-model="${i}" data-k="el" aria-label="elem típusa">${(Object.keys(MODEL_UI) as ModelKind[]).map(k => opt(k, MODEL_UI[k].label, m.el)).join('')}</select>
           ${MODEL_UI[m.el].pins.map(([, l], j) => `<label class="small">${esc(l)}</label><select data-model="${i}" data-k="pin${j}" aria-label="${esc(l)}">${pinOpts(f, m.pins[j] || '')}</select>`).join('')}
           ${MODEL_UI[m.el].vals.map(([, l, u], j) => `<label class="small">${esc(l)}</label><input type="text" data-model="${i}" data-k="val${j}" value="${esc(m.vals[j] ?? '')}" style="width:64px" aria-label="${esc(l)}"><span class="small muted">${u}</span>`).join('')}
+          ${m.el === 'mcu' ? `<label class="check small" title="ESP32-szerű lap: a buszfunkció bármely GPIO-ra kiosztható; a képességek ekkor az alapértelmezett lábak"><input type="checkbox" data-model="${i}" data-k="mux" ${m.mux === 'matrix' ? 'checked' : ''}> szabadon kiosztható buszok</label>` : ''}
           <button class="btn" data-act="delmodel" data-i="${i}" aria-label="Elem törlése">×</button></div>`).join('')}
         <button class="btn" data-act="addmodel" ${f.pins.length < 2 ? 'disabled' : ''}>+ Elem</button>
       </section>
@@ -800,14 +814,17 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       form.pins[+t.dataset.pin].role = t.value;
       const v = back.querySelector<HTMLInputElement>(`[data-pin="${t.dataset.pin}"][data-k="volt"]`);
       if (v) { v.disabled = t.value !== 'vin'; v.placeholder = t.value === 'vin' ? 'pl. 3-5.5' : '–'; v.title = t.value === 'vin' ? '' : 'Csak tápbemenetnél (vin) adható meg'; }
+      if ((t.value === 'gpio') !== !!back.querySelector(`[data-pin="${t.dataset.pin}"][data-k="caps"]`)) { render(); return; } // a Funkció oszlop átvált
       refresh(); return;
     }
     if (t.dataset.model != null) {
       const m = form.model[+t.dataset.model], k = t.dataset.k || '';
       if (k === 'el') { m.el = t.value as ModelKind; m.pins = MODEL_UI[m.el].pins.map((_, j) => m.pins[j] || ''); m.vals = MODEL_UI[m.el].vals.map(v => fmtSI(v[3])); render(); return; }
+      if (k === 'mux') { m.mux = t.checked ? 'matrix' : 'fixed'; refresh(); return; }
       if (k.startsWith('pin')) { m.pins[+k.slice(3)] = t.value; refresh(); }
       return;
     }
+    if (t.dataset.pin != null && t.dataset.k === 'fn') { form.pins[+t.dataset.pin].fn = t.value || undefined; refresh(); return; }
     if (t.dataset.press === 'on') { form.press = t.checked ? [form.pins[0]?.id || '', form.pins[1]?.id || ''] : null; render(); return; }
     if (t.dataset.press === '0' || t.dataset.press === '1') { if (form.press) form.press[+t.dataset.press] = t.value; refresh(); }
   });

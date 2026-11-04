@@ -17,27 +17,38 @@ const pcb = <T>(page: Page, body: string): Promise<T> => page.evaluate(`(() => {
 const part = (name: string, fill = '#1b4f8a') => ({ name, fp: '2 láb', prefix: 'X', pins: [{ id: '1', lr: 0, lc: 0, role: 'sig' }, { id: '2', lr: 0, lc: 1, role: 'gnd' }],
   graphics: [{ shape: 'rect', layer: 'body', r: [-0.6, 0.6], c: [-0.6, 1.6], fill, stroke: '#000' }] });
 
-test('terv fájlba és vissza: a saját alkatrészek a tervvel utaznak, a meglévők megmaradnak', async ({ page }, info) => {
+test('terv fájlba és vissza: a használt saját alkatrészek a tervvel utaznak, a fogadó könyvtára nem változik', async ({ page }, info) => {
   const t = await pcb<string>(page, `pcb.load({ board: { rows: 30, cols: 20, sec: 3 }, parts: [], bridges: [], wires: [], links: [], settings: {}, seq: 1 });
-    const t = pcb.addPart(${JSON.stringify(part('Barát modulja'))}).type; const d = pcb.get(); d.parts.push({ id: 'p1', type: t, label: 'X1', r: 5, c: 5, rot: 0, mir: false, props: {} }); pcb.load(d); return t;`);
+    const t = pcb.addPart(${JSON.stringify(part('Barát modulja'))}).type; pcb.addPart(${JSON.stringify(part('Nem használt'))});
+    const d = pcb.get(); d.parts.push({ id: 'p1', type: t, label: 'X1', r: 5, c: 5, rot: 0, mir: false, props: {} }); pcb.load(d); return t;`);
   await page.click('#accPlan summary');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bSaveFile')]);
   expect(dl.suggestedFilename()).toMatch(/^proofboard-terv-\d{8}\.json$/);
   const file = info.outputPath('terv.json');
   await dl.saveAs(file);
   const saved = JSON.parse(readFileSync(file, 'utf8'));
-  expect(Object.keys(saved.customParts)).toEqual([t]);
-  // "a haverom gépe": saját, más alkatrésze van, azonos kulcsú, de eltérő változattal is
+  expect(Object.keys(saved.customParts)).toEqual([t]); // csak a tervben használt alkatrész kerül a fájlba
+  // "a haverom gépe": tiszta böngésző, saját könyvtárral, benne azonos kulcsú, de eltérő alkatrésszel
+  await page.evaluate(() => localStorage.clear());
+  await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
   const r = await pcb<any>(page, `pcb.load({ board: { rows: 30, cols: 20, sec: 3 }, parts: [], bridges: [], wires: [], links: [], settings: {}, seq: 1 });
-    pcb.addPart(${JSON.stringify(part('Saját szenzorom'))});
-    const d = pcb.get(); d.customParts['${t}'] = ${JSON.stringify(part('Barát modulja', '#2f9e44'))}; pcb.load(d);
+    pcb.addPart(${JSON.stringify(part('Saját szenzorom'))}); pcb.addPart(${JSON.stringify(part('Barát modulja', '#2f9e44'))});
+    const before = pcb.library();
     const msg = pcb.importPlan(${JSON.stringify(saved)});
-    return { msg, keys: Object.keys(pcb.customParts()).sort(), names: Object.values(pcb.customParts()).map(x => x.name).sort(), placed: pcb.pins('X1').length, iss: pcb.issues().length };`);
+    return { msg, lib: Object.keys(pcb.library()).sort(), same: JSON.stringify(before) === JSON.stringify(pcb.library()), proj: Object.keys(pcb.projectParts()), type: pcb.get().parts[0].type, placed: pcb.pins('X1').length };`);
   expect(r.placed).toBe(2);
-  expect(r.keys).toEqual([t, t + '_2', 'c_sajat_szenzorom'].sort());
-  expect(r.names).toEqual(['Barát modulja', 'Barát modulja', 'Saját szenzorom']);
+  expect(r.same).toBe(true);
+  expect(r.lib).toEqual([t, 'c_sajat_szenzorom'].sort());
+  expect(r.proj).toEqual([t + '_2']);
+  expect(r.type).toBe(t + '_2');
   expect(r.msg).toContain('a tervvel 1 saját alkatrész jött');
-  expect(r.msg).toContain('a saját, azonos nevű változatod megmaradt: Barát modulja');
+  expect(r.msg).toContain(`Barát modulja → ${t}_2`);
+  // a terv alkatrésze a Projekt csoportban, ＋ gombbal a könyvtárba tehető
+  await page.click('[data-ltab="lib"]');
+  await expect(page.locator(`details[data-grp="proj"] [data-lib="${t}_2"]`)).toBeVisible();
+  await page.click(`[data-tolib="${t}_2"]`);
+  expect(Object.keys(await pcb<any>(page, 'return pcb.library();')).sort()).toEqual([t, t + '_2', 'c_sajat_szenzorom'].sort());
+  await expect(page.locator('details[data-grp="proj"]')).toHaveCount(0);
 });
 
 test('jegyzet: lerakás a Jegyzet eszközzel, szöveg, méret, mutató egy alkatrészre; mozgatás, visszavonás', async ({ page }) => {

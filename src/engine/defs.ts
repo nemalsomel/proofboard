@@ -8,10 +8,18 @@ import { PARTS } from '../parts/builtin';
 
 export const DEFS: Record<string, CompiledPart> = compileAll(PARTS);
 
-/** A saját alkatrészek fordítása a beépítettek mellé (a terv `customParts` mezőjéből). */
+/**
+ * Saját könyvtár: a felhasználó alkatrészei, a tervtől függetlenül (projektváltáskor is megmaradnak).
+ * A terv a ténylegesen használt saját alkatrészeit a `customParts` mezőjében hordozza (így megosztható).
+ */
+let LIBRARY: Record<string, PartDef> = {};
+export const libraryParts = (): Record<string, PartDef> => LIBRARY;
+export function setLibrary(parts: Record<string, PartDef>): void { LIBRARY = { ...parts }; }
+
+/** A regiszter: beépített + saját könyvtár + a terv saját alkatrészei (azonos kulcsnál a tervé az erősebb). */
 export function syncDefs(custom: Record<string, PartDef> | null | undefined): void {
   for (const k of Object.keys(DEFS)) if (!(k in PARTS)) delete DEFS[k];
-  for (const [k, d] of Object.entries(custom || {})) {
+  for (const [k, d] of [...Object.entries(LIBRARY), ...Object.entries(custom || {})]) {
     try { DEFS[k] = compilePart(k, { cat: 'Saját', ...d }); }
     catch (e) { console.warn('Saját alkatrész kihagyva:', k, e); }
   }

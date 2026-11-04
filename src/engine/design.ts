@@ -3,7 +3,7 @@ import type { PartDef } from '../core/schema';
 import { hasErrors, validatePartDef } from '../core/validate';
 import { PARTS } from '../parts/builtin';
 import type { Cut } from './board';
-import { DEFS, syncDefs } from './defs';
+import { DEFS, libraryParts, syncDefs } from './defs';
 import type { AutoBridge, Bridge, Design, Hole, Link, Note, Wire } from './types';
 
 /** Jegyzetszínek: [szín, név]. */
@@ -31,6 +31,9 @@ export function normalize(d: unknown): Design {
     if (!/^c_[a-z0-9_]+$/.test(k) || k in PARTS || hasErrors(validatePartDef(def))) continue;
     o.customParts[k] = def;
   }
+  // a tervben használt, de a leírásában hiányzó saját alkatrész a könyvtárból kerül bele (így a terv önálló marad)
+  const lib = libraryParts();
+  for (const p of (r.parts || []) as Raw[]) if (p && typeof p.type === 'string' && !(p.type in PARTS) && !(p.type in o.customParts) && lib[p.type]) o.customParts[p.type] = lib[p.type];
   syncDefs(o.customParts);
   o.parts = ((r.parts || []) as Raw[]).map((p, i) => {
     if (!DEFS[p.type]) throw new Error('ismeretlen alkatrész: ' + p.type);
@@ -62,6 +65,26 @@ export function normalize(d: unknown): Design {
   }
   o.seq = Math.max(r.seq || 1, ...o.parts.map(p => +String(p.id).replace(/\D/g, '') + 1 || 1), ...o.links.map(l => +String(l.id).replace(/\D/g, '') + 1 || 1));
   return o;
+}
+
+/**
+ * Megnyitott terv saját alkatrészei a saját könyvtárhoz képest: ha egy kulcs a könyvtárban más tartalommal már
+ * foglalt, a terv változata új kulcsot kap (`_2`…), és a terv alkatrészei is erre mutatnak; a könyvtár változatlan.
+ */
+export function rekeyAgainstLibrary(raw: Raw, lib: Record<string, PartDef>): { raw: Raw; renamed: Array<{ name: string; from: string; to: string }> } {
+  const inc = (raw && raw.customParts && typeof raw.customParts === 'object' ? raw.customParts : {}) as Record<string, PartDef>;
+  const out: Record<string, PartDef> = {}, map = new Map<string, string>(), renamed: Array<{ name: string; from: string; to: string }> = [];
+  const taken = (k: string) => k in lib || k in inc || k in out || k in PARTS;
+  for (const [k, def] of Object.entries(inc)) {
+    if (k in lib && JSON.stringify(lib[k]) !== JSON.stringify(def)) {
+      let n = 2;
+      while (taken(k + '_' + n)) n++;
+      const nk = k + '_' + n;
+      out[nk] = def; map.set(k, nk); renamed.push({ name: def.name, from: k, to: nk });
+    } else out[k] = def;
+  }
+  const parts = Array.isArray(raw.parts) ? (raw.parts as Raw[]).map(p => (p && map.has(p.type) ? { ...p, type: map.get(p.type) } : p)) : raw.parts;
+  return { raw: { ...raw, customParts: out, parts }, renamed };
 }
 
 /**

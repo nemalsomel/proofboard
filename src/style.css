@@ -106,7 +106,18 @@ textarea{width:100%;height:150px;resize:vertical;font-size:11px;margin-top:8px;b
 /* Saját alkatrészek a listában */
 .libitem{display:flex;gap:4px}
 .libitem>.btn:first-child{flex:1;min-width:0}
-.libitem>.btn:last-child{flex:none;padding:6px 9px}
+.libitem>.btn:not(:first-child){flex:none;padding:6px 9px;align-items:center;justify-content:center}
+.libitem>.btn.libfav{color:var(--muted)}
+.libitem>.btn.libfav.on{color:#d9a400;background:transparent}
+.lib-search{margin-bottom:8px}
+.lib-search input{width:100%;box-sizing:border-box;padding:7px 9px;font:inherit;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--fg)}
+.libgrp{margin:0 0 4px}
+.libgrp>summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;font:500 10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:5px 0}
+.libgrp>summary::-webkit-details-marker{display:none}
+.libgrp>summary::before{content:'▸';margin-right:6px;transition:transform .15s}
+.libgrp[open]>summary::before{transform:rotate(90deg)}
+.libgrp>summary>span:first-child{flex:1}
+.libgrp>.libitem{margin-bottom:4px}
 
 /* Alkatrész-szerkesztő */
 .pe-back{position:fixed;inset:0;z-index:50;background:rgba(10,14,12,.42);display:flex;align-items:center;justify-content:center;padding:16px}
@@ -128,6 +139,8 @@ textarea{width:100%;height:150px;resize:vertical;font-size:11px;margin-top:8px;b
 .pe-ext{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
 .pe-ext label{display:flex;gap:4px;align-items:center;color:var(--muted)}
 .pe-model{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.pe-model>input[type=text]{flex:0 0 64px;min-width:64px}
+.pe-model>select{max-width:100%}
 .pe-cv{width:100%;display:block;border-radius:8px;border:1px solid var(--line);cursor:crosshair}
 .pe-json{width:100%;height:420px;font:12px var(--mono);resize:vertical}
 .btn:disabled{opacity:.5;cursor:not-allowed}
