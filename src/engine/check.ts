@@ -5,6 +5,7 @@
 import { fmtSI } from '../core/expr';
 import type { PartInstance } from '../core/schema';
 import { DEFS, hasPress, isMcu, isOff } from './defs';
+import { plugOf } from './plug';
 import { inBoard, placedPins, xf } from './geometry';
 import { findPin, linkText, partGroups, type LinkState } from './links';
 import { fnCaps, fnName, fnWant, GPIO_MODES, hasAdc, hasCap, mcuMux, SPECIAL_CAPS } from './mcu';
@@ -39,6 +40,10 @@ export function checkAll(D: Design, { A0: A, AS, SIM, linkState }: CheckCtx): Is
   const inb = (r: number, c: number) => inBoard(D.board, r, c), at = (q: { r: number; c: number }): Hole[] => [[q.r, q.c]];
   const hasMcu = D.parts.some(p => isMcu(p));
   for (const p of D.parts) { const bp = A.byPart.get(p.id)!; if (!isOff(p) && bp.pins.every(q => !q.on)) add('warn', `${p.label}: teljesen a panelon kívül esik`, []); }
+  for (const p of D.parts) if (p.plug && !plugOf(D, p)) {
+    const h = D.parts.find(x => x.id === p.plug);
+    if (h) add('warn', `${p.label}: a ${h.label} csatlakozónak kevesebb lába van, mint a kábelnek (${DEFS[p.type].pins(p).length}), így nincs bedugva`, placedPins(h).map(q => [q.r, q.c] as Hole));
+  }
   const hole = new Map<string, NetPin[]>();
   for (const q of A.pins) { if (!q.on) continue; const k = q.r + ':' + q.c; if (!hole.has(k)) hole.set(k, []); hole.get(k)!.push(q); }
   for (const [k, a] of hole) if (a.length > 1) add('err', `Ütközés a ${k} lyukban: ${a.map(pinLabel).join(', ')}`, at(a[0]));

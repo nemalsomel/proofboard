@@ -74,7 +74,7 @@ test('példatár a Terv fülön: kategória, betöltés, visszavonás', async ({
   await expect(page.locator('.ex-item')).toHaveCount(3);
   await page.click('.ex-item[data-ex="servo"]');
   await expect(page.locator('#exMsg')).toContainText('Betöltve: Szervó');
-  expect(await pcb(page, `return pcb.get().parts.map(p => p.type).sort();`)).toEqual(['pico', 'servo']);
+  expect(await pcb(page, `return pcb.get().parts.map(p => p.type).sort();`)).toEqual(['header', 'pico', 'servo']); // a szervó kábele tüskesorba dugva
   await pcb(page, `pcb.undo();`);
   expect(await pcb(page, `return pcb.get().parts.map(p => p.type).sort();`)).toEqual(['elko', 'pico', 'res']);
 });

@@ -6,7 +6,9 @@ import type { PartInstance } from '../core/schema';
 import { buildLayout, type Layout } from './board';
 import { DEFS, isMcu } from './defs';
 import { inBoard, placedPins } from './geometry';
+import { plugPairs } from './plug';
 import type { Design, NetPin } from './types';
+
 
 export interface PartPins { pins: NetPin[]; map: Record<string, NetPin>; out: boolean }
 export interface Netlist {
@@ -66,6 +68,8 @@ export function analyze(D: Design, opts: AnalyzeOpts = {}): Netlist {
     if (opts.pressed && opts.pressed(p))
       for (const c of DEFS[p.type].def.controls || []) if (c.kind === 'press') for (const [a, b] of c.closes) if (m[a] && m[b]) uni(m[a].s, m[b].s);
   }
+  // csatlakozóba dugott külső alkatrész: lábanként egy hálózat a csatlakozó lábával
+  for (const p of D.parts) for (const [q, h] of plugPairs(D, p)) { const a = byPart.get(p.id)!.map[q.id], b = byPart.get(h.part.id)!.map[h.id]; if (a && b) uni(a.s, b.s); }
   // vezetékek: lyuk–lyuk, vagy kábel egy panelon kívüli kivezetéshez
   const offAt = new Map<string, number>();
   for (const q of pins) if (!q.on) offAt.set(q.r + ':' + q.c, q.s);

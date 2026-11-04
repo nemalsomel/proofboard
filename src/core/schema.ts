@@ -41,7 +41,8 @@ export interface ParamOption {
   [field: string]: unknown;
 }
 
-export type ParamType = 'value' | 'number' | 'int' | 'select' | 'color' | 'span';
+/** `names`: lábnevek vesszővel (szöveg); a lábak nevét sorrendben felülírja (pl. tüskesor: GND,VCC,SDA,SCL). */
+export type ParamType = 'value' | 'number' | 'int' | 'select' | 'color' | 'span' | 'names';
 
 export interface ParamDef {
   key: string;
@@ -162,6 +163,8 @@ export interface PinLabels {
   rename?: Record<string, string>;
   /** name módban: 'in' a test közepe felé, 'out' kifelé (alap: az `off` előjele szerint alá/fölé). */
   side?: 'in' | 'out';
+  /** Csak a megnevezett lábakat (ahol a név nem az azonosító) írja ki. */
+  named?: boolean;
 }
 
 export interface Bounds {
@@ -194,6 +197,13 @@ export interface PartDef {
    * a panel mellett áll, a lábai kivezetések, amelyekhez vezeték (kábel) köt be a panelra.
    */
   mount?: 'board' | 'off';
+  /**
+   * Csatlakozó (tüskesor, modul motorcsatlakozója): külső alkatrész kábele dugható bele, a külső alkatrész i. lába
+   * a csatlakozó i. lábával egy hálózat. `pins`: a csatlakozó lábai sorrendben (alap: az összes láb);
+   * `count`: a lábszámot tartó paraméter kulcsa (ilyen csatlakozó újonnan is készülhet a külső alkatrészhez,
+   * lábszáma a kábelé), `names`: a lábneveket tartó paraméter kulcsa (a kábel lábneveit kapja).
+   */
+  socket?: { pins?: string[]; count?: string; names?: string };
   /** Szerkesztői adatok (a futás figyelmen kívül hagyja), pl. az űrlap állapota. */
   meta?: Record<string, unknown>;
 }
@@ -223,6 +233,8 @@ export interface PartInstance {
   mir: boolean;
   props: Record<string, any>;
   xray?: boolean;
+  /** Külső alkatrésznél: a csatlakozó (tüskesor) példány azonosítója, amelybe a kábele be van dugva. */
+  plug?: string;
 }
 
 export interface Rect { r0: number; r1: number; c0: number; c1: number }

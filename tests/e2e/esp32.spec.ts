@@ -122,8 +122,11 @@ test('buszfunkciók: az I²C-kijelző egy buszra és megfelelő lábakra kerül;
   expect(r.pwm).toEqual(['GP0 és GP1 ugyanazon a PWM-szeleten (PWM0) van, csak azonos frekvenciával működhetnek (most: 1000 Hz, 50 Hz).']);
 });
 
-test('kábel a modul csatlakozójába: a léptetőmotor kábelei a ULN2003 kimeneti lábain végződnek', async ({ page }) => {
-  const r = await pcb<any>(page, `pcb.example('stepper'); const d = pcb.get(), u = pcb.pins('U1'), at = id => { const q = u.find(x => x.id === id); return q.r + ':' + q.c; };
-    const ends = d.auto.wires.map(w => w.b.join(':')); return { ends, want: ['A', 'B', 'C', 'D', 'COM'].map(at) };`);
-  for (const w of r.want) expect(r.ends).toContain(w);
+test('kábel a modul csatlakozójába: a léptetőmotor a ULN2003 motorcsatlakozójába dugva, vezeték nélkül', async ({ page }) => {
+  const r = await pcb<any>(page, `pcb.example('stepper'); return { plug: pcb.plug('M1'), wires: pcb.get().auto.wires.length, links: pcb.links().length, iss: pcb.issues().length };`);
+  expect(r.plug.header).toBe('U1');
+  expect(r.plug.pins.map((x: any) => x.from + '>' + x.to)).toEqual(['A>A', 'B>B', 'C>C', 'D>D', 'COM>COM']);
+  expect(r.wires).toBe(0);
+  expect(r.links).toBe(6); // a motor → csatlakozó kapcsolatokat a dugó váltja ki
+  expect(r.iss).toBe(0);
 });

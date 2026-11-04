@@ -1,6 +1,7 @@
 /** Kapcsolatok (links): lábhivatkozások feloldása, egyenértékű lábak, feliratok és a bekötöttségi állapot. */
 import type { PartInstance } from '../core/schema';
 import { DEFS, isMcu, isOff } from './defs';
+import { plugOf } from './plug';
 import { placedPins } from './geometry';
 import { hasCap } from './mcu';
 import { pinLabel, type Netlist } from './netlist';
@@ -66,7 +67,7 @@ export function linkStates(D: Design, A: Netlist): Map<string, LinkState> {
       } else ok = pinNet(l.b) === na;
     }
     const nb = D.auto.bridges.filter(b => (b[4] || []).includes(l.id)).length, wire = D.auto.wires.some(w => (w.links || []).includes(l.id));
-    const offRef = (ref: string) => { const q = findPin(D, ref); return !!q && isOff(q.part); };
+    const offRef = (ref: string) => { const q = findPin(D, ref); return !!q && isOff(q.part) && !plugOf(D, q.part); }; // csatlakozóba dugva nem szabad kábel
     out.set(l.id, { ok, gpio: gp ? gp.name : null, gpioRef: gp ? gp.part.id + '.' + gp.id : null, nb, wire, cable: offRef(l.a) || offRef(l.b) });
   }
   return out;

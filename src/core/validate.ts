@@ -11,7 +11,7 @@ export interface Problem {
 }
 
 const SHAPES = new Set(['rect', 'circle', 'poly', 'line', 'text', 'axial', 'radial', 'link', 'dial']);
-const PARAM_TYPES = new Set(['value', 'number', 'int', 'select', 'color', 'span']);
+const PARAM_TYPES = new Set(['value', 'number', 'int', 'select', 'color', 'span', 'names']);
 /** A modell-elemek lábhivatkozásai. */
 export const MODEL_PINS: Record<ModelEl['el'], string[]> = {
   resistor: ['a', 'b'],
@@ -167,6 +167,18 @@ export function validatePartDef(def: unknown): Problem[] {
       });
     }
   });
+
+  // csatlakozó: a lábszám- és lábnév-paraméter létezzen
+  if (d.socket != null) {
+    const pk = (k: unknown, t: string[]) => (d.params || []).find(x => x.key === k && t.includes(x.type));
+    if (!isObj(d.socket)) err('socket', 'A csatlakozó leírása objektum.');
+    else {
+      if (d.socket.count != null && !pk(d.socket.count, ['int'])) err('socket.count', 'A csatlakozó lábszámához egész (int) paraméter kell.');
+      if (d.socket.names != null && !pk(d.socket.names, ['names'])) err('socket.names', 'A csatlakozó lábneveihez names típusú paraméter kell.');
+      if (d.socket.pins != null && (!Array.isArray(d.socket.pins) || !d.socket.pins.length)) err('socket.pins', 'A csatlakozó lábainak listája nem lehet üres.');
+      else for (const id of d.socket.pins || []) if (!ids.has(id)) err('socket.pins', `A csatlakozóban nincs ilyen láb: ${id}`);
+    }
+  }
 
   // vezérlők
   (d.controls || []).forEach((c, i) => {

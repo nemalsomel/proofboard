@@ -8,6 +8,7 @@ export function penvD(def: PartDef, p: HasProps): Env {
   const pp = p.props || {};
   const e: Env = { label: p.label, $opt: {} };
   for (const pr of def.params || []) {
+    if (pr.type === 'names') { const v = pp[pr.key] ?? pr.default; e[pr.key] = typeof v === 'string' ? v : ''; continue; }
     if (pr.type === 'span') {
       let dr = Math.round(+(pp.dr ?? pr.default[0])) || 0;
       let dc = Math.round(+(pp.dc ?? pr.default[1])) || 0;
@@ -68,6 +69,8 @@ export function compilePart(type: string, def: PartDef): CompiledPart {
         for (let i = 0; i < n; i++) out.push(mkPin(sp, { ...env, i }));
       } else out.push(mkPin(sp, env));
     }
+    // lábnevek paraméterből (vesszővel): sorrendben felülírják a lábak nevét
+    for (const pr of def.params || []) if (pr.type === 'names') String(env[pr.key] || '').split(',').forEach((n, i) => { const t = n.trim(); if (t && out[i]) out[i].name = t; });
     cache.set(p, { key, pins: out });
     return out;
   };

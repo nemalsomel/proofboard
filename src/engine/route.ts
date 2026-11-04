@@ -11,6 +11,7 @@ import { inBoard, placedPins, xf } from './geometry';
 import { findPin, partGroups } from './links';
 import { fnCaps, fnPenalty, gpioFits, gpioPenalty, hasCap, mcuMux } from './mcu';
 import { layoutOf, type Netlist } from './netlist';
+import { plugAlias } from './plug';
 import type { AutoBridge, Bridge, Design, Hole, Link, PlacedPin, Wire } from './types';
 
 /** Csíkos panelen (teljes csík) alapból automatikus a vágás. */
@@ -31,18 +32,19 @@ export function suggestCuts(D: Design): Cut[] {
     const g = partGroups(p);
     for (const q of placedPins(p)) if (inb(q.r, q.c)) pins.push({ q, key: isMcu(q.part) && q.role === 'gnd' ? 'GND' : p.id + ':' + g[q.id] });
   }
-  const keyOf = (ref: string) => { const q = findPin(D, ref); if (!q) return null; return isMcu(q.part) && q.role === 'gnd' ? 'GND' : q.part.id + ':' + partGroups(q.part)[q.id]; };
+  const AL = plugAlias(D); // csatlakozóba dugott külső láb → a csatlakozó lába
+  const keyOf = (ref: string) => { const q = findPin(D, AL(ref)); if (!q) return null; return isMcu(q.part) && q.role === 'gnd' ? 'GND' : q.part.id + ':' + partGroups(q.part)[q.id]; };
   const L0 = buildLayout(D.board, D.cuts || []), claimed = new Set(D.links.filter(l => l.b !== 'GPIO' && l.b !== 'GND').map(l => [l.a, l.b]).flat());
   for (const l of D.links) {
     const a = keyOf(l.a);
     if (!a) continue;
     if (l.b === 'GND') u(a, 'GND');
     else if (l.b === 'GPIO') {
-      const qa = findPin(D, l.a);
-      if (!qa || !inb(qa.r, qa.c)) continue;
-      const an = qa.role === 'adc', cell = L0.cell(qa.r, qa.c);
+      const qa = findPin(D, AL(l.a)), qm = findPin(D, l.a);
+      if (!qa || !qm || !inb(qa.r, qa.c)) continue;
+      const an = qm.role === 'adc', cell = L0.cell(qa.r, qa.c);
       const same = pins.map(x => x.q).filter(q => gpioFits(q, an) && !claimed.has(q.part.id + '.' + q.id) && L0.cell(q.r, q.c) === cell)
-        .sort((x, y) => gpioPenalty(x) + fnPenalty(qa.fn, x) - gpioPenalty(y) - fnPenalty(qa.fn, y) || Math.abs(x.r - qa.r) - Math.abs(y.r - qa.r));
+        .sort((x, y) => gpioPenalty(x) + fnPenalty(qm.fn, x) - gpioPenalty(y) - fnPenalty(qm.fn, y) || Math.abs(x.r - qa.r) - Math.abs(y.r - qa.r));
       const pref = l.gpio ? same.find(q => q.part.id + '.' + q.id === l.gpio) : undefined, g = pref || same[0];
       if (g) { const ref = g.part.id + '.' + g.id; claimed.add(ref); l.gpio = ref; u(a, keyOf(ref)!); }
     } else { const b = keyOf(l.b); if (b) u(a, b); }
@@ -70,7 +72,17 @@ export function route(D: Design, opts: RouteOpts = {}): void {
   const allPins: PlacedPin[] = [];
   for (const p of D.parts) for (const q of placedPins(p)) if (inb(q.r, q.c)) allPins.push(q);
   const pinByRef = new Map(allPins.map(q => [q.part.id + '.' + q.id, q]));
-  const links = D.links.filter(l => pinByRef.has(l.a) && (l.b === 'GND' || l.b === 'GPIO' || pinByRef.has(l.b)));
+  // csatlakozóba dugott külső alkatrész: a kapcsolat a csatlakozó lábáról indul; a láb szerepe, buszfunkciója az eredetié
+  const AL = plugAlias(D), ORIG = new Map<string, string>(), back: Array<[Link, Link]> = [];
+  const RL = D.links.map(l => {
+    const a = AL(l.a), b = l.b === 'GND' || l.b === 'GPIO' ? l.b : AL(l.b);
+    if (a === l.a && b === l.b) return l;
+    if (a !== l.a) ORIG.set(a, l.a);
+    if (b !== l.b) ORIG.set(b, l.b);
+    const x = { ...l, a, b }; back.push([x, l]); return x;
+  });
+  const metaPin = (ref: string): PlacedPin | null | undefined => (ORIG.has(ref) ? findPin(D, ORIG.get(ref)!) : pinByRef.get(ref));
+  const links = RL.filter(l => pinByRef.has(l.a) && (l.b === 'GND' || l.b === 'GPIO' || pinByRef.has(l.b)));
   const valid = new Set(links.map(l => l.id));
   const pinHoles = new Set(allPins.map(q => q.r + ':' + q.c));
   const PG = new Map(D.parts.map(p => [p.id, partGroups(p)]));
@@ -106,7 +118,7 @@ export function route(D: Design, opts: RouteOpts = {}): void {
   const isGnd = (qs: PlacedPin[] | undefined) => !!qs && qs.some(q => isMcu(q.part) && q.role === 'gnd');
   const freeGpio = (qs: PlacedPin[] | undefined, r: number, S: RouteState): qs is PlacedPin[] =>
     !!qs && qs.length === 1 && isMcu(qs[0].part) && qs[0].role === 'gpio' && S.sz[r] === 1;
-  const needAdc = (l: Link) => (pinByRef.get(l.a) || { role: '' }).role === 'adc';
+  const needAdc = (l: Link) => (metaPin(l.a) || { role: '' }).role === 'adc';
   // konkrét lábra mutató kapcsolat célja (pl. „→ GPIO25”): szabad GPIO-célnak nem választható
   const claimedG = new Set(links.filter(l => l.b !== 'GND' && l.b !== 'GPIO').flatMap(l => [l.a, l.b]));
   const srcOf = (S: RouteState, l: Link) => { const qa = pin(l.a); return S.find(cellOf(qa.r, qa.c)); };
@@ -171,13 +183,13 @@ export function route(D: Design, opts: RouteOpts = {}): void {
   const geo = (a: number, b: number) => LY.edge(a, b)!.br;
   // ugyanannak a perifériának a már bekötött, azonos buszú (I²C/SPI/UART) lábai: melyik buszszámon vannak
   const busOf = (S: RouteState, I: Info, l: Link): Set<string> | null => {
-    const a = pinByRef.get(l.a);
+    const a = metaPin(l.a);
     if (!a || !a.fn || l.b !== 'GPIO') return null;
     const bt = a.fn.split('.')[0];
     const sets: Array<Set<string>> = [];
     for (const o of links) {
       if (o === l || o.b !== 'GPIO') continue;
-      const x = pinByRef.get(o.a);
+      const x = metaPin(o.a);
       if (!x || x.part !== a.part || !x.fn || x.fn.split('.')[0] !== bt) continue;
       const g = (I.get(srcOf(S, o)) || []).find(q => isMcu(q.part) && q.role === 'gpio');
       if (!g) continue;
@@ -188,7 +200,7 @@ export function route(D: Design, opts: RouteOpts = {}): void {
   };
 
   function routeOne(S: RouteState, l: Link): { ok: boolean; n?: number } {
-    const I = info(S), src = srcOf(S, l), busPref = busOf(S, I, l), fnA = (pinByRef.get(l.a) || { fn: undefined }).fn;
+    const I = info(S), src = srcOf(S, l), busPref = busOf(S, I, l), fnA = (metaPin(l.a) || { fn: undefined }).fn;
     if (sat(S, l, I)) return { ok: true, n: 0 };
     const pred = predFor(S, l, I);
     const spare = l.b === 'GPIO' && !needAdc(l); // az ADC-képes GPIO-kat az analóg jeleknek tartogatja
@@ -277,7 +289,7 @@ export function route(D: Design, opts: RouteOpts = {}): void {
       {
         const I = info(S);
         for (const l of links) {
-          const a = pinByRef.get(l.a);
+          const a = metaPin(l.a);
           if (!a || !a.fn || l.b !== 'GPIO') continue;
           const g = (I.get(srcOf(S, l)) || []).find(q => isMcu(q.part) && q.role === 'gpio');
           if (!g || mcuMux(g.part) === 'matrix') continue;
@@ -342,7 +354,7 @@ export function route(D: Design, opts: RouteOpts = {}): void {
   // kábelek: külső kivezetés → a cél szekciójának (vagy hálózatának) szabad lyuka, a kivezetéshez legközelebb
   const offByRef = new Map<string, PlacedPin>();
   for (const p of D.parts) if (isOff(p)) for (const q of placedPins(p)) offByRef.set(p.id + '.' + q.id, q);
-  const cables = D.links.filter(l => offByRef.has(l.a) || offByRef.has(l.b)).sort((x, y) => prio(x) - prio(y));
+  const cables = RL.filter(l => offByRef.has(l.a) || offByRef.has(l.b)).sort((x, y) => prio(x) - prio(y));
   const takenG = new Set<number>();
   // a panelra ültetett alkatrészek teste: a kábel vége lehetőleg ne kerüljön alá
   const bodies = D.parts.filter(p => !isOff(p)).map((p: PartInstance) => {
@@ -407,6 +419,7 @@ export function route(D: Design, opts: RouteOpts = {}): void {
     const g = (I.get(srcOf(S, l)) || []).find(q => isMcu(q.part) && q.role === 'gpio' && (!an || hasCap(q, 'adc')));
     if (g) l.gpio = g.part.id + '.' + g.id;
   }
+  for (const [x, l] of back) l.gpio = x.gpio;
 }
 
 /**

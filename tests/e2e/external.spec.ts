@@ -94,7 +94,8 @@ test('felület: a motor csak a panel mellé rakható, vezeték köthető a kivez
   await page.click('[data-lib="motor"]');
   await at(50, 10); // a panelon: nem rakható le
   await at(56, -6); // mellette: igen
-  expect(await pcb(page, `return pcb.get().parts.map(p => p.label + '@' + p.r + ':' + p.c);`)).toEqual(['M1@56:-6']);
+  expect(await pcb(page, `return pcb.get().parts.map(p => p.label + '@' + p.r + ':' + p.c)[0];`)).toBe('M1@56:-6');
+  expect((await pcb<any>(page, `return pcb.plug('M1');`)).header).toBe('J1'); // a kábel tüskesorba dugva
   await page.keyboard.press('Escape');
   await page.keyboard.press('w');
   await at(56, -6);
