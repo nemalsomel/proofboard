@@ -44,9 +44,13 @@ npm run build:single # egyetlen önálló HTML-fájl (dist-single/index.html)
 ```
 src/core/     séma (típusok), kifejezés-értelmező, logikai kifejezések (értelmező, kapufa, igazságtábla, Quine–McCluskey), lábnév-elhelyezés, alkatrész-fordító, leírás-ellenőrző, könyvtárformátum — tiszta, típusos
 src/parts/    beépített alkatrészleírások (adat)
-src/engine/   egyenletmegoldó (csomóponti analízis), panel-elrendezés (csíkdarabok, vágások, vágásjavaslat)
-src/ui/       alkatrész-szerkesztő
-src/app.ts    felület, netlista, szimuláció, ellenőrzés, útvonalkereső — folyamatosan bomlik modulokra
+src/engine/   típusos, DOM-mentes motor:
+                types (terv), defs (alkatrész-regiszter), geometry, mcu (GPIO-képességek, buszfunkciók),
+                board (csíkdarabok, vágások), netlist, solve (csomóponti analízis), simulate (PWM, logika, léptető),
+                links, check (ellenőrzés), route (útvonalkereső, csíkvágás, kézi→automatikus),
+                design (beolvasás, üres terv), signal (Jelsorozat), swap (vezérlőcsere), presets (regressziós minták)
+src/ui/       alkatrész-szerkesztő, logikai nézetek, példatár
+src/app.ts    felület: rajzolás, egér- és érintéskezelés, oldalsávok, panelek, window.pcb API (még típus nélkül)
 tests/unit/   Vitest
 tests/e2e/    Playwright, a window.pcb API-n keresztül
 ```
