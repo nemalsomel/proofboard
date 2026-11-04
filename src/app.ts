@@ -48,7 +48,10 @@ const ledLevel=I=>Math.sqrt(Math.max(0,Math.min(1,I/0.015)));
 const rgba=(hex,a)=>{const n=parseInt(hex.slice(1),16);return`rgba(${n>>16},${(n>>8)&255},${n&255},${a})`;};
 const ROLEC={out:'#e8590c',c:'#868e96',cp:'#e03131',cn:'#1f2328',col:'#5c666e',base:'#2563eb',emit:'#1f2328',vin:'#d6336c',pout:'#e8590c',chg:'#e8590c',sig:'#2563eb',adc:'#0ca678',nc:'#adb5bd',j:'#aeb5bb',s:'#1f2328',g:'#2563eb',d:'#868e96',A:'#2563eb',B:'#d97706',an:'#e03131',ka:'#1f2328',gnd:'#1f2328',p33:'#e03131',pwr:'#be4bdb',gpio:'#2563eb',misc:'#868e96',r:'#868e96',h:'#868e96',bp:'#e03131',bn:'#1f2328'};
 const WCOL=[['#1c7ed6','kék'],['#e03131','piros'],['#212529','fekete'],['#f59f00','sárga'],['#2f9e44','zöld'],['#f1f3f5','fehér'],['#e8590c','narancs']];
-const TOOLS=[['select','Kijelölés','V'],['bridge','Híd','B'],['wire','Vezeték','W'],['link','Kapcsolat','C'],['cut','Csíkvágás','K'],['note','Jegyzet','J'],['erase','Törlés','E'],['pan','Mozgatás','H']];
+/** Eszközök: azonosító, név, gyorsbillentyű, ikon, súgó. */
+const TOOLS=[['select','Kijelölés','V','tSelect','Kijelölés és mozgatás; Shift+kattintás vagy keret: több elem'],['bridge','Híd','B','tBridge','Forrasztóhíd szomszédos lyukak között (húzással több is)'],['wire','Vezeték','W','tWire','Huzal két tetszőleges lyuk között'],['link','Kapcsolat','C','tLink','Két láb összekötése; az útvonalat a program keresi meg'],['cut','Csíkvágás','K','tCut','A réz megszakítása két lyuk között, vagy egy lyuk kifúrása'],['note','Jegyzet','J','tNote','Szöveges cédula a panelon'],['erase','Törlés','E','tErase','Kattintásra vagy húzással töröl'],['pan','Mozgatás','H','tHand','A nézet mozgatása (Szóköz + húzás is)']];
+/** Szimulációban is használható eszközök. */
+const SIM_TOOLS=new Set(['select','pan']);
 
 /* ---------- Állapot ---------- */
 let D, A0, AS, SIM, ISSUES=[];
@@ -63,6 +66,7 @@ const autoCutOn=()=>autoCutOnOf(D);
 /** A lyuk csíkdarabja: [kezdő sor, záró sor]. */
 const segOf=(r,c)=>{const L=LAY(),s=L.segs[L.cell(r,c)];return s;};
 const EXT=8; // ennyi lyuknyit lóghat ki egy alkatrész a panelról
+const NEXT=24; // a vászon ennyi lyuknyit mutat a panel körül (jegyzeteknek, magyarázatnak)
 const inCanvas=(r,c)=>r>=-EXT-0.5&&c>=-EXT-0.5&&r<=D.board.rows+EXT-0.5&&c<=D.board.cols+EXT-0.5;
 const isOff=p=>DEFS[p.type].def.mount==='off';
 function partFits(p){const g=gpins(p);
@@ -103,7 +107,7 @@ function L(p,lr,lc){const[r,c]=xf(p,lr,lc);return[hx(c),hy(r)];}
 function poly(p,r0,r1,c0,c1){const pts=[L(p,r0,c0),L(p,r0,c1),L(p,r1,c1),L(p,r1,c0)];ctx.beginPath();ctx.moveTo(...pts[0]);for(let i=1;i<4;i++)ctx.lineTo(...pts[i]);ctx.closePath();}
 function vdir(p,dr,dc){const[r,c]=xv(p,dr,dc);return[cu()?-c:c,r];}
 function resize(){
-  P=Math.round(14*ui.zoom);M=32+EXT*P;dpr=window.devicePixelRatio||1;
+  P=Math.round(14*ui.zoom);M=32+NEXT*P;dpr=window.devicePixelRatio||1;
   let W=bw(),H=bh();if(VR()&1){const t=W;W=H;H=t;}
   cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';
   // szabad vászon: a panel körül a látómező nagyjának megfelelő üres tér, így bárhová húzható
@@ -359,7 +363,7 @@ function addBridge(r1,c1,r2,c2){if(!inb(r1,c1)||!inb(r2,c2))return false;if(LAY(
 function onDown(ev,hAt){
   const h=hAt||toHole(ev);ui.hover=h;
   if(ui.tool==='pan'){ui.drag={kind:'pan',x:ev.clientX,y:ev.clientY};cv.setPointerCapture(ev.pointerId);return;}
-  if(ui.sim){const p=hitPart(h.rf,h.cf);if(p&&hasPress(p)){if(D.settings.btnMode==='toggle')ui.pressed[p.id]=!ui.pressed[p.id];else{ui.pressed[p.id]=true;ui.holdPtr.set(ev.pointerId,p.id);cv.setPointerCapture(ev.pointerId);}recompute();}return;}
+  if(ui.sim){const p=hitPart(h.rf,h.cf);if(!(p&&hasPress(p))){if(ui.tool==='select'){ui.sel=p?grp([p.id]):null;renderLeft();draw();}return;}if(p&&hasPress(p)){if(D.settings.btnMode==='toggle')ui.pressed[p.id]=!ui.pressed[p.id];else{ui.pressed[p.id]=true;ui.holdPtr.set(ev.pointerId,p.id);cv.setPointerCapture(ev.pointerId);}recompute();}return;}
   if(ui.placing){const g=ghostPart(h);if(!partFits(g))return;pushUndo();useInProject(ui.placing);libRecent(ui.placing);const p={...g,id:'p'+(D.seq++),label:nextLabel(ui.placing)};if(!p.xray)delete p.xray;D.parts.push(p);if(isOff(p))attachPlug(p);
     if(ev.shiftKey){commit();return;} // Shift: további példányok
     ui.sel=grp([p.id]);ui.placing=null;setTool('select');commit();return;}
@@ -437,7 +441,7 @@ function onMove(ev,hAt){
   if(d&&d.kind==='pan'){const sc=$('#scroll');sc.scrollLeft-=ev.clientX-d.x;sc.scrollTop-=ev.clientY-d.y;d.x=ev.clientX;d.y=ev.clientY;return;}
   if(d&&d.kind==='box'){d.h1=h;draw();return;}
   if(d&&(d.kind==='nmove'||d.kind==='nsize')){const dr=Math.round(h.rf-d.h0.rf),dc=Math.round(h.cf-d.h0.cf);
-    const nr=d.kind==='nmove'?Math.max(-EXT,Math.min(D.board.rows+EXT-2,d.r0+dr)):d.n.r,nc=d.kind==='nmove'?Math.max(-EXT,Math.min(D.board.cols+EXT-2,d.c0+dc)):d.n.c;
+    const nr=d.kind==='nmove'?Math.max(-NEXT,Math.min(D.board.rows+NEXT-2,d.r0+dr)):d.n.r,nc=d.kind==='nmove'?Math.max(-NEXT,Math.min(D.board.cols+NEXT-2,d.c0+dc)):d.n.c;
     const nw=d.kind==='nsize'?Math.max(3,Math.min(60,d.w0+dc)):d.n.w,nh=d.kind==='nsize'?Math.max(2,Math.min(60,d.h0n+dr)):d.n.h;
     if(nr!==d.n.r||nc!==d.n.c||nw!==d.n.w||nh!==d.n.h){if(!d.pushed){pushUndo();d.pushed=true;}Object.assign(d.n,{r:nr,c:nc,w:nw,h:nh});draw();}return;}
   if(d&&d.kind==='gmove'){let dr=h.r-d.h0.r,dc=h.c-d.h0.c,g=0;
@@ -579,7 +583,7 @@ function rtab(name,remember=true){ui.rtab=name;
   document.querySelectorAll('[data-rtab]').forEach(b=>{const on=b.dataset.rtab===name;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
   document.querySelectorAll('[data-rpane]').forEach(p=>{p.hidden=p.dataset.rpane!==name;});
   document.querySelectorAll('[data-rail-rtab]').forEach(b=>b.classList.toggle('on',b.dataset.railRtab===name));
-  if(remember)layPatch({rtab:name});}
+  if(remember&&name!=='props')layPatch({rtab:name});}
 document.querySelector('.right .rtabs').addEventListener('click',e=>{const b=e.target.closest('[data-rtab]');if(b)rtab(b.dataset.rtab);});
 document.querySelector('.right .rtabs').addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;const ts=[...document.querySelectorAll('[data-rtab]')],i=ts.findIndex(b=>b.classList.contains('on')),n=ts[(i+(e.key==='ArrowRight'?1:ts.length-1))%ts.length];rtab(n.dataset.rtab);n.focus();e.preventDefault();});
 document.querySelectorAll('details.acc').forEach(d=>{const st=(uiPref().acc||{})[d.id];if(st!=null)d.open=!!st;d.addEventListener('toggle',()=>uiPrefSet({acc:{...(uiPref().acc||{}),[d.id]:d.open}}));});
@@ -664,7 +668,7 @@ document.addEventListener('keydown',ev=>{
   if(k==='t'){rotView();return;}
   if(k==='0'){fitView();return;}
   if(k==='p'){bottomPanel();return;}
-  if(ui.sim)return;
+  if(ui.sim){const tool=TOOLS.find(x=>x[2].toLowerCase()===k&&SIM_TOOLS.has(x[0]));if(tool)setTool(tool[0]);return;}
   const tool=TOOLS.find(x=>x[2].toLowerCase()===k);if(tool){setTool(tool[0]);return;}
   if(k==='r')rotate();else if(k==='m')mirror();else if(k==='delete'||k==='backspace')delSel();else if(k==='d'){const p=selPart();if(p)duplicate(p);}else if(k==='x'){toggleXray();}
 });
@@ -726,7 +730,7 @@ function bindParams(root,p){
   });
 }
 function renderLeft0(){
-  $('#tools').innerHTML=TOOLS.map(([id,l,k])=>`<button class="btn ${ui.tool===id&&!ui.placing?'on':''}" data-tool="${id}" title="${l} (${k})" aria-keyshortcuts="${k}" ${ui.sim?'disabled':''}>${l}<kbd>${k}</kbd></button>`).join('');
+  $('#tools').innerHTML=TOOLS.map(([id,l,k,ic,h])=>`<button class="btn tool ${ui.tool===id&&!ui.placing?'on':''}" data-tool="${id}" title="${l} (${k}) – ${h}" aria-label="${l}" aria-keyshortcuts="${k}" ${ui.sim&&!SIM_TOOLS.has(id)?'disabled':''}><span class="ti">${icon(ic)}<kbd>${k}</kbd></span><span class="tl">${l}</span></button>`).join('');
   renderLib();
   $('#wireColorRow').hidden=ui.tool!=='wire'||!!ui.placing;
   {const g=isGroup()?ui.sel:null,sp=selPart();$('#selSumm').textContent=sp?sp.label:g&&gSize(g)?`${gSize(g)} elem`:ui.sel&&ui.sel.kind==='wire'?'vezeték':ui.sel&&ui.sel.kind==='bridge'?'híd':ui.sel&&ui.sel.kind==='note'?'jegyzet':'';}
@@ -1032,12 +1036,13 @@ let LAY_S=(()=>{let raw=null;try{raw=JSON.parse(localStorage.getItem(LAYKEY)||'n
   return parseStore(raw,{l:!!o.colL,r:!!o.colR,...(['board','prog','split'].includes(o.work)?{work:o.work}:{})});})();
 function layStore(){try{localStorage.setItem(LAYKEY,JSON.stringify(LAY_S));}catch(e){}}
 function layUI(){document.querySelectorAll('[data-layout]').forEach(b=>{const on=b.dataset.layout===LAY_S.cur;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});
-  $('#layReset').hidden=!isCustom(LAY_S);}
+  $('#layReset').hidden=!isCustom(LAY_S);const c=$('.app').classList;for(const l of LAYOUTS)c.toggle('lay-'+l.id,l.id===LAY_S.cur);}
 /** Kézi módosítás a mostani elrendezésben (oldalsáv, alsó panel, nézet, jobb fül). */
 function layPatch(o){if(ui.layApplying)return;LAY_S=layRemember(LAY_S,o);layStore();layUI();}
 function applyLayout(id,store=true,over){if(!isLayout(id))id='design';const r=laySwitch(LAY_S,id);LAY_S=r.store;const st={...r.state,...(over||{})};ui.layApplying=true;
   try{sideCollapse('l',st.l,false);sideCollapse('r',st.r,false);setWork(MOB.matches&&st.work==='split'?'prog':st.work,false);rtab(st.rtab,false);bottomPanel(st.bottom,null,false);}
   finally{ui.layApplying=false;}
+  if(id!=='design'&&!SIM_TOOLS.has(ui.tool))setTool('select'); // a Program és a Szimuláció elrendezésben csak Kijelölés és Mozgatás
   if(store)layStore();layUI();return id;}
 document.querySelectorAll('[data-layout]').forEach(b=>b.addEventListener('click',()=>applyLayout(b.dataset.layout)));
 $('#layReset').onclick=()=>{LAY_S=resetLayout(LAY_S);applyLayout(LAY_S.cur);};
@@ -1058,12 +1063,12 @@ function btab(t,remember=true){ui.btab=t==='log'?'log':'issues';
   if(remember)uiPrefSet({btab:ui.btab});if(ui.btab==='log'&&$('#bpanel').classList.contains('open'))setTimeout(logRead,1500);}
 /** Az alsó panel nyitása/csukása (elhagyva: vált), opcionálisan fülváltással. */
 function bottomPanel(open,tab,remember=true){const bp=$('#bpanel');if(open==null)open=!bp.classList.contains('open');open=!!open;
-  bp.classList.toggle('open',open);const t=$('#bpTog');t.setAttribute('aria-expanded',String(open));t.setAttribute('aria-label',open?'Alsó panel összecsukása':'Alsó panel kinyitása');
+  bp.classList.toggle('open',open);{const b=$('#colB');b.classList.toggle('on',open);b.setAttribute('aria-pressed',String(open));}const t=$('#bpTog');t.setAttribute('aria-expanded',String(open));t.setAttribute('aria-label',open?'Alsó panel összecsukása':'Alsó panel kinyitása');
   if(tab)btab(tab);else if(open&&ui.btab==='log')setTimeout(logRead,1500);
   if(remember)layPatch({bottom:open});resize();if(typeof PW!=='undefined')PW.place();return{open,tab:ui.btab};}
 document.querySelector('.bp-head').addEventListener('click',e=>{const b=e.target.closest('[data-btab]');if(!b)return;const open=$('#bpanel').classList.contains('open');
   if(open&&ui.btab===b.dataset.btab)bottomPanel(false);else{btab(b.dataset.btab);if(!open)bottomPanel(true);}});
-$('#bpTog').onclick=()=>bottomPanel();
+$('#bpTog').onclick=()=>bottomPanel();$('#colB').onclick=()=>bottomPanel();
 $('#bpRead').onclick=logRead;
 $('#bpClear').onclick=()=>{LOG.length=0;logUnread=0;renderLog();};
 {const bp=$('#bpanel'),g=$('#bpGrip'),setH=h=>{h=Math.max(80,Math.min(Math.round(window.innerHeight*0.6),Math.round(h)));bp.style.setProperty('--bph',h+'px');return h;};
@@ -1080,11 +1085,13 @@ $('#tsTog').onclick=()=>strip();
 strip(!!uiPref().strip);
 /* ---------- Lebegő tulajdonságablak (alapból lebeg; a jobb sávba rögzíthető) ---------- */
 const PWKEY='proofboard.ui.propwin';
-function pwPlace(d){const pr=$('#props');(d?$('#dockBody'):$('#pwBody')).appendChild(pr);$('#propDock').hidden=!d;}
+function pwPlace(d){const pr=$('#props');(d?$('#dockBody'):$('#pwBody')).appendChild(pr);$('#propDock').hidden=!d;
+  for(const b of document.querySelectorAll('[data-rtab="props"],[data-rail-rtab="props"]'))b.hidden=!d;
+  if(!d&&ui.rtab==='props')rtab(ui.rtabProps||'design',false);}
 const PW=mountFloatWin({win:$('#propWin'),head:$('#pwHead'),body:$('#pwBody'),area:$('#carea'),
   load:()=>{try{return parseWin(JSON.parse(localStorage.getItem(PWKEY)||'null'));}catch(e){return parseWin(null);}},
   save:st=>{try{localStorage.setItem(PWKEY,JSON.stringify(st));}catch(e){}},
-  onDock:d=>{pwPlace(d);if(d){rtab('design');sideCollapse('r',false);}renderLeft();},
+  onDock:d=>{pwPlace(d);ui.pwHad=false;if(d)sideCollapse('r',false);renderLeft();},
   compact:()=>MOB.matches});
 pwPlace(PW.state().docked);
 $('#pwCol').onclick=()=>{PW.collapse();pwUpdate();};$('#pwDock').onclick=()=>PW.dock(true);$('#pwUndock').onclick=()=>PW.dock(false);
@@ -1092,7 +1099,9 @@ $('#pwCol').onclick=()=>{PW.collapse();pwUpdate();};$('#pwDock').onclick=()=>PW.
 function pwUpdate(){const has=!!(ui.sel||ui.linkStart);if(!has)ui.pwMob=false;PW.show(has&&(!MOB.matches||!!ui.pwMob));
   $('#pwTitle').textContent=ui.linkStart&&!ui.sel?'Kapcsolat':'Kijelölés';$('#dockSumm').textContent=$('#selSumm').textContent;
   $('#pwCol').setAttribute('aria-expanded',String(!PW.state().collapsed));
-  if(PW.state().docked&&!has&&!$('#props').textContent.trim())$('#props').innerHTML='<span class="muted small">Nincs kijelölés. Kattints egy alkatrészre, hídra, vezetékre vagy jegyzetre a Kijelölés eszközzel.</span>';}
+  // rögzítve: kijelöléskor a Tulajdonságok fülre vált, a kijelölés megszűntével vissza oda, ahonnan jött
+  if(PW.state().docked&&has!==!!ui.pwHad){if(has&&ui.rtab!=='props'){ui.rtabProps=ui.rtab;rtab('props',false);}else if(!has&&ui.rtab==='props')rtab(ui.rtabProps||'design',false);}
+  ui.pwHad=has;}
 window.addEventListener('resize',()=>PW.place());
 /* Alt nyomva tartva: a gyorsbillentyűk betűi látszanak az eszközsávon */
 document.addEventListener('keydown',e=>{if(e.key==='Alt')$('.app').classList.add('alt');});
@@ -1314,9 +1323,9 @@ let sideCollapse=()=>null;
   const col={l:stateOf(LAY_S).l,r:stateOf(LAY_S).r},RAIL=46;
   const apply=()=>{w.l=clamp('l',w.l);w.r=clamp('r',w.r);app.style.setProperty('--lw',(col.l?RAIL:w.l)+'px');app.style.setProperty('--rw',(col.r?RAIL:w.r)+'px');
     app.classList.toggle('colL',col.l);app.classList.toggle('colR',col.r);
-    $('#colL').setAttribute('aria-expanded',String(!col.l));$('#colR').setAttribute('aria-expanded',String(!col.r));};
+    for(const [id,c] of [['#colL',col.l],['#colR',col.r]]){const b=$(id);b.setAttribute('aria-pressed',String(!c));b.classList.toggle('on',!c);}};
   sideCollapse=(k,on,remember=true)=>{col[k]=on==null?!col[k]:!!on;apply();if(remember)layPatch(k==='l'?{l:col.l}:{r:col.r});resize();return{...col};};
-  $('#colL').onclick=()=>sideCollapse('l',true);$('#colR').onclick=()=>sideCollapse('r',true);
+  $('#colL').onclick=()=>sideCollapse('l');$('#colR').onclick=()=>sideCollapse('r');
   for(const b of document.querySelectorAll('[data-expand]'))b.onclick=()=>sideCollapse(b.dataset.expand,false);
   for(const b of document.querySelectorAll('[data-rail-ltab]'))b.onclick=()=>{ltab(b.dataset.railLtab);sideCollapse('l',false);};
   for(const b of document.querySelectorAll('[data-rail-rtab]'))b.onclick=()=>{rtab(b.dataset.railRtab,b.dataset.railRtab!=='sim');sideCollapse('r',false);};
@@ -1343,7 +1352,7 @@ function boardUI(){
   const cur=BOARDS.findIndex(x=>x[1]===b.cols&&x[2]===b.rows&&(x[3]||x[2])===b.sec);
   sel.innerHTML=BOARDS.map((x,i)=>`<option value="${i}" ${i===cur?'selected':''}>${x[0]} (${x[1]}×${x[2]})</option>`).join('')+`<option value="-1" ${cur<0?'selected':''}>Egyedi</option>`;
   $('#bdCols').value=b.cols;$('#bdRows').value=b.rows;$('#bdSec').value=b.sec>=b.rows?'0':String(Math.min(b.sec,5));
-  bdMm();$('#boardInfo').textContent=`${b.cols}×${b.rows} lyuk · ${secLabel(b)}`;$('#boardSumm').textContent=`${b.cols}×${b.rows} · ${secLabel(b)}`;
+  bdMm();$('#boardInfo').textContent=`${b.cols}×${b.rows} lyuk · ${secLabel(b)}`;
 }
 function bdMm(){const c=+$('#bdCols').value||0,r=+$('#bdRows').value||0;$('#bdMm').textContent=`≈ ${(c*2.54).toFixed(0)} × ${(r*2.54).toFixed(0)} mm`;}
 $('#bdPreset').addEventListener('change',e=>{const x=BOARDS[+e.target.value];if(!x)return;$('#bdCols').value=x[1];$('#bdRows').value=x[2];$('#bdSec').value=String(x[3]);bdMm();});
@@ -1357,8 +1366,11 @@ $('#bdApply').onclick=()=>{
   D.wires=D.wires.filter(w=>inb(w.a[0],w.a[1])&&inb(w.b[0],w.b[1]));
   D.auto={bridges:[],wires:[]};ui.sel=null;
   if(D.settings.autoRoute&&D.links.length)route({full:true});
-  commit(true);resize();boardUI();
+  commit(true);resize();boardUI();closeDlg('#dlgBoard');log(`Panel: ${cols}×${rows} lyuk, ${secLabel(D.board)}.`);
 };
+/* Panel beállításai: párbeszédablakban (ritkán kell); a Fájl menüből vagy a fejléc panel-adatára kattintva */
+function openBoard(){boardUI();openDlg('#dlgBoard');}
+$('#bBoard').onclick=openBoard;$('#boardInfo').onclick=openBoard;
 
 /* ---------- API ---------- */
 window.pcb={

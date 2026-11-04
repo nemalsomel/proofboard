@@ -12,7 +12,7 @@
 <body>
 <div class="app">
   <header class="top">
-    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Proofboard<small id="boardInfo"></small></div>
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Proofboard<button class="board-info" id="boardInfo" title="Panel beállításai"></button></div>
     <div class="menuwrap">
       <button class="btn ghost" id="bFile" aria-haspopup="menu" aria-expanded="false" aria-controls="fileMenu">Fájl<span data-icon="down" class="caret"></span></button>
       <div class="menu" id="fileMenu" role="menu" aria-label="Fájl" hidden>
@@ -20,6 +20,7 @@
         <button class="menu-item" role="menuitem" id="bOpenFile" data-icon="open" title="Terv betöltése fájlból; a saját alkatrészeid megmaradnak">Megnyitás…<kbd>Ctrl+O</kbd></button>
         <button class="menu-item" role="menuitem" id="bSaveFile" data-icon="save" title="A teljes terv (a benne használt saját alkatrészekkel együtt) fájlba">Mentés fájlba<kbd>Ctrl+S</kbd></button>
         <button class="menu-item" role="menuitem" id="bExamples" data-icon="book">Példák…</button>
+        <button class="menu-item" role="menuitem" id="bBoard" data-icon="board">Panel beállításai…</button>
         <div class="menu-sep" role="separator"></div>
         <p class="menu-h">Saját alkatrészkönyvtár</p>
         <button class="menu-item" role="menuitem" id="bLibExp" data-icon="save" title="A saját könyvtár mentése fájlba (a tervtől függetlenül)">Könyvtár exportálása</button>
@@ -40,7 +41,12 @@
       <button class="btn" data-layout="design" title="Tervezés: alkatrészek és bekötés (Alt+1)">Tervezés</button>
       <button class="btn" data-layout="prog" title="Program: a panel és a program egymás mellett (Alt+2)">Program</button>
       <button class="btn" data-layout="sim" title="Szimuláció: vezérlők és GPIO-k (Alt+3)">Szimuláció</button>
-      <button class="btn icon" id="layReset" data-icon="rotate" aria-label="Az elrendezés alapállapota" title="Az elrendezés visszaállítása az alapállapotára" hidden></button>
+    </div>
+    <button class="btn icon ghost desk-only" id="layReset" data-icon="rotate" aria-label="Az elrendezés alapállapota" title="Az elrendezés visszaállítása az alapállapotára" hidden></button>
+    <div class="grp seg desk-only" role="group" aria-label="Panelek ki-be">
+      <button class="btn icon" id="colL" data-icon="sideL" aria-label="Bal oldalsáv (Alkatrészek)" aria-pressed="true" title="Bal oldalsáv: Alkatrészek ( [ )"></button>
+      <button class="btn icon" id="colB" data-icon="sideB" aria-label="Alsó panel (Problémák, Napló)" aria-pressed="false" title="Alsó panel: Problémák, Napló (P)"></button>
+      <button class="btn icon" id="colR" data-icon="sideR" aria-label="Jobb oldalsáv" aria-pressed="true" title="Jobb oldalsáv: Tulajdonságok, Kapcsolatok, Szimuláció ( ] )"></button>
     </div>
     <div class="grp seg" role="group" aria-label="Visszavonás">
       <button class="btn icon" id="bUndo" data-icon="undo" aria-label="Visszavonás" title="Visszavonás (Ctrl+Z)"></button>
@@ -54,7 +60,6 @@
   <aside class="left">
     <div class="rtabs ltabs" role="tablist" aria-label="Bal oldali panel">
       <button class="rtab on" role="tab" data-ltab="lib" aria-selected="true" aria-controls="lpLib">Alkatrészek</button>
-      <button class="side-tog" id="colL" title="Oldalsáv összecsukása ( [ )" aria-label="Bal oldalsáv összecsukása" aria-expanded="true">«</button>
     </div>
     <div class="rail" id="railL" role="toolbar" aria-label="Bal oldalsáv (összecsukva)">
       <button class="rail-btn" data-expand="l" title="Kinyitás ( [ )" aria-label="Bal oldalsáv kinyitása">»</button>
@@ -166,21 +171,24 @@
 
   <aside class="right">
     <div class="rtabs" role="tablist" aria-label="Jobb oldali panel">
-      <button class="side-tog" id="colR" title="Oldalsáv összecsukása ( ] )" aria-label="Jobb oldalsáv összecsukása" aria-expanded="true">»</button>
-      <button class="rtab on" role="tab" data-rtab="design" aria-selected="true" aria-controls="rpDesign">Terv</button>
+      <button class="rtab" role="tab" data-rtab="props" aria-selected="false" aria-controls="rpProps" hidden>Tulajdonságok</button>
+      <button class="rtab on" role="tab" data-rtab="design" aria-selected="true" aria-controls="rpDesign">Kapcsolatok</button>
       <button class="rtab" role="tab" data-rtab="sim" aria-selected="false" aria-controls="rpSim">Szimuláció</button>
     </div>
     <div class="rail" id="railR" role="toolbar" aria-label="Jobb oldalsáv (összecsukva)">
       <button class="rail-btn" data-expand="r" title="Kinyitás ( ] )" aria-label="Jobb oldalsáv kinyitása">«</button>
-      <button class="rail-btn" data-rail-rtab="design" title="Terv" aria-label="Terv" data-icon="list"></button>
+      <button class="rail-btn" data-rail-rtab="props" title="Tulajdonságok" aria-label="Tulajdonságok" data-icon="edit" hidden></button>
+      <button class="rail-btn" data-rail-rtab="design" title="Kapcsolatok" aria-label="Kapcsolatok" data-icon="list"></button>
       <button class="rail-btn" data-rail-rtab="sim" title="Szimuláció" aria-label="Szimuláció" data-icon="pulse"></button>
     </div>
-    <div class="rpane" id="rpDesign" data-rpane="design" role="tabpanel">
-      <section class="dock acc" id="propDock" hidden>
-        <div class="dock-head"><span class="h">Tulajdonságok</span><span class="muted small" id="dockSumm"></span><span class="sp"></span>
+    <div class="rpane" id="rpProps" data-rpane="props" role="tabpanel" hidden>
+      <section class="dock" id="propDock" hidden>
+        <div class="dock-head"><span class="h">Tulajdonságok</span><span class="small fwin-s" id="dockSumm"></span><span class="sp"></span>
           <button class="btn icon ghost" id="pwUndock" aria-label="Leválasztás lebegő ablakba" title="Leválasztás: lebegő ablak a panel fölött" data-icon="undock"></button></div>
         <div class="dock-body" id="dockBody"></div>
       </section>
+    </div>
+    <div class="rpane" id="rpDesign" data-rpane="design" role="tabpanel">
       <details class="acc" id="accLinks" open>
         <summary><span class="h">Kapcsolatok</span><span id="linkSum"></span></summary>
       <label class="check" style="margin-bottom:8px"><input type="checkbox" id="autoR"> Automatikus útvonaltervezés</label>
@@ -194,15 +202,6 @@
       <ul class="issues" id="links"></ul>
       <div class="lk" id="linkTotal" style="border-top:1px solid var(--line);margin-top:4px;padding-top:8px;justify-content:space-between;flex-wrap:wrap;gap:4px 10px"></div>
       <p class="help" style="margin-top:6px">Kapcsolat: <kbd>C</kbd> eszköz, vagy gomb kijelölésekor „A → GPIO, B → GND”. A kézi hidakat az útvonalkereső nem módosítja; a „Kézi → automatikus” kapcsolatokká alakítja őket, a „Rögzítés kézire” visszafelé.</p>
-      </details>
-      <details class="acc" id="accBoard">
-        <summary><span class="h">Panel</span><span class="muted small" id="boardSumm"></span></summary>
-      <div class="props" style="margin-bottom:14px">
-        <div class="row"><label for="bdPreset">Típus</label><select id="bdPreset" style="flex:1"></select></div>
-        <div class="row nowrap"><label for="bdCols">Méret</label><input type="number" id="bdCols" min="4" max="120" aria-label="oszlopok"><span class="muted small">×</span><input type="number" id="bdRows" min="4" max="200" aria-label="sorok"><span class="muted small">lyuk</span></div>
-        <div class="row"><label for="bdSec">Szekció</label><select id="bdSec" style="flex:1"><option value="1">nincs (pontraszter)</option><option value="2">1×2</option><option value="3">1×3</option><option value="4">1×4</option><option value="5">1×5</option><option value="0">teljes csík (stripboard)</option></select></div>
-        <div class="row"><button class="btn" id="bdApply">Alkalmaz</button><span class="muted small" id="bdMm"></span></div>
-      </div>
       </details>
       <details class="acc" id="accLegend">
         <summary><span class="h">Jelmagyarázat</span></summary>
@@ -248,6 +247,18 @@
   <header class="dlg-head"><h2 id="dlgExT">Példák</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
   <div class="dlg-body"><div id="examples" class="examples"></div></div>
   <footer class="dlg-foot"><span class="help">A betöltés visszavonható (Ctrl+Z).</span></footer>
+</dialog>
+<dialog class="dlg dlg-sm" id="dlgBoard" aria-labelledby="dlgBoardT">
+  <header class="dlg-head"><h2 id="dlgBoardT">Panel beállításai</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <div class="dlg-body">
+    <div class="props">
+        <div class="row"><label for="bdPreset">Típus</label><select id="bdPreset" style="flex:1"></select></div>
+        <div class="row nowrap"><label for="bdCols">Méret</label><input type="number" id="bdCols" min="4" max="120" aria-label="oszlopok"><span class="muted small">×</span><input type="number" id="bdRows" min="4" max="200" aria-label="sorok"><span class="muted small">lyuk</span></div>
+        <div class="row"><label for="bdSec">Szekció</label><select id="bdSec" style="flex:1"><option value="1">nincs (pontraszter)</option><option value="2">1×2</option><option value="3">1×3</option><option value="4">1×4</option><option value="5">1×5</option><option value="0">teljes csík (stripboard)</option></select></div>
+        <div class="row"><button class="btn primary" id="bdApply">Alkalmaz</button><span class="muted small" id="bdMm"></span></div>
+      </div>
+    <p class="help">A panel méretének vagy a rézosztásnak a változása visszavonható (Ctrl+Z). A panelról lelógó hidak és vezetékek törlődnek.</p>
+  </div>
 </dialog>
 <dialog class="dlg dlg-sm" id="dlgNew" aria-labelledby="dlgNewT">
   <header class="dlg-head"><h2 id="dlgNewT">Új terv</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>

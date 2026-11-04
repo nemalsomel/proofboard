@@ -41,6 +41,18 @@ const P: Record<string, string> = {
   close: '<path d="m6 6 12 12M18 6 6 18"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  grip: '<path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" stroke-width="3"/>',
+  sideL: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+  sideR: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+  sideB: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15h18"/>',
+  tSelect: '<path d="M5.5 3.5 18 11l-5.5 1.5L10 18z"/><path d="m12.5 12.5 5 5"/>',
+  tBridge: '<circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="12" r="2.6"/><path d="M8.6 12h6.8" stroke-width="3.2"/>',
+  tWire: '<circle cx="5" cy="18" r="2"/><circle cx="19" cy="6" r="2"/><path d="M6.5 16.5C9 8 15 16 17.5 7.5"/>',
+  tLink: '<circle cx="5" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/><path d="M7.5 12h9" stroke-dasharray="2 2.4"/>',
+  tCut: '<circle cx="6" cy="7" r="2.6"/><circle cx="6" cy="17" r="2.6"/><path d="M8.2 8.6 20 17M8.2 15.4 20 7"/>',
+  tNote: '<path d="M5 4h14v10l-5 6H5z"/><path d="M14 20v-6h5M8 9h7M8 12.5h4"/>',
+  tErase: '<path d="M8 20 3.6 15.6a1.6 1.6 0 0 1 0-2.2L12.9 4a1.6 1.6 0 0 1 2.2 0l4.9 4.9a1.6 1.6 0 0 1 0 2.2L11 20"/><path d="M8 20h12M8.5 9.5l6 6"/>',
+  tHand: '<path d="M8 13V6a1.5 1.5 0 0 1 3 0v6M11 11.5V4.5a1.5 1.5 0 0 1 3 0V12M14 11.5V6.5a1.5 1.5 0 0 1 3 0V14c0 4-2.5 7-6 7-2.5 0-4-1-5.5-3l-2-3.3a1.5 1.5 0 0 1 2.4-1.8L8 15"/>',
   pulse: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
 };
 export type IconName = keyof typeof P;

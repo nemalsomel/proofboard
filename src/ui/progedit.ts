@@ -6,6 +6,7 @@
  * Kezelés: csomópont a „+ Csomópont” menüből; él kimenetről bemenetre húzással, vagy érintéssel (kimenet, majd
  * bemenet); csomópont húzása a fejlécénél; üres helyen húzva a vászon mozog, görgővel nagyít.
  */
+import { icon } from './icons';
 import { NODE_DEFS, type NodeDef, type PEdge, type PNode, type Program, type Val } from '../engine/program';
 
 export interface PinChoice { ref: string; part: string; name: string; gpio: string | null }
@@ -127,7 +128,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
           + `${po ? `<span class="pg-pr">${on ? `<b data-v="${n.id}.${po.id}">${fmt(vout)}</b> ` : ''}${esc(po.label)}</span><span class="pg-port out ${po.kind}${pending === n.id + '.' + po.id ? ' pend' : ''}" data-port="${n.id}.${po.id}" title="${esc(po.label)}"></span>` : '<span></span><span></span>'}</div>`;
       }).join('');
       return `<div class="pg-node${s ? ' sel' : ''}${err ? ' err' : ''}" data-node="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${W}px;--c:${CAT_COL[d.cat]}">
-        <div class="pg-head" data-drag="${n.id}">${esc(d.label)}</div>${ports}
+        <div class="pg-head" data-drag="${n.id}">${icon('grip', 'pg-grip')}<span>${esc(d.label)}</span></div>${ports}
         <div class="pg-sum">${sm.map(x => `<div style="height:${SUM}px">${esc(x)}</div>`).join('')}${err ? `<div class="pg-err">${esc(err)}</div>` : ''}</div></div>`;
     }).join('');
     $<HTMLElement>('.pg-empty').hidden = prog.nodes.length > 0;
@@ -222,6 +223,8 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     renderNodes(); renderEdges(); renderProps();
   });
   canvas.addEventListener('pointerdown', e => {
+    // középső gomb: a vászon mozgatása bárhonnan (csomópont fölött is)
+    if (e.button === 1) { e.preventDefault(); drag = { kind: 'pan', x0: e.clientX, y0: e.clientY, vx: view.x, vy: view.y }; canvas.setPointerCapture(e.pointerId); return; }
     if (e.button !== 0) return;
     const t = e.target as Element, port = t.closest('[data-port]') as HTMLElement | null, edge = t.closest('[data-edge]') as Element | null, head = t.closest('.pg-node') as HTMLElement | null;
     menu.hidden = true; canvas.focus({ preventScroll: true });
@@ -237,7 +240,8 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     if (head) {
       const n = node(head.dataset.node!)!;
       if (!sel || sel.kind !== 'node' || sel.id !== n.id) select({ kind: 'node', id: n.id });
-      if ((t as HTMLElement).closest('.pg-head')) { drag = { kind: 'move', id: n.id, x0: e.clientX, y0: e.clientY, nx: n.x, ny: n.y, moved: false }; canvas.setPointerCapture(e.pointerId); }
+      // a csomópont bárhol megfogható, ahol nincs interaktív elem (a port fent már elkapta)
+      drag = { kind: 'move', id: n.id, x0: e.clientX, y0: e.clientY, nx: n.x, ny: n.y, moved: false }; canvas.setPointerCapture(e.pointerId);
       return;
     }
     if (sel) select(null);

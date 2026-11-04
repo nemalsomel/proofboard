@@ -107,7 +107,8 @@ test('szabad vászon: nagyítás a kurzorhoz, pásztázás az üres téren és s
   const box = (await page.locator('#scroll').boundingBox())!;
   await page.evaluate(() => { const s = document.querySelector('#scroll')!; s.scrollLeft = 0; s.scrollTop = 0; });
   const s0 = await sc();
-  await page.mouse.move(box.x + 30, box.y + 30); await page.mouse.down(); await page.mouse.move(box.x + 10, box.y + 10, { steps: 3 }); await page.mouse.up();
+  const ex = box.x + box.width * 0.2, ey = box.y + box.height * 0.25; // üres tér a panel mellett (a nagyítás alatt)
+  await page.mouse.move(ex, ey); await page.mouse.down(); await page.mouse.move(ex - 20, ey - 20, { steps: 3 }); await page.mouse.up();
   const s1 = await sc();
   expect(Math.abs(s1.x - s0.x - 20)).toBeLessThanOrEqual(2); expect(Math.abs(s1.y - s0.y - 20)).toBeLessThanOrEqual(2);
   // szóköz + húzás a panelon is pásztáz, nem jelöl ki

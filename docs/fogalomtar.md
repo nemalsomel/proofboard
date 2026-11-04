@@ -56,7 +56,8 @@ Egy dologra egy szó: a felületen, a súgóban, a példák jegyzeteiben és a h
 | **kijelölés** | a kiválasztott alkatrészek, hidak, vezetékek; az állapotsor mutatja |
 | **nézet** | ugyanannak a tervnek egy megjelenítése: Panel, Program (később: Alkatrész-szerkesztő) |
 | **elrendezés** | a panelek kiinduló állapota egy munkához: Tervezés, Program, Szimuláció; a kézi módosítás elrendezésenként megmarad |
-| **eszközsáv** | a vászon alján az eszközök sora; összecsukva csak az aktív eszköz látszik |
+| **eszközsáv** | a vászon alján az eszközök sora (ikon és név); összecsukva csak az aktív eszköz látszik |
+| **Panel beállításai** | a panel mérete és rézosztása (párbeszédablak) |
 | **tulajdonságablak** | a kijelölés beállításai; lebeg a vászon fölött, vagy a jobb sávba rögzítve *Tulajdonságok* szakasz |
 | **alsó panel** | a vászon alatti, összecsukható sáv: Problémák és Napló |
 | **állapotsor** | a vászon alatti sor: rámutatott lyuk, eszköz, kijelölés, problémák, szimuláció |
