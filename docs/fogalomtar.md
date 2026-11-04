@@ -46,7 +46,7 @@ Egy dologra egy szó: a felületen, a súgóban, a példák jegyzeteiben és a h
 | **kód** | a programból generált MicroPython vagy Arduino forrás | szkript |
 | **szimuláció** | a kör egyenáramú számítása, futás közben a programmal | futtatás |
 | **Problémák** | az ellenőrzés eredménye: **hiba** (nem fog működni) és **figyelmeztetés** (gyanús) | Ellenőrzés (régi fülnév), alert |
-| **napló** | a szimuláció és a program eseményei időrendben (a Napló panel az 5.2-es fordulóban jön) | log, konzol |
+| **napló** | események időrendben: betöltés, mentés, útvonalkeresés, szimuláció (az alsó panel Napló füle) | log, konzol |
 
 ## Felület
 
@@ -55,6 +55,9 @@ Egy dologra egy szó: a felületen, a súgóban, a példák jegyzeteiben és a h
 | **eszköz** | amivel a panelon dolgozol: Kijelölés, Híd, Vezeték, Kapcsolat, Csíkvágás, Jegyzet, Törlés, Mozgatás |
 | **kijelölés** | a kiválasztott alkatrészek, hidak, vezetékek; az állapotsor mutatja |
 | **nézet** | ugyanannak a tervnek egy megjelenítése: Panel, Program (később: Alkatrész-szerkesztő) |
-| **elrendezés** | a panelek kiinduló állapota egy munkához: Tervezés, Program, Szimuláció (5.2-es forduló) |
+| **elrendezés** | a panelek kiinduló állapota egy munkához: Tervezés, Program, Szimuláció; a kézi módosítás elrendezésenként megmarad |
+| **eszközsáv** | a vászon alján az eszközök sora; összecsukva csak az aktív eszköz látszik |
+| **tulajdonságablak** | a kijelölés beállításai; lebeg a vászon fölött, vagy a jobb sávba rögzítve *Tulajdonságok* szakasz |
+| **alsó panel** | a vászon alatti, összecsukható sáv: Problémák és Napló |
 | **állapotsor** | a vászon alatti sor: rámutatott lyuk, eszköz, kijelölés, problémák, szimuláció |
 | **Fájl menü** | új terv, megnyitás, mentés, példák, saját könyvtár export/import, JSON, téma |

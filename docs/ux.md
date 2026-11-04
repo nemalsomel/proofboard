@@ -18,7 +18,7 @@ mi került a felületre, hova, és milyen kérdést hagyott nyitva. A felülvizs
 | Összecsukható oldalsávok (`[` és `]`) | kész | ikonsáv a fülekkel, a Problémákon hibaszám |
 | Harmonikák a jobb sávban (Kapcsolatok, Panel) | kész | állapotuk megmarad; a Terv harmonika tartalma a Fájl menübe került |
 | Fülek: Szerkesztés / Alkatrészek, Terv / Problémák / Szimuláció | kész | szimuláció indításakor a Szimuláció fülre vált |
-| Elrendezések (Tervezés, Program, Szimuláció) | terv (5.2) | a döntések a UX-felülvizsgálat dokumentumban |
+| Elrendezések (Tervezés, Program, Szimuláció) | kész (5.2) | `src/ui/layout.ts`; a döntések a UX-felülvizsgálat dokumentumban |
 | Parancspaletta (pl. Ctrl+K) | terv | alkatrész, eszköz, példa és beállítás keresése egy helyen |
 | Kezdőkép üres tervnél | kész (5.1) | bevezető, Tiszta sablon panelválasztással, Példa betöltése |
 | Fájl menü, téma, állapotsor, szabad vászon | kész (5.1) | tokenek (elsődleges/másodlagos szín, lépték), komponenskészlet, ikonok, fogalomtár |
@@ -32,6 +32,7 @@ mi került a felületre, hova, és milyen kérdést hagyott nyitva. A felülvizs
 | Példatár | Példák a Terv harmonikában, kategóriákkal | Első indításkor is ajánlani? |
 | Vezérlők | Vezérlőcsere a tulajdonságpanelen | A csere nem látszik, amíg nincs kijelölve a vezérlő |
 | Lezáró kör | Összecsukható sávok, lábfunkciók az állapotsorban és a GPIO-táblában | Kell-e láb-súgó buborék a vásznon? |
+| Elrendezés-rendszer (5.2) | Elrendezések (Tervezés, Program, Szimuláció; elrendezésenként megőrzött kézi módosítással), nézetsáv a vászon fölött, eszközsáv a vászon alján, lebegő és rögzíthető tulajdonságablak, alsó panel (Problémák több oszlopban, Napló), a Problémák fül és a bal Szerkesztés fül megszűnt | A Program elrendezés tartalma (csomóponttár, Kód a jobb sávban) az 5.4-ben; mobilon a tulajdonságablak csak a Beállítás gombra nyílik |
 | Alapozó kör (5.1) | Fájl menü (új, megnyitás, mentés, példák, könyvtár, JSON, téma), kezdőkép, állapotsor, szabad vászon, értesítés, ikonok, fogalomtár; „Vezérlés” → „Program”, „Ellenőrzés” → „Problémák”, „Forrasztóhíd” → „Híd” | A nézet-gombsor (Alkatrészoldal…Röntgen) az 5.2–5.3-ban rendeződik |
 | Alkatrész-kör | Keresőmező, Kedvencek / Legutóbb használt / Projekt / Saját könyvtár csoportok (összecsukhatók), tervtől független könyvtár; szerkesztőben MCU-modell, képességek, buszfunkció | Húzással is lehessen lerakni? Kell-e a kategóriákra szűrő gomb a keresés mellé? |
 

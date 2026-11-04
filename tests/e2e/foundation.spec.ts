@@ -75,7 +75,7 @@ test('téma: Világos/Sötét/Auto a Fájl menüben, a választás megmarad', as
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBeUndefined();
 });
 
-test('állapotsor: eszköz, kijelölés, problémák (kattintásra a Problémák fül), szimuláció', async ({ page }) => {
+test('állapotsor: eszköz, kijelölés, problémák (kattintásra az alsó panel Problémák füle), szimuláció', async ({ page }) => {
   await pcb(page, `pcb.example('rc'); pcb.select(['R1']);`);
   await expect(page.locator('#sbTool')).toContainText('Kijelölés');
   await expect(page.locator('#sbSel')).toHaveText('Kijelölve: R1');
@@ -83,10 +83,10 @@ test('állapotsor: eszköz, kijelölés, problémák (kattintásra a Problémák
   // hibát okozunk: egy alkatrész másolata ugyanazokba a lyukakba
   await pcb(page, `const d = pcb.get(), r = d.parts.find(p => p.label === 'R1'); d.parts.push({ ...r, id: 'px', label: 'R9' }); pcb.load(d);`);
   await expect(page.locator('#sbIss')).toContainText(/\d+ hiba/);
-  await pcb(page, `pcb.sides('r', true);`);
   await page.click('#sbIss');
-  await expect(page.locator('.right .rtab.on')).toContainText('Problémák');
-  expect(await pcb(page, `return pcb.sides().r;`)).toBe(false);
+  expect(await pcb(page, `return pcb.bottom();`)).toEqual({ open: true, tab: 'issues' });
+  await expect(page.locator('#issues')).toContainText('Ütközés');
+  await expect(page.locator('#bpIssN')).not.toHaveText('');
   await expect(page.locator('#sbSim')).toHaveText('Szimuláció áll');
   await pcb(page, `pcb.sim(true);`);
   await expect(page.locator('#sbSim')).toHaveText('Szimuláció fut');

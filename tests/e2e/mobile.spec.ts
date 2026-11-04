@@ -37,7 +37,7 @@ const part = (page: Page, label: string) => pcb<[number, number]>(page, `const p
 
 test('egy ujj üres helyen görget, alkatrészen mozgat; a koppintás kijelöl', async ({ page }) => {
   await pcb(page, 'pcb.preset();');
-  const [ex, ey] = await holeXY(page, 30, 1); // üres terület a panel bal szélén
+  const [ex, ey] = await holeXY(page, 30, 1, false); // üres terület a panel bal szélén (középre görgetve, hogy ne az eszközsáv alá essen)
   const s0 = await scroll(page);
   await gesture(page, [[ex, ey]], [[ex - 80, ey - 80]]);
   const s1 = await scroll(page);
@@ -71,15 +71,16 @@ test('két ujj: csípéssel nagyít, a félbehagyott mozgatás visszaáll', asyn
   expect(await part(page, 'K2')).toEqual(k0);
 });
 
-test('lerakás: az Eszközök lapról választva, forgatással, az ujj fölé tolt előnézettel', async ({ page }) => {
+test('lerakás: az Alkatrészek lapról választva, forgatással, az ujj fölé tolt előnézettel', async ({ page }) => {
   await pcb(page, `pcb.load({ board: { rows: 78, cols: 39, sec: 3 }, parts: [], bridges: [], wires: [], links: [], gpio: {}, settings: { usb: true, btnMode: 'hold', autoRoute: false }, seq: 1 });`);
   await page.locator('#tabbar [data-sheet="left"]').tap();
   await expect(page.locator('.app')).toHaveClass(/sheet-left/);
   await page.locator('[data-ltab="lib"]').tap();
   await page.locator('[data-lib="res"]').tap();
   await expect(page.locator('.app')).not.toHaveClass(/sheet-left/);
+  await expect(page.locator('.left')).not.toBeInViewport({ ratio: 0.05 }); // a lap lecsúszott, nem takarja a gombokat
   await page.locator('#fab [data-fab="rot"]').tap();
-  const [x, y] = await holeXY(page, 20, 10);
+  const [x, y] = await holeXY(page, 20, 10, false); // középre görgetve, a lebegő gombok fölött
   await touch('touchStart', [[x, y + 56]]); // az előnézet 56 px-lel az ujj fölött
   await touch('touchMove', [[x + 2, y + 57]]);
   await touch('touchEnd', []);

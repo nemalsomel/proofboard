@@ -141,22 +141,20 @@ test('kapcsolat kiválasztása: kezdet, cél és útvonal', async ({ page }) => 
   expect(r.status).toContain('cél');
 });
 
-test('jobb oldali sáv: fülek, a szimuláció indításakor a Szimuláció fül, leállításkor vissza; a harmonika állapota megmarad', async ({ page }) => {
+test('jobb oldali sáv: a szimuláció a Szimuláció elrendezésre vált, leállításkor vissza; a harmonika állapota megmarad', async ({ page }) => {
+  await pcb(page, 'pcb.preset();');
   await expect(page.locator('.right .rtab.on')).toHaveText('Terv');
   await expect(page.locator('#accLinks')).toHaveAttribute('open', '');
   await expect(page.locator('#accBoard')).not.toHaveAttribute('open', '');
-  await expect(page.locator('[data-rtab="check"] #issueSum')).toContainText('Rendben'); // az összegzés a fülön látszik
-  await page.click('[data-rtab="check"]');
-  await expect(page.locator('#issues')).toBeVisible();
   await page.click('#bSim');
+  await expect(page.locator('[data-layout="sim"]')).toHaveClass(/on/);
   await expect(page.locator('.right .rtab.on')).toHaveText('Szimuláció');
   await expect(page.locator('#simOut')).toBeVisible();
   await page.click('[data-rtab="design"]'); // el lehet kapcsolni
   await expect(page.locator('#simOut')).toBeHidden();
-  await page.click('[data-rtab="sim"]');
   await page.click('#bSim');
-  await expect(page.locator('.right .rtab.on')).toHaveAttribute('data-rtab', 'check'); // vissza oda, ahonnan indult
-  await page.click('[data-rtab="design"]');
+  await expect(page.locator('[data-layout="design"]')).toHaveClass(/on/); // vissza oda, ahonnan indult
+  await expect(page.locator('.right .rtab.on')).toHaveText('Terv');
   await page.click('#accBoard summary');
   await page.waitForFunction(() => (JSON.parse(localStorage.getItem('proofboard.ui.right') || '{}').acc || {}).accBoard === true);
   await page.reload();
@@ -165,23 +163,48 @@ test('jobb oldali sáv: fülek, a szimuláció indításakor a Szimuláció fül
   await expect(page.locator('.right .rtab.on')).toHaveText('Terv');
 });
 
-test('bal oldali sáv: Szerkesztés és Alkatrészek fül; vezetékszín csak a Vezeték eszköznél; kijelöléskor a tulajdonságok', async ({ page }) => {
-  await expect(page.locator('.left .rtab.on')).toHaveText('Szerkesztés');
-  await expect(page.locator('#lib')).toBeHidden();
+test('eszközsáv és lebegő tulajdonságablak: vezetékszín csak a Vezeték eszköznél; kijelöléskor lebeg, összecsukható, rögzíthető', async ({ page }) => {
+  await expect(page.locator('.left .rtab.on')).toHaveText('Alkatrészek');
+  await expect(page.locator('#lib')).toBeVisible();
+  await expect(page.locator('#bNewPart')).toBeVisible();
   await expect(page.locator('#wireColorRow')).toBeHidden();
   await page.keyboard.press('w');
   await expect(page.locator('#wireColorRow')).toBeVisible();
+  await expect(page.locator('#tools [data-tool="wire"]')).toHaveClass(/on/);
   await page.keyboard.press('v');
   await expect(page.locator('#wireColorRow')).toBeHidden();
-  await page.click('[data-ltab="lib"]');
-  await expect(page.locator('#lib')).toBeVisible();
-  await expect(page.locator('#bNewPart')).toBeVisible();
-  // kijelölés a panelon → vissza a Szerkesztés fülre, a Kijelölés összegzésében a név
+  // kijelölés a panelon → lebegő ablak a névvel
   await pcb(page, 'pcb.preset();');
+  await expect(page.locator('#propWin')).toBeHidden();
   const k = await pcb<any>(page, `const q = pcb.pins('K1'); return pcb.reveal(q[0].r + 1, q[0].c + 2);`);
   await page.mouse.click(k.x, k.y);
-  await expect(page.locator('.left .rtab.on')).toHaveText('Szerkesztés');
+  await expect(page.locator('#propWin')).toBeVisible();
   await expect(page.locator('#selSumm')).toHaveText('K1');
+  await expect(page.locator('#propWin #pLabel')).toHaveValue('K1');
+  // címsorra csökkenthető
+  await page.click('#pwCol');
+  await expect(page.locator('#pwBody')).toBeHidden();
+  await page.click('#pwCol');
+  await expect(page.locator('#pwBody')).toBeVisible();
+  // húzható a címsoránál; a hely megmarad
+  const h = (await page.locator('#pwHead').boundingBox())!;
+  await page.mouse.move(h.x + 40, h.y + h.height / 2); await page.mouse.down(); await page.mouse.move(h.x - 60, h.y + 80, { steps: 4 }); await page.mouse.up();
+  const st = await pcb<any>(page, 'return pcb.propWin();');
+  expect(st.x).toBeGreaterThan(80); expect(st.y).toBeGreaterThan(60);
+  // rögzítés a jobb sávba: a tulajdonságok ott, a lebegő ablak eltűnik; újratöltés után is
+  await page.click('#pwDock');
+  await expect(page.locator('#propWin')).toBeHidden();
+  await expect(page.locator('#propDock #pLabel')).toHaveValue('K1');
+  await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
+  await expect(page.locator('#propDock')).toBeVisible();
+  await expect(page.locator('#propDock')).toContainText('Kattints egy alkatrészre'); // kijelölés nélkül a súgó áll ott
+  await pcb(page, `pcb.select(['K2']);`);
+  await expect(page.locator('#propDock #pLabel')).toHaveValue('K2');
+  await page.click('#pwUndock');
+  await expect(page.locator('#propDock')).toBeHidden();
+  await expect(page.locator('#propWin #pLabel')).toHaveValue('K2');
+  expect((await pcb<any>(page, 'return pcb.propWin();')).x).toBe(st.x);
+  // a jelmagyarázat a jobb sávban
   await page.click('#accLegend summary');
   await expect(page.locator('.legend')).toBeVisible();
 });

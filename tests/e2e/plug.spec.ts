@@ -26,7 +26,6 @@ test('külső alkatrész lerakásakor tüskesor kerül a panelra; mozgatható, a
   expect(r).toEqual({ ok: true, iss: 0, wires: 0 });
   // kihúzás és visszadugás a tulajdonságpanelen
   await pcb(page, 'pcb.select(["SV1"]);');
-  await page.click('[data-ltab="edit"]');
   await page.click('#pUnplug');
   expect(await pcb(page, 'return pcb.plug("SV1");')).toBeNull();
   await pcb(page, 'pcb.select(["J1"]);');
@@ -54,7 +53,6 @@ test('lerakás a könyvtárból: a motor mellé a panelra kerül a tüskesor, a 
 test('önálló tüskesor: lábnevek a tulajdonságpanelen', async ({ page }) => {
   await pcb(page, `pcb.load({ board: { rows: 20, cols: 20, sec: 3 }, parts: [{ id: 'p1', type: 'header', label: 'J1', r: 5, c: 5, rot: 0, mir: false, props: { n: 4 } }], bridges: [], wires: [], links: [], gpio: {}, settings: { usb: true, btnMode: 'hold', autoRoute: true }, seq: 10 });
     pcb.select(["J1"]);`);
-  await page.click('[data-ltab="edit"]');
   await page.fill('#pp_names', 'GND, VCC, SDA, SCL');
   await page.locator('#pp_names').blur();
   expect(await pcb(page, 'return pcb.pins("J1").map(q => q.name);')).toEqual(['GND', 'VCC', 'SDA', 'SCL']);

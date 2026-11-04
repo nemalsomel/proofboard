@@ -35,74 +35,32 @@
         </div>
       </div>
     </div>
-    <div class="grp seg" role="group" aria-label="Munkaterület" id="workSw">
-      <button class="btn on" data-work="board" aria-pressed="true" title="A panel (alkatrészek, bekötés)">Panel</button>
-      <button class="btn" data-work="prog" aria-pressed="false" title="A program: csomópontok, amelyek futás közben a GPIO-kat vezérlik">Program</button>
-      <button class="btn desk-only" data-work="split" aria-pressed="false" title="A panel és a program egymás mellett">Mindkettő</button>
-    </div>
-    <div class="grp" role="group" aria-label="Nézet">
-      <button class="btn" id="vComp" title="Alkatrészoldal (F)">Alkatrészoldal</button>
-      <button class="btn" id="vCu" title="Rézoldal, tükrözve (F)">Rézoldal</button>
-      <button class="btn" id="vRats" title="Kapcsolati vonalak mutatása (N)">Kapcsolati nézet</button>
-      <button class="btn" id="vXray" title="Minden alkatrész röntgen nézetben: csak körvonal, lábak és lábnevek (X)">Röntgen</button>
-      <button class="btn" id="vStub" title="Hosszú vezetékek rövidítve: csak a két vég látszik szakadásjellel; rámutatva vagy kijelölve a teljes vonal">Vezeték: rövid</button>
-      <button class="btn icon" id="vRot" data-icon="rotate" aria-label="Panel elforgatása 90°-kal" title="A panel nézetének elforgatása 90°-kal (T)"></button>
-    </div>
-    <div class="grp seg" role="group" aria-label="Nagyítás">
-      <button class="btn icon" id="zOut" data-icon="zoomOut" aria-label="Kicsinyítés" title="Kicsinyítés (Ctrl+görgő)"></button>
-      <button class="btn mono small zlbl" id="zLbl" title="Az egész panel látszódjon (0)">100%</button>
-      <button class="btn icon" id="zIn" data-icon="zoomIn" aria-label="Nagyítás" title="Nagyítás (Ctrl+görgő)"></button>
-      <button class="btn icon" id="zFit" data-icon="fit" aria-label="Az egész panel" title="Az egész panel, középen (0)"></button>
+    <span class="top-sp"></span>
+    <div class="grp seg desk-only" role="group" aria-label="Elrendezés" id="laySw">
+      <button class="btn" data-layout="design" title="Tervezés: alkatrészek és bekötés (Alt+1)">Tervezés</button>
+      <button class="btn" data-layout="prog" title="Program: a panel és a program egymás mellett (Alt+2)">Program</button>
+      <button class="btn" data-layout="sim" title="Szimuláció: vezérlők és GPIO-k (Alt+3)">Szimuláció</button>
+      <button class="btn icon" id="layReset" data-icon="rotate" aria-label="Az elrendezés alapállapota" title="Az elrendezés visszaállítása az alapállapotára" hidden></button>
     </div>
     <div class="grp seg" role="group" aria-label="Visszavonás">
       <button class="btn icon" id="bUndo" data-icon="undo" aria-label="Visszavonás" title="Visszavonás (Ctrl+Z)"></button>
       <button class="btn icon" id="bRedo" data-icon="redo" aria-label="Újra" title="Újra (Ctrl+Y)"></button>
     </div>
-    <div class="grp" style="margin-left:auto">
+    <div class="grp">
       <button class="btn primary sim" id="bSim" title="Szimuláció (S)"></button>
     </div>
   </header>
 
   <aside class="left">
     <div class="rtabs ltabs" role="tablist" aria-label="Bal oldali panel">
-      <button class="rtab on" role="tab" data-ltab="edit" aria-selected="true" aria-controls="lpEdit">Szerkesztés</button>
-      <button class="rtab" role="tab" data-ltab="lib" aria-selected="false" aria-controls="lpLib">Alkatrészek</button>
+      <button class="rtab on" role="tab" data-ltab="lib" aria-selected="true" aria-controls="lpLib">Alkatrészek</button>
       <button class="side-tog" id="colL" title="Oldalsáv összecsukása ( [ )" aria-label="Bal oldalsáv összecsukása" aria-expanded="true">«</button>
     </div>
     <div class="rail" id="railL" role="toolbar" aria-label="Bal oldalsáv (összecsukva)">
       <button class="rail-btn" data-expand="l" title="Kinyitás ( [ )" aria-label="Bal oldalsáv kinyitása">»</button>
-      <button class="rail-btn" data-rail-ltab="edit" title="Szerkesztés" aria-label="Szerkesztés" data-icon="edit"></button>
       <button class="rail-btn" data-rail-ltab="lib" title="Alkatrészek" aria-label="Alkatrészek" data-icon="parts"></button>
     </div>
-    <div class="rpane" id="lpEdit" data-lpane="edit" role="tabpanel">
-      <section>
-        <p class="h">Eszközök</p>
-      <div class="tools" id="tools"></div>
-      <p class="help touch-only" style="margin-top:8px">Érintéssel: egy ujjal húzva görgetsz, alkatrészen húzva mozgatod; hosszan nyomva kijelölő keret; két ujjal nagyítás és görgetés. Lerakáskor az előnézet az ujjad fölött jár, felengedésre kerül le.</p>
-        <div class="wirecolor" id="wireColorRow" hidden><span class="small muted">Vezeték színe</span><div class="swatches" id="swatches"></div></div>
-      </section>
-      <details class="acc" id="accSel" open>
-        <summary><span class="h">Kijelölés</span><span class="muted small" id="selSumm"></span></summary>
-      <div id="props" class="props"><span class="muted small">Kattints egy alkatrészre vagy vezetékre a Kijelölés eszközzel.</span></div>
-      </details>
-      <details class="acc" id="accLegend">
-        <summary><span class="h">Jelmagyarázat</span></summary>
-      <div class="legend">
-        <span><i style="background:#2563eb"></i>gomb A / GPIO</span>
-        <span><i style="background:#d97706"></i>gomb B</span>
-        <span><i style="background:#1f2328"></i>GND / katód</span>
-        <span><i style="background:#e03131"></i>3V3 / anód / +</span>
-        <span><i style="background:#be4bdb"></i>VBUS / VSYS</span>
-        <span><i style="background:#c8cdd3"></i>kézi híd</span>
-        <span><i style="background:#5b9bd5"></i>automatikus híd</span>
-        <span><i style="background:#00e676"></i>kapcsolat → GPIO</span>
-        <span><i style="background:#00b8ff"></i>kapcsolat → GND</span>
-        <span><i style="background:#ffab00"></i>kapcsolat láb–láb</span>
-        <span><i style="background:#ff1744"></i>bekötetlen kapcsolat</span>
-      </div>
-      </details>
-    </div>
-    <div class="rpane" id="lpLib" data-lpane="lib" role="tabpanel" hidden>
+    <div class="rpane" id="lpLib" data-lpane="lib" role="tabpanel">
       <section>
       <div class="lib-search"><input type="search" id="libSearch" placeholder="Keresés: név, láb, funkció (pl. i2c, adc, motor)" aria-label="Alkatrész keresése" autocomplete="off"></div>
       <div class="lib" id="lib"></div>
@@ -112,38 +70,90 @@
       <p class="help" id="libMsg" aria-live="polite" style="margin-top:6px"></p>
       <p class="help" style="margin-top:6px">A <b>saját könyvtár</b> a böngésződben marad, terv váltásakor is; exportálni és importálni a Fájl menüben lehet. Amit egy tervbe leraksz, az a terv része lesz (<b>Projekt</b>), így a tervfájllal együtt utazik.</p>
       <p class="help" style="margin-top:8px">Lerakás közben: <kbd>R</kbd> forgatás, <kbd>M</kbd> tükrözés, <kbd>Esc</kbd> mégse.</p>
+      <p class="help touch-only" style="margin-top:8px">Érintéssel: egy ujjal húzva görgetsz, alkatrészen húzva mozgatod; hosszan nyomva kijelölő keret; két ujjal nagyítás és görgetés. Lerakáskor az előnézet az ujjad fölött jár, felengedésre kerül le.</p>
       </section>
     </div>
   </aside>
 
   <div class="gutter" id="gL" role="separator" aria-orientation="vertical" aria-label="Bal oldalsáv szélessége" tabindex="0" title="Húzd a szélesség állításához, dupla kattintás: alapméret"></div>
   <main class="stage">
-    <div class="scroll" id="scroll"><canvas id="cv"></canvas></div>
-    <div class="fab" id="fab" role="toolbar" aria-label="Műveletek a kijelöléssel" hidden></div>
-    <section class="intro" id="intro" aria-labelledby="introTitle" hidden>
-      <div class="intro-card">
-        <h1 id="introTitle">Kezdjünk egy panelt</h1>
-        <p>A Proofboarddal próbanyákot tervezel és ki is próbálod, mielőtt forrasztanál.</p>
-        <ol class="intro-steps">
-          <li><b>Alkatrészek</b> – a bal oldali könyvtárból rakd le őket a panelra.</li>
-          <li><b>Bekötés</b> – kapcsolatokkal (az útvonalat a program keresi meg), vagy kézzel hidakkal és vezetékekkel.</li>
-          <li><b>Kipróbálás</b> – a szimuláció megmutatja a feszültségeket, a Problémák a hibákat; a program a vezérlőlapot működteti.</li>
-        </ol>
-        <div class="intro-act">
-          <div class="intro-opt">
-            <label for="introBoard" class="small muted">Panel</label>
-            <select id="introBoard"></select>
-            <button class="btn primary" id="introBlank" data-icon="board">Tiszta sablon</button>
-          </div>
-          <div class="intro-opt">
-            <span class="small muted">vagy nézd meg, hogyan készül</span>
-            <button class="btn secondary" id="introEx" data-icon="book">Példa betöltése</button>
+    <div class="vbar" role="toolbar" aria-label="Nézetek">
+      <div class="grp seg vtabs" role="group" aria-label="Nézet" id="workSw">
+        <button class="btn on" data-work="board" aria-pressed="true" title="A panel (alkatrészek, bekötés)">Panel</button>
+        <button class="btn" data-work="prog" aria-pressed="false" title="A program: csomópontok, amelyek futás közben a GPIO-kat vezérlik">Program</button>
+        <button class="btn desk-only" data-work="split" aria-pressed="false" title="A panel és a program egymás mellett">Mindkettő</button>
+      </div>
+      <div class="grp vmodes" role="group" aria-label="A panel megjelenítése" id="vModes">
+        <button class="btn" id="vComp" title="Alkatrészoldal (F)">Alkatrészoldal</button>
+        <button class="btn" id="vCu" title="Rézoldal, tükrözve (F)">Rézoldal</button>
+        <button class="btn" id="vRats" title="Kapcsolati vonalak mutatása (N)">Kapcsolati nézet</button>
+        <button class="btn" id="vXray" title="Minden alkatrész röntgen nézetben: csak körvonal, lábak és lábnevek (X)">Röntgen</button>
+        <button class="btn" id="vStub" title="Hosszú vezetékek rövidítve: csak a két vég látszik szakadásjellel; rámutatva vagy kijelölve a teljes vonal">Vezeték: rövid</button>
+        <button class="btn icon" id="vRot" data-icon="rotate" aria-label="Panel elforgatása 90°-kal" title="A panel nézetének elforgatása 90°-kal (T)"></button>
+      </div>
+    </div>
+    <div class="carea" id="carea">
+      <div class="scroll" id="scroll"><canvas id="cv"></canvas></div>
+      <section class="intro" id="intro" aria-labelledby="introTitle" hidden>
+        <div class="intro-card">
+          <h1 id="introTitle">Kezdjünk egy panelt</h1>
+          <p>A Proofboarddal próbanyákot tervezel és ki is próbálod, mielőtt forrasztanál.</p>
+          <ol class="intro-steps">
+            <li><b>Alkatrészek</b> – a bal oldali könyvtárból rakd le őket a panelra.</li>
+            <li><b>Bekötés</b> – kapcsolatokkal (az útvonalat a program keresi meg), vagy kézzel hidakkal és vezetékekkel.</li>
+            <li><b>Kipróbálás</b> – a szimuláció megmutatja a feszültségeket, a Problémák a hibákat; a program a vezérlőlapot működteti.</li>
+          </ol>
+          <div class="intro-act">
+            <div class="intro-opt">
+              <label for="introBoard" class="small muted">Panel</label>
+              <select id="introBoard"></select>
+              <button class="btn primary" id="introBlank" data-icon="board">Tiszta sablon</button>
+            </div>
+            <div class="intro-opt">
+              <span class="small muted">vagy nézd meg, hogyan készül</span>
+              <button class="btn secondary" id="introEx" data-icon="book">Példa betöltése</button>
+            </div>
           </div>
         </div>
+      </section>
+      <section class="progview" id="progView" aria-label="Program" hidden></section>
+      <div class="toolstrip" id="toolstrip" role="toolbar" aria-label="Eszközök">
+        <button class="btn icon ghost ts-tog" id="tsTog" aria-label="Eszközsáv összecsukása" aria-expanded="true" title="Eszközsáv összecsukása / kinyitása" data-icon="left"></button>
+        <div class="tools" id="tools"></div>
+        <div class="wirecolor" id="wireColorRow" hidden><span class="small muted">Szín</span><div class="swatches" id="swatches"></div></div>
+      </div>
+      <section class="fwin" id="propWin" aria-labelledby="pwTitle" hidden>
+        <header class="fwin-head" id="pwHead">
+          <span class="fwin-t" id="pwTitle">Kijelölés</span><span class="small fwin-s" id="selSumm"></span><span class="sp"></span>
+          <button class="btn icon ghost" id="pwCol" aria-label="Összecsukás címsorra" aria-expanded="true" title="Összecsukás címsorra (dupla kattintás a címsoron is)" data-icon="down"></button>
+          <button class="btn icon ghost" id="pwDock" aria-label="Rögzítés a jobb sávba" title="Rögzítés a jobb sávba (a Tulajdonságok szakasz tetejére)" data-icon="dock"></button>
+        </header>
+        <div class="fwin-body" id="pwBody"><div id="props" class="props"></div></div>
+      </section>
+      <div class="grp seg zoomctl" role="group" aria-label="Nagyítás">
+          <button class="btn icon" id="zOut" data-icon="zoomOut" aria-label="Kicsinyítés" title="Kicsinyítés (Ctrl+görgő)"></button>
+          <button class="btn mono small zlbl" id="zLbl" title="Az egész panel látszódjon (0)">100%</button>
+          <button class="btn icon" id="zIn" data-icon="zoomIn" aria-label="Nagyítás" title="Nagyítás (Ctrl+görgő)"></button>
+          <button class="btn icon" id="zFit" data-icon="fit" aria-label="Az egész panel" title="Az egész panel, középen (0)"></button>
+        </div>
+      <div class="fab" id="fab" role="toolbar" aria-label="Műveletek a kijelöléssel" hidden></div>
+      <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    </div>
+    <section class="bpanel" id="bpanel" aria-label="Problémák és napló">
+      <div class="bp-grip" id="bpGrip" role="separator" aria-orientation="horizontal" aria-label="Az alsó panel magassága" tabindex="0" title="Húzd a magasság állításához"></div>
+      <div class="bp-head" role="tablist" aria-label="Alsó panel">
+        <button class="bp-tab on" role="tab" data-btab="issues" aria-selected="true">Problémák <span class="badge" id="bpIssN"></span></button>
+        <button class="bp-tab" role="tab" data-btab="log" aria-selected="false">Napló <span class="badge info" id="bpLogN"></span></button>
+        <span class="sp"></span>
+        <button class="btn ghost bp-act" id="bpRead" hidden>Mind elolvasva</button>
+        <button class="btn ghost bp-act" id="bpClear" hidden>Napló törlése</button>
+        <button class="btn icon ghost" id="bpTog" aria-label="Alsó panel kinyitása" aria-expanded="false" title="Problémák és napló (P)" data-icon="down"></button>
+      </div>
+      <div class="bp-body" id="bpBody">
+        <ul class="issues cols" id="issues" data-bpane="issues" role="tabpanel"></ul>
+        <ul class="log cols" id="log" data-bpane="log" role="tabpanel" hidden></ul>
       </div>
     </section>
-    <section class="progview" id="progView" aria-label="Program" hidden></section>
-    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <footer class="status" id="statusbar">
       <span class="sb-msg" id="status">—</span>
       <span class="sb-item" id="sbTool"></span>
@@ -158,16 +168,19 @@
     <div class="rtabs" role="tablist" aria-label="Jobb oldali panel">
       <button class="side-tog" id="colR" title="Oldalsáv összecsukása ( ] )" aria-label="Jobb oldalsáv összecsukása" aria-expanded="true">»</button>
       <button class="rtab on" role="tab" data-rtab="design" aria-selected="true" aria-controls="rpDesign">Terv</button>
-      <button class="rtab" role="tab" data-rtab="check" aria-selected="false" aria-controls="rpCheck">Problémák <span id="issueSum"></span></button>
       <button class="rtab" role="tab" data-rtab="sim" aria-selected="false" aria-controls="rpSim">Szimuláció</button>
     </div>
     <div class="rail" id="railR" role="toolbar" aria-label="Jobb oldalsáv (összecsukva)">
       <button class="rail-btn" data-expand="r" title="Kinyitás ( ] )" aria-label="Jobb oldalsáv kinyitása">«</button>
       <button class="rail-btn" data-rail-rtab="design" title="Terv" aria-label="Terv" data-icon="list"></button>
-      <button class="rail-btn" data-rail-rtab="check" title="Problémák" aria-label="Problémák" data-icon="warn"><span class="badge" id="railIss"></span></button>
       <button class="rail-btn" data-rail-rtab="sim" title="Szimuláció" aria-label="Szimuláció" data-icon="pulse"></button>
     </div>
     <div class="rpane" id="rpDesign" data-rpane="design" role="tabpanel">
+      <section class="dock acc" id="propDock" hidden>
+        <div class="dock-head"><span class="h">Tulajdonságok</span><span class="muted small" id="dockSumm"></span><span class="sp"></span>
+          <button class="btn icon ghost" id="pwUndock" aria-label="Leválasztás lebegő ablakba" title="Leválasztás: lebegő ablak a panel fölött" data-icon="undock"></button></div>
+        <div class="dock-body" id="dockBody"></div>
+      </section>
       <details class="acc" id="accLinks" open>
         <summary><span class="h">Kapcsolatok</span><span id="linkSum"></span></summary>
       <label class="check" style="margin-bottom:8px"><input type="checkbox" id="autoR"> Automatikus útvonaltervezés</label>
@@ -191,9 +204,22 @@
         <div class="row"><button class="btn" id="bdApply">Alkalmaz</button><span class="muted small" id="bdMm"></span></div>
       </div>
       </details>
-    </div>
-    <div class="rpane" id="rpCheck" data-rpane="check" role="tabpanel" hidden>
-      <ul class="issues" id="issues"></ul>
+      <details class="acc" id="accLegend">
+        <summary><span class="h">Jelmagyarázat</span></summary>
+      <div class="legend">
+        <span><i style="background:#2563eb"></i>gomb A / GPIO</span>
+        <span><i style="background:#d97706"></i>gomb B</span>
+        <span><i style="background:#1f2328"></i>GND / katód</span>
+        <span><i style="background:#e03131"></i>3V3 / anód / +</span>
+        <span><i style="background:#be4bdb"></i>VBUS / VSYS</span>
+        <span><i style="background:#c8cdd3"></i>kézi híd</span>
+        <span><i style="background:#5b9bd5"></i>automatikus híd</span>
+        <span><i style="background:#00e676"></i>kapcsolat → GPIO</span>
+        <span><i style="background:#00b8ff"></i>kapcsolat → GND</span>
+        <span><i style="background:#ffab00"></i>kapcsolat láb–láb</span>
+        <span><i style="background:#ff1744"></i>bekötetlen kapcsolat</span>
+      </div>
+      </details>
     </div>
     <div class="rpane" id="rpSim" data-rpane="sim" role="tabpanel" hidden>
       <section id="simSec">
@@ -212,7 +238,7 @@
   </aside>
   <nav class="tabbar" id="tabbar" aria-label="Panelek">
     <button class="tab on" data-sheet="" aria-pressed="true">Panel</button>
-    <button class="tab" data-sheet="left" aria-pressed="false">Eszközök</button>
+    <button class="tab" data-sheet="left" aria-pressed="false">Alkatrészek</button>
     <button class="tab" data-sheet="right" aria-pressed="false">Részletek <span class="badge" id="tabIss"></span></button>
   </nav>
 </div>
