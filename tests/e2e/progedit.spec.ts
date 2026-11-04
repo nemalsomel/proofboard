@@ -82,11 +82,11 @@ test('a kijelölt csomópont lába a panelon is kiemelődik; hibás láb a csom�
   await expect(page.locator('[data-node="n1"] .pg-err')).toHaveText('Nincs kiválasztva láb');
 });
 
-test('Kód fül: MicroPython és Arduino, a kijelölt csomópont sorai kiemelve, sorra kattintva kijelöl; letöltés és PlatformIO-zip', async ({ page }) => {
+test('Kód fül a jobb sávban: MicroPython és Arduino, a kijelölt blokk sorai kiemelve, sorra kattintva kijelöl; letöltés és PlatformIO-zip', async ({ page }) => {
   await pcb(page, `pcb.example('prog-toggle');`);
   await page.click('[data-node="n2"] .pg-head');
-  await page.click('[data-pvtab="code"]');
-  await expect(page.locator('#pvNodes')).toBeHidden();
+  await page.click('[data-rtab="code"]');
+  await expect(page.locator('#pvNodes')).toBeVisible(); // a blokkok és a kód egyszerre látszik
   await expect(page.locator('.pc-code')).toContainText('from machine import Pin');
   await expect(page.locator('.pc-ln.on').first()).toContainText('n2');
   const [py] = await Promise.all([page.waitForEvent('download'), page.click('[data-pc="dl"]')]);
@@ -98,7 +98,42 @@ test('Kód fül: MicroPython és Arduino, a kijelölt csomópont sorai kiemelve,
   expect(z.suggestedFilename()).toBe('proofboard-platformio.zip');
   // sorra kattintva a hozzá tartozó csomópont lesz kijelölve
   await page.locator('.pc-ln[data-node="n3"]').first().click();
-  await page.click('[data-pvtab="nodes"]');
   await expect(page.locator('.pg-node[data-node="n3"]')).toHaveClass(/sel/);
   expect((await pcb<any>(page, `return pcb.code('arduino');`)).file).toBe('proofboard.ino');
+});
+
+test('Sorozat és Léptetőmotor sablon: a menüből egy kattintással, a ULN2003 IN1–IN4 lábaira', async ({ page }) => {
+  await pcb(page, `pcb.example('stepper'); pcb.program(null); pcb.work('prog');`);
+  await page.click('[data-pg="add"]');
+  await page.click('[data-tpl="stepper"]');
+  const pr = await pcb<any>(page, `return pcb.program();`);
+  expect(pr.nodes.map((n: any) => n.type)).toEqual(['blink', 'seq', 'out', 'out', 'out', 'out']);
+  expect(pr.nodes.slice(2).map((n: any) => n.props.pin)).toEqual(['p2.IN1', 'p2.IN2', 'p2.IN3', 'p2.IN4']);
+  expect(pr.edges).toHaveLength(5);
+  // a Sorozat beállítása: saját mintánál megjelenik a mintamező
+  await expect(page.locator('#pgp_custom')).toHaveCount(0);
+  await page.selectOption('#pgp_preset', 'custom');
+  await expect(page.locator('#pgp_custom')).toBeVisible();
+});
+
+test('régi terv Jelsorozattal: betöltéskor programmá alakul', async ({ page }) => {
+  const pr = await pcb<any>(page, `pcb.example('stepper'); const d = pcb.get(); delete d.program;
+    d.signal = { preset: 'full', custom: '', pins: ['p1.6', 'p1.7', null, null], step: 0, rate: 5, dir: -1 }; pcb.load(d); return pcb.program();`);
+  expect(pr.nodes.map((n: any) => n.type)).toEqual(['blink', 'seq', 'out', 'out']);
+  expect(pr.nodes[0].props.period).toBe(200);
+  expect(pr.nodes[1].props).toMatchObject({ preset: 'full', dir: 'back' });
+  expect(await pcb(page, `return 'signal' in pcb.get();`)).toBe(false);
+});
+
+test('Mindkettő: egymás mellett vagy egymás alatt; a beállítás megmarad', async ({ page }) => {
+  await pcb(page, `pcb.example('prog-blink');`);
+  await page.keyboard.press('3');
+  await expect(page.locator('#splitDir')).toBeVisible();
+  const side = async () => { const a = (await page.locator('#scroll').boundingBox())!, b = (await page.locator('#progView').boundingBox())!; return b.y > a.y + a.height / 2 ? 'alatta' : 'mellette'; };
+  expect(await side()).toBe('mellette');
+  await page.click('#splitDir');
+  expect(await side()).toBe('alatta');
+  await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
+  await pcb(page, `pcb.work('split');`);
+  expect(await side()).toBe('alatta');
 });

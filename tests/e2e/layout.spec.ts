@@ -42,20 +42,21 @@ test('elrendezések: Tervezés / Program / Szimuláció; a kézi módosítás el
   expect(await page.evaluate(() => (window as any).pcb.layout())).toBe('design');
   await expect(page.locator('#layReset')).toBeHidden();
   await page.click('[data-layout="prog"]');
-  expect(await page.evaluate(() => [(window as any).pcb.work(), (window as any).pcb.sides()])).toEqual(['split', { l: true, r: true }]);
+  expect(await page.evaluate(() => [(window as any).pcb.work(), (window as any).pcb.sides()])).toEqual(['split', { l: true, r: false }]);
   await expect(page.locator('#progView')).toBeVisible();
-  // kézi módosítás a Program elrendezésben: jobb sáv nyitva, alsó panel nyitva
-  await page.click('[data-expand="r"]');
+  await expect(page.locator('.right .rtab.on')).toHaveText('Kód'); // a Program elrendezésben jobbra a kód
+  // kézi módosítás a Program elrendezésben: jobb sáv csukva, alsó panel nyitva
+  await page.click('#colR');
   await page.keyboard.press('p');
   await expect(page.locator('#layReset')).toBeVisible();
   await page.keyboard.press('Alt+1');
   expect(await page.evaluate(() => [(window as any).pcb.layout(), (window as any).pcb.work(), (window as any).pcb.sides(), (window as any).pcb.bottom().open])).toEqual(['design', 'board', { l: false, r: false }, false]);
   await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
   await page.keyboard.press('Alt+2');
-  expect(await page.evaluate(() => [(window as any).pcb.sides(), (window as any).pcb.bottom().open])).toEqual([{ l: true, r: false }, true]);
+  expect(await page.evaluate(() => [(window as any).pcb.sides(), (window as any).pcb.bottom().open])).toEqual([{ l: true, r: true }, true]);
   // vissza az alapállapotra
   await page.click('#layReset');
-  expect(await page.evaluate(() => [(window as any).pcb.sides(), (window as any).pcb.bottom().open])).toEqual([{ l: true, r: true }, false]);
+  expect(await page.evaluate(() => [(window as any).pcb.sides(), (window as any).pcb.bottom().open])).toEqual([{ l: true, r: false }, false]);
   await expect(page.locator('#layReset')).toBeHidden();
 });
 

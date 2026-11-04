@@ -4,7 +4,7 @@ import { hasErrors, validatePartDef } from '../core/validate';
 import { PARTS } from '../parts/builtin';
 import type { Cut } from './board';
 import { DEFS, libraryParts, syncDefs } from './defs';
-import { normProgram } from './program';
+import { normProgram, signalToProgram } from './program';
 import type { AutoBridge, Bridge, Design, Hole, Link, Note, Wire } from './types';
 
 
@@ -64,8 +64,10 @@ export function normalize(d: unknown): Design {
   { const pg = normProgram(r.program); if (pg && pg.nodes.length) o.program = pg; }
   if (r.signal && typeof r.signal === 'object') {
     const s = r.signal as Raw;
-    o.signal = { preset: String(s.preset || 'half'), custom: String(s.custom || ''), pins: (Array.isArray(s.pins) ? s.pins : []).slice(0, 8).map((x: unknown) => (x ? String(x) : null)),
-      step: +s.step || 0, rate: +s.rate || 4, dir: +s.dir < 0 ? -1 : 1 };
+    // a régi Jelsorozat programmá alakul (Sorozat blokk, ütemadóval és kimenetekkel)
+    const pg = signalToProgram({ preset: String(s.preset || 'half'), custom: String(s.custom || ''), pins: (Array.isArray(s.pins) ? s.pins : []).slice(0, 8).map((x: unknown) => (x ? String(x) : null)),
+      step: +s.step || 0, rate: +s.rate || 4, dir: +s.dir < 0 ? -1 : 1 }, o.program);
+    if (pg && pg.nodes.length) o.program = pg;
   }
   o.seq = Math.max(r.seq || 1, ...o.parts.map(p => +String(p.id).replace(/\D/g, '') + 1 || 1), ...o.links.map(l => +String(l.id).replace(/\D/g, '') + 1 || 1));
   return o;

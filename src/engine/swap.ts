@@ -39,7 +39,6 @@ export function swapMcu(D: Design, pid: string, type: string, hooks: { before():
   hooks.before();
   const old = p.type, oq = new Map(DEFS[old].pins(p).map(q => [q.id, q])), pre = p.id + '.', dropped: string[] = [];
   const carry: Array<{ l: Link; old: string; mode?: string; pwm?: PwmCfg }> = [];
-  const sig = D.signal && Array.isArray(D.signal.pins) ? D.signal.pins.map(k => (k && k.startsWith(pre) ? k : null)) : [];
   const links: Link[] = [];
   for (const l of D.links) {
     let { a, b } = l, g = l.gpio && l.gpio.startsWith(pre) ? l.gpio : null;
@@ -73,6 +72,7 @@ export function swapMcu(D: Design, pid: string, type: string, hooks: { before():
     if (c.mode && q && gpioModeOk(q, c.mode)) D.gpio[nk] = c.mode;
     if (c.pwm && q && gpioModeOk(q, 'pwm')) D.pwm = { ...(D.pwm || {}), [nk]: c.pwm };
   }
-  if (sig.length && D.signal) D.signal = { ...D.signal, pins: D.signal.pins.map((k, i) => (sig[i] ? map.get(sig[i]!) || null : k)) };
+  // a program a vezérlő lábára is hivatkozhat (pl. a régi Jelsorozatból): az új GPIO-ra kerül
+  if (D.program) for (const n of D.program.nodes) { const r = n.props.pin; if (typeof r === 'string' && r.startsWith(pre) && map.has(r)) n.props.pin = map.get(r); }
   return { dropped };
 }

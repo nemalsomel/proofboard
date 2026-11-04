@@ -68,3 +68,18 @@ describe('zip', () => {
     expect(new DataView(z.buffer).getUint16(z.length - 12, true)).toBe(2); // bejegyzések száma
   });
 });
+
+describe('Sorozat blokk kódja', () => {
+  it('MicroPython és Arduino: minta tömbként, felfutó élre lép', async () => {
+    const { generateCode } = await import('../../src/engine/codegen');
+    const { stepperTemplate } = await import('../../src/engine/program');
+    const { emptyDesign } = await import('../../src/engine/design');
+    const { analyze } = await import('../../src/engine/netlist');
+    const D = emptyDesign(), { prog } = stepperTemplate(undefined, [null, null, null, null]);
+    const py = generateCode(D, analyze(D), prog, 'micropython').code, ino = generateCode(D, analyze(D), prog, 'arduino').code;
+    expect(py).toContain("n2_minta = ['1000', '1100', '0100', '0110', '0010', '0011', '0001', '1001']");
+    expect(py).toMatch(/n2_i = \(n2_i \+ \(-1 if False else 1\)\) % 8/);
+    expect(ino).toContain('const char* n2_minta[8] = {"1000", "1100"');
+    expect(ino).toContain("n2_c0 = n2_minta[n2_i][0] == '1';");
+  });
+});

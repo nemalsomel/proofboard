@@ -30,7 +30,6 @@ import { LAYOUTS, LAYOUT_DEFAULTS, isLayout, parseStore, stateOf, remember as la
 import { mountFloatWin, parseWin } from './ui/floatwin';
 import { generateCode } from './engine/codegen';
 import { emptyDesign, normalize, normCutList, rekeyAgainstLibrary, NOTE_COL } from './engine/design';
-import { SIG_PRESETS, SIG_NAMES, sigCfg as sigCfgOf, sigRows, sigApplyTo } from './engine/signal';
 import { swapMcu as swapMcuOf } from './engine/swap';
 import { presetMacropad, presetRouted } from './engine/presets';
 import { route as routeOf, suggestCuts as suggestCutsOf, manualToAuto as manualToAutoOf, autoCutOn as autoCutOnOf } from './engine/route';
@@ -579,10 +578,11 @@ function zoom(dz){zoomTo(ui.zoom+dz);}
 const UIKEY='proofboard.ui.right';
 const uiPref=()=>{try{return JSON.parse(localStorage.getItem(UIKEY)||'{}')||{};}catch(e){return{};}};
 const uiPrefSet=o=>{try{localStorage.setItem(UIKEY,JSON.stringify({...uiPref(),...o}));}catch(e){}};
-function rtab(name,remember=true){ui.rtab=name;
+function rtab(name,remember=true){if(name==='code'){if(ui.rtab!=='code')ui.rtabBeforeCode=ui.rtab;codeMount();}ui.rtab=name;
   document.querySelectorAll('[data-rtab]').forEach(b=>{const on=b.dataset.rtab===name;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
   document.querySelectorAll('[data-rpane]').forEach(p=>{p.hidden=p.dataset.rpane!==name;});
   document.querySelectorAll('[data-rail-rtab]').forEach(b=>b.classList.toggle('on',b.dataset.railRtab===name));
+  if(name==='code')PC.refresh();
   if(remember&&name!=='props')layPatch({rtab:name});}
 document.querySelector('.right .rtabs').addEventListener('click',e=>{const b=e.target.closest('[data-rtab]');if(b)rtab(b.dataset.rtab);});
 document.querySelector('.right .rtabs').addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;const ts=[...document.querySelectorAll('[data-rtab]')],i=ts.findIndex(b=>b.classList.contains('on')),n=ts[(i+(e.key==='ArrowRight'?1:ts.length-1))%ts.length];rtab(n.dataset.rtab);n.focus();e.preventDefault();});
@@ -597,39 +597,43 @@ function ltab(name){ui.ltab=name==='props'?'props':'lib';
   document.querySelectorAll('[data-rail-ltab]').forEach(b=>b.classList.toggle('on',b.dataset.railLtab===ui.ltab));}
 document.querySelector('.ltabs').addEventListener('click',e=>{const b=e.target.closest('[data-ltab]');if(b)ltab(b.dataset.ltab);});
 ui.ltab='lib';
-function setSim(on){if(!on)sigPlay(false);if(on&&!ui.sim){LSTATE.clear();STSTATE.clear();if(LAY_S.cur!=='sim'){ui.layBack=LAY_S.cur;applyLayout('sim',true,{work:ui.work||'board'});}else ui.layBack=null;log('Szimuláció elindítva.');}
+function setSim(on){if(on&&!ui.sim){LSTATE.clear();STSTATE.clear();if(LAY_S.cur!=='sim'){ui.layBack=LAY_S.cur;applyLayout('sim',true,{work:ui.work||'board'});}else ui.layBack=null;log('Szimuláció elindítva.');}
   else if(!on&&ui.sim){if(ui.layBack&&LAY_S.cur==='sim')applyLayout(ui.layBack);ui.layBack=null;log('Szimuláció leállítva.');}
   ui.sim=on;if(!on){ui.pressed={};ui.holdPtr.clear();}ui.wireStart=null;ui.placing=null;simBtn();
   progStart(on);
-  if(on&&D.signal&&(D.signal.pins||[]).some(Boolean))sigApply();else recompute();if(on&&ui.prog)progTick(0);renderLeft();if(PE&&ui.work!=='board'&&ui.pvTab!=='code'){progLiveAt=0;PE.live();}}
+  recompute();if(on&&ui.prog)progTick(0);renderLeft();if(PE&&ui.work!=='board'){progLiveAt=0;PE.live();}}
 /* ---------- Program futtatása: ütemenként kiértékel, és ha a GPIO-beállítások változnak, újraszámol ---------- */
 const PROG_MS=20;
 /* ---------- Munkaterület: Panel / Vezérlés / Mindkettő; a programszerkesztő (ui/progedit.ts) ---------- */
 let PE=null,PC=null,progLiveAt=0;
-function progRefresh(){if(!PE||!ui.work||ui.work==='board')return;if(ui.pvTab==='code')PC.refresh();else PE.refresh();}
-/** A Vezérlés nézet felépítése: Csomópontok és Kód fül, a két önálló komponenssel. */
+function progRefresh(){codeRefresh();if(!PE||!ui.work||ui.work==='board')return;PE.refresh();}
+/** A Program nézet: a blokkszerkesztő (ui/progedit.ts). A generált kód a jobb sáv Kód fülén (ui/progcode.ts). */
 function progMount(){if(PE)return;const v=$('#progView');
-  v.innerHTML=`<div class="pv-tabs" role="tablist" aria-label="Program"><button class="rtab" role="tab" data-pvtab="nodes">Blokkok</button><button class="rtab" role="tab" data-pvtab="code">Kód</button></div>
-    <div class="pv-pane" id="pvNodes" role="tabpanel"></div><div class="pv-pane" id="pvCode" role="tabpanel" hidden></div>`;
-  PE=mountProgEditor($('#pvNodes'),progHost);PC=mountCodeView($('#pvCode'),codeHost);
-  v.querySelector('.pv-tabs').addEventListener('click',e=>{const b=e.target.closest('[data-pvtab]');if(b)pvTab(b.dataset.pvtab);});
-  pvTab(uiPref().pvTab==='code'?'code':'nodes',false);}
-function pvTab(t,remember=true){ui.pvTab=t;document.querySelectorAll('[data-pvtab]').forEach(b=>{const on=b.dataset.pvtab===t;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
-  $('#pvNodes').hidden=t!=='nodes';$('#pvCode').hidden=t!=='code';if(remember)uiPrefSet({pvTab:t});if(t==='code')PC.refresh();else PE.refresh();}
+  v.innerHTML=`<div class="pv-pane" id="pvNodes"></div>`;
+  PE=mountProgEditor($('#pvNodes'),progHost);}
+/** Kód fül: a jobb sávban (régi API: pvTab('code')). */
+function codeMount(){if(!PC)PC=mountCodeView($('#codeView'),codeHost);return PC;}
+const codeOpen=()=>ui.rtab==='code'&&!$('.app').classList.contains('colR');
+function codeRefresh(){if(PC&&ui.rtab==='code')PC.refresh();}
+function pvTab(t){if(t==='code'){codeMount();sideCollapse('r',false);rtab('code');}else{ui.pvTab='nodes';if(ui.rtab==='code')rtab(ui.rtabBeforeCode||'design');}ui.pvTab=t==='code'?'code':'nodes';}
 const codeHost={
   code(lang){return D.program&&D.program.nodes.length?generateCode(D,A0||analyze(false),D.program,lang):null;},
   selected:()=>ui.progSel||null,
-  select(id){ui.progSel=id;if(PE)PE.select(id);},
+  select(id){ui.progSel=id;if(PE)PE.select(id);codeRefresh();},
   download(name,blob){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);},
   lang:()=>uiPref().codeLang==='arduino'?'arduino':'micropython',
   setLang(l){uiPrefSet({codeLang:l});},
 };
-function progLive(){if(!PE||!ui.work||ui.work==='board'||ui.pvTab==='code')return;const n=performance.now();if(n-progLiveAt<100)return;progLiveAt=n;PE.live();}
+function progLive(){if(!PE||!ui.work||ui.work==='board')return;const n=performance.now();if(n-progLiveAt<100)return;progLiveAt=n;PE.live();}
 function setWork(v,remember=true){if(!['board','prog','split'].includes(v))v='board';ui.work=v;const a=$('.app').classList;
   a.toggle('work-prog',v==='prog');a.toggle('work-split',v==='split');$('#progView').hidden=v==='board';
   document.querySelectorAll('[data-work]').forEach(b=>{const on=b.dataset.work===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});
   if(v!=='board'){progMount();progRefresh();}else{ui.progHi=null;}
+  $('#splitDir').hidden=v!=='split';
   if(remember)layPatch({work:v});resize();draw();}
+/* Mindkettő: egymás mellett vagy egymás alatt (a panel felül) */
+function splitDir(vert){if(vert==null)vert=!$('.app').classList.contains('split-v');$('.app').classList.toggle('split-v',!!vert);const b=$('#splitDir');b.innerHTML=icon(vert?'sideB':'sideR');b.title=vert?'Egymás alatt (kattintva: egymás mellett)':'Egymás mellett (kattintva: egymás alatt)';b.setAttribute('aria-pressed',String(!!vert));uiPrefSet({splitV:!!vert});resize();if(PE)PE.refresh();}
+$('#splitDir').onclick=()=>splitDir();
 const progHost={
   get:()=>D.program||null,
   set(p,layoutOnly){pushUndo();const n=normProgram(p);if(n&&n.nodes.length)D.program=n;else delete D.program;
@@ -642,7 +646,7 @@ const progHost={
   running:()=>!!ui.sim,
   sim(on){setSim(on);},
   highlight(ref){ui.progHi=ref||null;draw();},
-  onSelect(id){ui.progSel=id;},
+  onSelect(id){ui.progSel=id;codeRefresh();},
 };
 document.querySelectorAll('[data-work]').forEach(b=>b.addEventListener('click',()=>setWork(b.dataset.work)));
 function progStart(on){if(ui.progTimer){clearInterval(ui.progTimer);ui.progTimer=null;}
@@ -825,7 +829,7 @@ function renderRight0(){
   $('#usb').checked=!!D.settings.usb;
   $('#mHold').classList.toggle('on',D.settings.btnMode!=='toggle');$('#mToggle').classList.toggle('on',D.settings.btnMode==='toggle');
   let h='';
-  renderSliders();renderSig();
+  renderSliders();
   if(!SIM){$('#simOut').innerHTML='';return;}
   const pcs=SIM.picos;
   if(pcs.length)h+=pcs.map(pc=>`<div class="small">${esc(pc.p.label)}: ${pc.powered?'<span class="c-ok">táp van</span>':'<span class="c-err">nincs táp</span>'}${pc.usb?' (USB)':''}</div>`).join('');
@@ -872,38 +876,6 @@ function renderSliders(){const ss=sliders(),el=$('#simCtl');
   el.innerHTML=ss.length?`<p class="small muted" style="margin:8px 0 2px">Vezérlők</p>`+ss.map(({p,c,pr})=>{const v=penv(p)[c.key],k=p.id+'|'+c.key;
     return `<div class="row slider"><label for="sl_${p.id}_${c.key}">${esc(p.label)} ${esc(c.label||pr.label)}</label><input type="range" id="sl_${p.id}_${c.key}" data-sl="${k}" min="${pr.min}" max="${pr.max}" step="${pr.step||1}" value="${v}"><output data-slv="${k}">${v}${pr.unit?' '+esc(pr.unit):''}</output></div>`;}).join(''):'';}
 /* ---------- Jelsorozat: GPIO-kimenetek léptetése előre megadott minták szerint (pl. léptetőmotor) ---------- */
-const sigCfg=()=>sigCfgOf(D);
-const sigGpios=()=>D.parts.flatMap(gpins).filter(q=>q.role==='gpio').map(q=>({key:q.part.id+'.'+q.id,name:(D.parts.filter(p=>p.type===q.part.type).length>1?q.part.label+'.':'')+q.name}));
-function sigApply(){sigApplyTo(D);save();recompute();}
-function sigStep(d){const c=sigCfg();c.step=(c.step||0)+d;D.signal=c;sigApply();}
-function sigPlay(on){if(ui.sigTimer){clearInterval(ui.sigTimer);ui.sigTimer=null;}
-  if(on&&ui.sim){const c=sigCfg();ui.sigTimer=setInterval(()=>sigStep(c.dir<0?-1:1),1000/Math.max(0.5,Math.min(50,+c.rate||4)));}
-  const b=document.getElementById('sigPlay');if(b){b.textContent=ui.sigTimer?'❚❚ Állj':'▶ Lejátszás';b.classList.toggle('on',!!ui.sigTimer);}}
-function renderSig(){const el=$('#sigBox'),gs=sigGpios();if(!gs.length){el.innerHTML='';el.dataset.sig='';return;}
-  const c=sigCfg(),{rows,w}=sigRows(c),cur=((c.step%rows.length)+rows.length)%rows.length;
-  const sig=JSON.stringify([gs,c.preset,c.custom,c.pins,c.rate,c.dir,w,ui.sim]);
-  if(el.dataset.sig!==sig){el.dataset.sig=sig;
-    const opt=k=>`<option value="">–</option>`+gs.map(g=>`<option value="${g.key}" ${g.key===k?'selected':''}>${esc(g.name)}</option>`).join('');
-    el.innerHTML=`<details class="sig" ${c.pins.some(Boolean)?'open':''}><summary>Jelsorozat <span class="muted small">GPIO-léptető</span></summary>
-      <p class="help">A kiválasztott GPIO-k kimenetek lesznek, és lépésenként a minta egy sorát kapják (1 = magas, 0 = alacsony). Léptetőmotorhoz a ULN2003 IN1–IN4 bemeneteire kötött GPIO-kat válaszd.</p>
-      <div class="row"><label for="sigPreset">Minta</label><select id="sigPreset">${SIG_NAMES.map(([v,t])=>`<option value="${v}" ${c.preset===v?'selected':''}>${t}</option>`).join('')}</select></div>
-      ${c.preset==='custom'?`<div class="row"><label for="sigCustom">Sorok</label><input id="sigCustom" value="${esc(c.custom||'')}" placeholder="pl. 10 01 11" spellcheck="false"></div>`:''}
-      <div class="sig-ch">${Array.from({length:w},(_,i)=>`<label>${i+1}.<select data-sigpin="${i}" aria-label="${i+1}. csatorna">${opt(c.pins[i])}</select></label>`).join('')}</div>
-      <div class="sig-ctl"><button class="btn" id="sigBack" title="Előző lépés" ${ui.sim?'':'disabled'}>◀</button><button class="btn" id="sigFwd" title="Következő lépés" ${ui.sim?'':'disabled'}>▶</button>
-        <button class="btn" id="sigPlay" ${ui.sim?'':'disabled'}>▶ Lejátszás</button></div>
-      <div class="sig-ctl"><label class="small" for="sigRate">Ütem</label><input type="number" id="sigRate" min="0.5" max="50" step="0.5" value="${c.rate}" style="width:56px"><span class="small">lépés/s</span>
-        <label class="check small"><input type="checkbox" id="sigDir" ${c.dir<0?'checked':''}> visszafelé</label></div>
-      ${ui.sim?'':'<p class="help">A léptetéshez indítsd a szimulációt.</p>'}
-      <div class="sig-rows" id="sigRows"></div></details>`;
-    sigPlay(!!ui.sigTimer);}
-  $('#sigRows').innerHTML=rows.map((r,i)=>`<button class="sig-row ${i===cur?'on':''}" data-sigrow="${i}" ${ui.sim?'':'disabled'} title="${i+1}. lépés">${r.split('').map(b=>`<span class="lv ${b==='1'?'lv1':'lv0'}">${b}</span>`).join('')}</button>`).join('');}
-$('#sigBox').addEventListener('change',e=>{const t=e.target,c=sigCfg();
-  if(t.id==='sigPreset'){c.preset=t.value;c.step=0;}else if(t.id==='sigCustom'){c.custom=t.value;}else if(t.id==='sigRate'){c.rate=Math.max(0.5,Math.min(50,+t.value||4));}
-  else if(t.id==='sigDir'){c.dir=t.checked?-1:1;}else if(t.dataset.sigpin!=null){c.pins=[...c.pins];c.pins[+t.dataset.sigpin]=t.value||null;}else return;
-  D.signal=c;if(ui.sigTimer)sigPlay(true);if(ui.sim&&t.id!=='sigRate'&&t.id!=='sigDir')sigApply();else{save();renderRight();}});
-$('#sigBox').addEventListener('click',e=>{const t=e.target.closest('button');if(!t||t.disabled)return;
-  if(t.id==='sigBack')sigStep(-1);else if(t.id==='sigFwd')sigStep(1);else if(t.id==='sigPlay')sigPlay(!ui.sigTimer);
-  else if(t.dataset.sigrow!=null){const c=sigCfg();c.step=+t.dataset.sigrow;D.signal=c;sigApply();}});
 function setSlider(p,key,v){const pr=(DEFS[p.type].def.params||[]).find(x=>x.key===key);if(!pr)return false;v=Math.max(pr.min,Math.min(pr.max,+v||0));p.props={...p.props,[key]:v};
   SIM=simulate(AS);ISSUES=checkAll();renderRight();draw();save();return true;}
 $('#simCtl').addEventListener('input',e=>{const t=e.target.closest('[data-sl]');if(!t)return;const [pid,key]=t.dataset.sl.split('|');const p=D.parts.find(x=>x.id===pid);if(p)setSlider(p,key,t.value);});
@@ -961,7 +933,7 @@ function loadExample(id){const ex=EXAMPLES.find(e=>e.id===id);if(!ex)return fals
   const raw=JSON.parse(JSON.stringify(ex.design)),d={...raw,bridges:[],wires:[],auto:{bridges:[],wires:[]},seq:100,
     links:raw.links.map(([a,b],i)=>({id:'l'+(10+i),a,b,gpio:null})),notes:raw.notes.map((n,i)=>({id:'n'+(80+i),...n})),
     settings:{usb:true,btnMode:'hold',autoRoute:true,...(raw.settings||{})}};
-  if(ui.sim)setSim(false);pushUndo();sigPlay(false);
+  if(ui.sim)setSim(false);pushUndo();
   D=(normalize(d));syncDefs(D.customParts);ui.sel=null;ui.selLink=null;LSTATE.clear();STSTATE.clear();
   for(const p of [...D.parts])if(isOff(p)&&!p.plug)attachPlug(p); // a külső alkatrészek csatlakozóba dugva
   if(D.links.length){route({full:true});}
@@ -969,7 +941,6 @@ function loadExample(id){const ex=EXAMPLES.find(e=>e.id===id);if(!ex)return fals
     D.auto={bridges:[],wires:[],cuts:[]};D.links=[];D.settings.autoRoute=false;}
   if(ex.design.program&&(!ui.work||ui.work==='board'))setWork(window.innerWidth>1000?'split':'prog');
   for(const [a,m] of Object.entries(ex.gpioFrom||{})){const l=D.links.find(x=>x.a===a);if(l&&l.gpio)D.gpio[l.gpio]=m;}
-  if(ex.signal){const s=ex.signal;D.signal={preset:s.preset,custom:s.custom||'',step:0,rate:s.rate||4,dir:1,pins:s.from.map(a=>{const l=D.links.find(x=>x.a===a);return l&&l.gpio||null;})};}
   commit(true);resize();boardUI();homeView();
   toast(`Betöltve: ${ex.title}. Az előző terv visszavonással (Ctrl+Z) visszahozható.`);
   closeDlg('#dlgEx');renderExamples();return true;}
@@ -1022,7 +993,7 @@ function boardSelects(){const b=D.board,cur=Math.max(0,BOARDS.findIndex(x=>x[1]=
   for(const id of ['#introBoard','#newBoard'])$(id).innerHTML=BOARDS.map((x,i)=>`<option value="${i}" ${i===cur?'selected':''}>${esc(x[0])} (${x[1]}×${x[2]})</option>`).join('');}
 const isEmpty=()=>!D.parts.length&&!D.bridges.length&&!D.wires.length&&!(D.notes||[]).length&&!D.links.length&&!(D.program&&D.program.nodes.length);
 /** Üres terv a választott panellal (visszavonható). */
-function newDesign(i){const x=BOARDS[+i]||BOARDS[0];if(ui.sim)setSim(false);pushUndo();sigPlay(false);
+function newDesign(i){const x=BOARDS[+i]||BOARDS[0];if(ui.sim)setSim(false);pushUndo();
   const d=emptyDesign();d.board={cols:x[1],rows:x[2],sec:x[3]||x[2]};D=d;ui.sel=null;ui.selLink=null;ui.placing=null;ui.introOff=true;LSTATE.clear();STSTATE.clear();
   commit(true);resize();boardUI();homeView();}
 function openNew(){boardSelects();openDlg('#dlgNew');}
@@ -1159,7 +1130,7 @@ $('#bCopy').onclick=()=>{const ta=$('#json');if(!ta.value)ta.value=JSON.stringif
 function importPlan(raw){
   const {raw:r2,renamed}=rekeyAgainstLibrary(raw,LIB),inc=(r2&&r2.customParts&&typeof r2.customParts==='object')?r2.customParts:{};
   const d=normalize(r2);
-  pushUndo();D=d;ui.sel=null;LSTATE.clear();STSTATE.clear();sigPlay(false);commit();
+  pushUndo();D=d;ui.sel=null;LSTATE.clear();STSTATE.clear();commit();
   const nIn=Object.keys(inc).filter(k=>k in (d.customParts||{})).length;
   return `Betöltve: ${d.parts.length} alkatrész, ${d.bridges.length+d.auto.bridges.length} híd, ${d.wires.length+d.auto.wires.length} vezeték`+(nIn?`; a tervvel ${nIn} saját alkatrész jött (a terv része, a könyvtáradat nem változtatta)`:'')+(renamed.length?`; a könyvtáradban más azonos nevű alkatrész van, ezért a terv változata új néven: ${renamed.map(x=>x.name+' → '+x.to).join(', ')}`:'')+'.';
 }
@@ -1429,7 +1400,7 @@ window.pcb={
   /** Munkaterület: 'board' | 'prog' | 'split' (elhagyva: a mostani). */
   work(v){if(v)setWork(v);return ui.work||'board';},
   /** A Vezérlés nézet füle: 'nodes' | 'code'. */
-  pvTab(t){if(!PE)setWork('prog');if(t)pvTab(t);return ui.pvTab;},
+  pvTab(t){if(!PE&&t!=='code')setWork('prog');if(t)pvTab(t);return ui.pvTab||'nodes';},
   /** Generált kód: lang = 'micropython' | 'arduino'. */
   code(lang='micropython'){const c=codeHost.code(lang);return c?{file:c.file,code:c.code,warnings:c.warnings,lines:c.lines}:null;},
   /** A program állapota: csomópont-kimenetek, hibák, a beállított GPIO-módok (lábnévvel). */
@@ -1470,9 +1441,6 @@ window.pcb={
   /** A rajzon éppen látható LED-áramok (lassú PWM-nél a pillanatnyi, egyébként az átlag). */
   ledView(){const S=ui.sim&&ui.blinkSim||SIM;return S?S.leds.map(l=>({label:l.p.label,I:l.I})):[];},
   simInfo(){return SIM?{leds:SIM.leds.map(l=>({label:l.p.label,I:l.I,light:!!l.light})),fets:SIM.fets.map(f=>({label:f.p.label,on:f.on,vgs:f.vgs,I:f.I,floatGate:f.floatGate})),bats:SIM.bats.map(b=>({label:b.p.label,I:b.I,kind:b.kind})),picos:SIM.picos.map(x=>({label:x.p.label,powered:x.powered})),caps:SIM.caps.map(k=>({label:k.p.label,U:k.U,R:k.R,tau:k.tau})),bjts:SIM.bjts.map(t=>({label:t.p.label,st:t.st,ib:t.ib,ic:t.ic,vbe:t.vbe,vce:t.vce})),motors:SIM.motors.map(m=>({label:m.p.label,U:m.U,I:m.I,speed:m.speed})),logics:SIM.logics.map(L=>({label:L.p.label,vdd:L.vdd,ins:Object.fromEntries(L.ins.map(x=>[x.name,x.lv])),outs:Object.fromEntries(L.outs.map(o=>[o.name,o.st])),regs:Object.fromEntries(L.regs.map(r=>[r.name,r.val]))})),servos:SIM.servos.map(s=>({label:s.p.label,U:s.U,pulse:s.pulse,angle:s.angle})),steppers:SIM.steppers.map(s=>({label:s.p.label,pos:s.pos,angle:s.angle,coils:s.coils}))}:null;},
-  /** Jelsorozat: beállítás (preset, custom, pins: GPIO-nevek vagy kulcsok, rate) és léptetés. */
-  signal(cfg){if(cfg){const c={...sigCfg(),...cfg};if(cfg.pins)c.pins=cfg.pins.map(x=>{if(!x)return null;const g=sigGpios().find(g=>g.key===x||g.name===x);return g?g.key:null;});D.signal=c;if(ui.sim)sigApply();else{save();renderRight();}}const c=sigCfg();return{...c,rows:sigRows(c).rows,playing:!!ui.sigTimer};},
-  sigStep(n=1){if(!ui.sim)return false;sigStep(n);return true;},
   pins(label){const p=D.parts.find(x=>x.label===label);if(!p)return null;const m=A0.byPart.get(p.id).map;return gpins(p).map(q=>{const on=inb(q.r,q.c);return{id:q.id,name:q.name,r:q.r,c:q.c,net:on||isOff(p)?m[q.id].net:null};});},
   netV(label,pin){const p=D.parts.find(x=>x.label===label);const q=p&&A0.pins.find(x=>x.part===p&&x.id===pin);return q&&SIM?SIM.netV.get(q.net):null;},
   linkInfo(){return D.links.map(l=>{const g=linkGeom(l);return{text:linkText(l),start:g&&g.start,end:g&&g.end,endPin:g&&g.endPin?pinLabel(g.endPin):null,bridges:g?g.bridges.length:0};});},
@@ -1510,5 +1478,6 @@ function statusText(){return $('#status').textContent;}
   if(MOB.matches){ui.zoom=1.2;resize();const [x,y]=toScreen(M-30,M-28);sc.scrollTo(vpX(x),vpY(y));}else{resize();homeView();}
   boardSelects();introUI();
   window.addEventListener('resize',()=>draw());
+  splitDir(!!uiPref().splitV);
   applyLayout(LAY_S.cur,false);
 })();

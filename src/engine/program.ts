@@ -7,7 +7,7 @@
 import { isMcu } from './defs';
 import { findPin } from './links';
 import type { Netlist } from './netlist';
-import type { Design, PwmCfg } from './types';
+import type { Design, PwmCfg, SignalCfg } from './types';
 
 export type PortKind = 'bool' | 'num';
 export type Val = boolean | number;
@@ -19,8 +19,10 @@ export interface Program { nodes: PNode[]; edges: PEdge[] }
 export interface PortDef { id: string; label: string; kind: PortKind }
 export interface NodeParam {
   key: string; label: string;
-  /** pin: alkatrészláb (hivatkozás), number: szám, select: választás. */
-  type: 'pin' | 'number' | 'select';
+  /** pin: alkatrészláb (hivatkozás), number: szám, select: választás, text: szöveg (pl. saját minta). */
+  type: 'pin' | 'number' | 'select' | 'text';
+  /** Csak akkor látszik, ha a megadott paraméter értéke ez (pl. a saját minta csak „saját” választásnál). */
+  when?: { key: string; is: string };
   default: unknown; min?: number; max?: number; unit?: string;
   options?: ReadonlyArray<readonly [string, string]>;
 }
@@ -46,6 +48,21 @@ const num = (x: unknown, d: number): number => { const n = Number(x); return isF
 const bin = (id: string, label: string): PortDef => ({ id, label, kind: 'bool' });
 const nin = (id: string, label: string): PortDef => ({ id, label, kind: 'num' });
 const PIN = (label = 'Láb'): NodeParam => ({ key: 'pin', label, type: 'pin', default: '' });
+/** Sorozat-minták (a csatornák sorrendje A, B, C, D); a léptetőmotor tekercseihez és számlálóhoz. */
+export const SEQ_PRESETS: Record<string, string[]> = {
+  half: ['1000', '1100', '0100', '0110', '0010', '0011', '0001', '1001'],
+  full: ['1100', '0110', '0011', '1001'],
+  wave: ['1000', '0100', '0010', '0001'],
+  count: Array.from({ length: 16 }, (_, i) => i.toString(2).padStart(4, '0').split('').reverse().join('')),
+};
+export const SEQ_CH = 4;
+const SEQ_OPTS: ReadonlyArray<readonly [string, string]> = [['half', 'félléptetés (8 lépés)'], ['full', 'teljes lépés, két tekercs (4)'], ['wave', 'egy tekercs (4)'], ['count', 'bináris számláló (16)'], ['custom', 'saját minta']];
+/** A minta sorai 4 csatornára igazítva (saját mintánál a 0/1 csoportok, pl. „10 01 11”). */
+export function seqRows(preset: unknown, custom: unknown): string[] {
+  let rows = preset === 'custom' ? String(custom || '').split(/[\s,;]+/).filter(x => /^[01]{1,8}$/.test(x)) : SEQ_PRESETS[String(preset)] || SEQ_PRESETS.half;
+  if (!rows.length) rows = ['0'];
+  return rows.map(r => r.slice(0, SEQ_CH).padEnd(SEQ_CH, '0'));
+}
 /** Felfutó él: az előző ütem óta 0 → 1. */
 const rise = (st: Record<string, unknown>, k: string, v: boolean): boolean => { const was = !!st[k]; st[k] = v; return v && !was; };
 
@@ -111,6 +128,23 @@ export const NODE_DEFS: Record<string, NodeDef> = {
       if (c.st.last !== v) { c.st.last = v; c.st.at = c.t; }
       if (c.t - num(c.st.at, 0) >= d) c.st.v = v;
       return { v: !!c.st.v };
+    },
+  },
+  seq: {
+    label: 'Sorozat', cat: 'Idő', help: 'Minden felfutó élre (pl. ütemadótól) a minta következő sora kerül az A–D kimenetekre: léptetőmotor tekercsei, futófény, számláló. A „vissza” bemenet (vagy az irány) visszafelé léptet.',
+    ins: [bin('a', 'lépés'), bin('r', 'vissza')], outs: [bin('c0', 'A'), bin('c1', 'B'), bin('c2', 'C'), bin('c3', 'D'), nin('n', 'sor')],
+    params: [{ key: 'preset', label: 'Minta', type: 'select', default: 'half', options: SEQ_OPTS },
+      { key: 'custom', label: 'Saját minta (sorok szóközzel)', type: 'text', default: '10 01', when: { key: 'preset', is: 'custom' } },
+      { key: 'dir', label: 'Irány', type: 'select', default: 'fwd', options: [['fwd', 'előre'], ['back', 'vissza']] }],
+    eval: c => {
+      const rows = seqRows(c.p.preset, c.p.custom), n = rows.length;
+      let i = num(c.st.i, 0);
+      // az első ütem csak megjegyzi a bemenetet: induláskor (pl. magas ütemadóval) nem lép
+      const was = c.st.a === undefined ? true : !!c.st.a, now = B(c.in.a); c.st.a = now;
+      if (now && !was) i += (c.p.dir === 'back') !== B(c.in.r) ? -1 : 1;
+      i = ((i % n) + n) % n; c.st.i = i;
+      const r = rows[i];
+      return { c0: r[0] === '1', c1: r[1] === '1', c2: r[2] === '1', c3: r[3] === '1', n: i };
     },
   },
   out: {
@@ -228,3 +262,36 @@ export function evalProgram(D: Design, A: Netlist, prog: Program, rt: ProgRuntim
 /** A terv a program GPIO-beállításaival (a szimuláció és az ellenőrzés ezt kapja futás közben). */
 export const withProgram = (D: Design, o: ProgOut | null): Design =>
   o ? { ...D, gpio: { ...D.gpio, ...o.gpio }, pwm: { ...(D.pwm || {}), ...o.pwm } } : D;
+
+/** Új azonosító a meglévők mellé (n1, n2… / e1, e2…). */
+const freshId = (pre: string, used: Set<string>): string => { let i = 1; while (used.has(pre + i)) i++; const id = pre + i; used.add(id); return id; };
+
+/**
+ * Léptetőmotor sablon: Ütemadó → Sorozat → 4 digitális kimenet (a megadott lábakra, pl. ULN2003 IN1–IN4).
+ * A meglévő programhoz adja (új azonosítókkal), a megadott helytől jobbra-lefelé.
+ */
+export function stepperTemplate(prog: Program | undefined, pins: Array<string | null>, at = { x: 40, y: 40 },
+  o: { period?: number; preset?: string; custom?: string; dir?: string } = {}): { prog: Program; ids: string[] } {
+  const p: Program = prog ? { nodes: [...prog.nodes], edges: [...prog.edges] } : { nodes: [], edges: [] };
+  const nIds = new Set(p.nodes.map(n => n.id)), eIds = new Set(p.edges.map(e => e.id));
+  const clk = freshId('n', nIds), seq = freshId('n', nIds), outs = [0, 1, 2, 3].map(() => freshId('n', nIds));
+  p.nodes.push({ id: clk, type: 'blink', x: at.x, y: at.y + 40, props: { period: o.period ?? 250, duty: 50 } });
+  p.nodes.push({ id: seq, type: 'seq', x: at.x + 230, y: at.y, props: { preset: o.preset ?? 'half', custom: o.custom ?? '10 01', dir: o.dir ?? 'fwd' } });
+  p.edges.push({ id: freshId('e', eIds), from: clk + '.v', to: seq + '.a' });
+  outs.forEach((id, k) => {
+    p.nodes.push({ id, type: 'out', x: at.x + 460, y: at.y + k * 90, props: { pin: pins[k] || '' } });
+    p.edges.push({ id: freshId('e', eIds), from: `${seq}.c${k}`, to: id + '.a' });
+  });
+  return { prog: p, ids: [clk, seq, ...outs] };
+}
+
+/** A régi Jelsorozat (GPIO-léptető) programmá alakítva: ütemadó a sebességgel, sorozat a mintával, kimenet csatornánként. */
+export function signalToProgram(sig: SignalCfg, prog?: Program): Program | undefined {
+  const pins = (sig.pins || []).slice(0, SEQ_CH);
+  if (!pins.some(Boolean)) return prog;
+  const y0 = prog && prog.nodes.length ? Math.max(...prog.nodes.map(n => n.y)) + 160 : 40;
+  const { prog: p, ids } = stepperTemplate(prog, pins, { x: 40, y: y0 }, { period: Math.max(20, Math.round(1000 / Math.max(0.5, sig.rate || 4))), preset: sig.preset, custom: sig.custom, dir: sig.dir < 0 ? 'back' : 'fwd' });
+  // a nem használt csatornák kimenete nem kell
+  const drop = new Set(ids.slice(2).filter((_, k) => !pins[k]));
+  return { nodes: p.nodes.filter(n => !drop.has(n.id)), edges: p.edges.filter(e => !drop.has(e.to.slice(0, e.to.lastIndexOf('.')))) };
+}

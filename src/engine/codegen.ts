@@ -8,7 +8,7 @@
 import { DEFS, isMcu } from './defs';
 import { findPin } from './links';
 import type { Netlist } from './netlist';
-import { gpioOf, NODE_DEFS, type PNode, type Program } from './program';
+import { gpioOf, NODE_DEFS, seqRows, type PNode, type Program } from './program';
 import type { Design } from './types';
 
 export type CodeLang = 'micropython' | 'arduino';
@@ -136,6 +136,18 @@ export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLan
         V.push(py ? `${id}_utolso = None` : `int ${id}_utolso = -1;`, py ? `${id}_mikor = 0` : `unsigned long ${id}_mikor = 0;`);
         L.push(...(py ? [`_be = ${inp(n, 'a', 'bool')}`, `if _be != ${id}_utolso:`, `    ${id}_utolso = _be`, `    ${id}_mikor = t`, `if t - ${id}_mikor >= ${ms}:`, `    ${out('v')} = _be`]
           : [`{ bool be = ${inp(n, 'a', 'bool')};`, `  if ((int)be != ${id}_utolso) { ${id}_utolso = be; ${id}_mikor = t; }`, `  if (t - ${id}_mikor >= ${ms}) ${out('v')} = be; }`]));
+        break;
+      }
+      case 'seq': {
+        const rows = seqRows(p.preset, p.custom), cnt = rows.length, back = p.dir === 'back';
+        V.push(...(py ? [`${id}_minta = [${rows.map(r => `'${r}'`).join(', ')}]`, `${id}_i = 0`, `${id}_elozo = True  ${c('induláskor nem lép')}`]
+          : [`const char* ${id}_minta[${cnt}] = {${rows.map(r => `"${r}"`).join(', ')}};`, `int ${id}_i = 0;`, `bool ${id}_elozo = true;  ${c('induláskor nem lép')}`]));
+        const r = inp(n, 'r', 'bool'), lep = inp(n, 'a', 'bool');
+        const dirE = back ? (py ? `1 if ${r} else -1` : `${r} ? 1 : -1`) : (py ? `-1 if ${r} else 1` : `${r} ? -1 : 1`);
+        L.push(...(py ? [`_be = ${lep}`, `if _be and not ${id}_elozo:  ${c('felfutó él: következő sor')}`, `    ${id}_i = (${id}_i + (${dirE})) % ${cnt}`, `${id}_elozo = _be`,
+          ...[0, 1, 2, 3].map(k => `${out('c' + k)} = ${id}_minta[${id}_i][${k}] == '1'`), `${out('n')} = ${id}_i`]
+          : [`{ bool be = ${lep};`, `  if (be && !${id}_elozo) ${id}_i = (${id}_i + (${dirE}) + ${cnt}) % ${cnt};  ${c('felfutó él: következő sor')}`, `  ${id}_elozo = be; }`,
+            ...[0, 1, 2, 3].map(k => `${out('c' + k)} = ${id}_minta[${id}_i][${k}] == '1';`), `${out('n')} = ${id}_i;`]));
         break;
       }
       case 'out':

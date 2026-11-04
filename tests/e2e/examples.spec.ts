@@ -45,26 +45,24 @@ test('logikai példák: D tároló gombnyomásra vált, a dekóder végigléptet
   const r = await pcb<any>(page, `const L = () => pcb.simInfo().leds.map(l => l.I > 2e-4 ? 1 : 0).join('');
     pcb.example('toggle'); pcb.sim(true); const t = [L()];
     for (let i = 0; i < 2; i++) { pcb.press('SW1', true); t.push(L()); pcb.press('SW1', false); t.push(L()); }
-    pcb.sim(false); pcb.example('decoder'); pcb.sim(true); const d = [L()]; for (let i = 0; i < 4; i++) { pcb.sigStep(1); d.push(L()); }
+    pcb.sim(false); pcb.example('decoder'); pcb.progAuto(false); pcb.sim(true); const d = [L()]; for (let i = 0; i < 4; i++) { pcb.progStep(250); pcb.progStep(250); d.push(L()); }
     return { t: t.join(' '), d: d.join(' ') };`);
   expect(r.t).toBe('0 1 1 0 0');
   expect(r.d).toBe('1000 0100 0010 0001 1000');
 });
 
-test('léptetőmotor: a Jelsorozat félléptetésben lépteti, visszafelé is; a lejátszás a gombbal indul', async ({ page }) => {
-  await pcb(page, `pcb.example('stepper'); pcb.sim(true);`);
-  const fwd = await pcb<any>(page, `for (let i = 0; i < 10; i++) pcb.sigStep(1); return pcb.simInfo().steppers[0];`);
-  expect(fwd).toMatchObject({ pos: 10, coils: 'B' });
-  expect(fwd.angle).toBeCloseTo(10 * 360 / 4096, 6);
-  expect((await pcb<any>(page, `pcb.sigStep(-3); return pcb.simInfo().steppers[0];`)).pos).toBe(7);
-  await page.click('#sigPlay');
-  await expect(page.locator('#sigPlay')).toHaveText(/Állj/);
-  await page.waitForTimeout(700);
-  await page.click('#sigPlay');
-  expect((await pcb<any>(page, `return pcb.simInfo().steppers[0];`)).pos).toBeGreaterThan(8);
-  // a szimuláció leállítása a lejátszást is megállítja
-  await pcb(page, `pcb.sim(false);`);
-  expect(await pcb(page, `return pcb.signal().playing;`)).toBe(false);
+test('léptetőmotor: a program Sorozat blokkja félléptetésben lépteti, visszafelé is', async ({ page }) => {
+  // Ütemadó (125 ms) → Sorozat → 4 kimenet; a program kézzel léptetve (fél periódusonként egy kiértékelés)
+  const st = (n: number) => pcb<any>(page, `for (let i = 0; i < ${n}; i++) pcb.progStep(62.5); return pcb.simInfo().steppers[0];`);
+  await pcb(page, `pcb.example('stepper'); pcb.progAuto(false); pcb.sim(true);`);
+  const p0 = (await st(0)).pos, fwd = await st(20);
+  expect(fwd.pos - p0).toBe(10);
+  expect(fwd.angle).toBeCloseTo(fwd.pos * 360 / 4096, 6);
+  // irány: vissza
+  await pcb(page, `const pr = pcb.program(); pr.nodes.find(n => n.type === 'seq').props.dir = 'back'; pcb.program(pr);`);
+  const b0 = (await st(1)).pos, back = await st(6); // az első kiértékelés az új (nullázott) sorozat kezdősora
+  expect(back.pos - b0).toBe(-3);
+  expect(await pcb(page, `return pcb.issues().filter(i => i.sev === 'err').length;`)).toBe(0);
 });
 
 test('példatár a Fájl menüből: kategória, betöltés, visszavonás', async ({ page }) => {

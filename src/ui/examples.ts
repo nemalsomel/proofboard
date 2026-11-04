@@ -25,7 +25,6 @@ export interface Example {
   /** Betöltés után az útvonalkereső hídjai kézi hidakká válnak, a kapcsolatok törlődnek. */
   freeze?: boolean;
   /** Jelsorozat: a csatornák azok a GPIO-k, amelyekre a megadott lábak kapcsolata került. */
-  signal?: { preset: string; custom?: string; from: string[]; rate?: number };
   /** GPIO-módok a kiosztás után: a megadott lábról induló GPIO-kapcsolat GPIO-ja kapja (pl. LED → „out_high”). */
   gpioFrom?: Record<string, string>;
 }
@@ -226,14 +225,17 @@ export const EXAMPLES: Example[] = [
   },
   {
     id: 'stepper', cat: 'Motor', title: 'Léptetőmotor ULN2003-mal',
-    desc: '28BYJ-48 léptetőmotor meghajtóval; a Jelsorozat lépteti a tekercseket.',
-    signal: { preset: 'half', from: ['p2.IN1', 'p2.IN2', 'p2.IN3', 'p2.IN4'], rate: 8 },
+    desc: '28BYJ-48 léptetőmotor meghajtóval; a program lépteti a tekercseket (Ütemadó → Sorozat → 4 kimenet).',
     design: pico([{ id: 'p2', type: 'uln2003', label: 'U1', r: 22, c: 14 }, { id: 'p3', type: 'stepper', label: 'M1', r: 26, c: -8 }],
       [['p2.IN1', 'GPIO'], ['p2.IN2', 'GPIO'], ['p2.IN3', 'GPIO'], ['p2.IN4', 'GPIO'], ['p2.GND', 'GND'], ['p2.VCC', 'p1.40'],
         ['p3.A', 'p2.A'], ['p3.B', 'p2.B'], ['p3.C', 'p2.C'], ['p3.D', 'p2.D'], ['p3.COM', 'p2.COM']], [
         note(31, 2, 17, 10, 'Meghajtó\nA GPIO nem bír el egy tekercset (kb. 100 mA). A ULN2003 bemenete a 3,3 V-os jelet fogadja, a kimenete a tekercset a föld felé kapcsolja; a közös + a VBUS 5 V-ja.', YEL, 'p2'),
-        note(31, 21, 15, 10, 'Próbáld ki\nIndítsd a szimulációt, majd a Szimuláció fülön a Jelsorozatban ▶ Lejátszás. Félléptetésben 8 minta ismétlődik; a mutató a forgórész szöge.', GRN, 'p3'),
-      ]),
+        note(31, 21, 15, 10, 'Próbáld ki\nIndítsd a szimulációt: a Sorozat blokk félléptetésben (8 sor) lépteti a tekercseket, a mutató a forgórész szöge. Az Ütemadó periódusa a sebesség, a Sorozat iránya a forgásirány.', GRN, 'p3'),
+      ], { program: { nodes: [
+        { id: 'n1', type: 'blink', x: 40, y: 100, props: { period: 125, duty: 50 } },
+        { id: 'n2', type: 'seq', x: 270, y: 60, props: { preset: 'half', dir: 'fwd' } },
+        ...[0, 1, 2, 3].map(k => ({ id: 'n' + (3 + k), type: 'out', x: 500, y: 20 + k * 90, props: { pin: 'p2.IN' + (1 + k) } })),
+      ], edges: [{ id: 'e1', from: 'n1.v', to: 'n2.a' }, ...[0, 1, 2, 3].map(k => ({ id: 'e' + (2 + k), from: 'n2.c' + k, to: 'n' + (3 + k) + '.a' }))] } }),
   },
   /* ---------- Logika ---------- */
   {
@@ -252,8 +254,7 @@ export const EXAMPLES: Example[] = [
   },
   {
     id: 'decoder', cat: 'Logika', title: '2→4 dekóder (74HC139)',
-    desc: 'Két bemeneti bitből pontosan egy kimenet aktív (alacsony); a Jelsorozat számol.',
-    signal: { preset: 'custom', custom: '00 10 01 11', from: ['p2.2', 'p2.3'], rate: 2 },
+    desc: 'Két bemeneti bitből pontosan egy kimenet aktív (alacsony); a program Sorozat blokkja számol.',
     design: pico([
       { id: 'p2', type: 'hc139', label: 'U1', r: 20, c: 8 },
       ...[0, 1, 2, 3].map(i => res('p' + (3 + i), 'R' + (1 + i), 29 + 3 * i, 6 + i, 220)),
@@ -262,8 +263,12 @@ export const EXAMPLES: Example[] = [
       ...[0, 1, 2, 3].flatMap(i => [['p' + (7 + i) + '.K', 'p2.' + (4 + i)], ['p' + (7 + i) + '.A', 'p' + (3 + i) + '.2'], ['p' + (3 + i) + '.1', 'p1.36']] as Array<[string, string]>),
       ['p2.15', 'p1.36'], ['p2.13', 'GND'], ['p2.14', 'GND']], [
       note(27, 21, 17, 10, 'Dekóder\nAz A1A0 kétbites szám (0–3) kiválasztja az egyik kimenetet: az lesz 0, a többi 1. A LED-ek a 3V3 felől kapnak áramot, ezért az aktív (alacsony) kimenetnél világítanak.', YEL, 'p2'),
-      note(38, 21, 17, 10, 'Próbáld ki\nSzimulációban a Jelsorozat 00 → 10 → 01 → 11 sorrendben lépteti az A0, A1 bemenetet: a fény végigfut a LED-eken.\nAz 1A0 lábat körbezárják a szomszédai: oda vezeték kell.', GRN),
-    ]),
+      note(38, 21, 17, 10, 'Próbáld ki\nSzimulációban a program Sorozat blokkja 00 → 10 → 01 → 11 sorrendben lépteti az A0, A1 bemenetet: a fény végigfut a LED-eken.\nAz 1A0 lábat körbezárják a szomszédai: oda vezeték kell.', GRN),
+    ], { program: { nodes: [
+      { id: 'n1', type: 'blink', x: 40, y: 80, props: { period: 500, duty: 50 } },
+      { id: 'n2', type: 'seq', x: 270, y: 40, props: { preset: 'custom', custom: '00 10 01 11', dir: 'fwd' } },
+      { id: 'n3', type: 'out', x: 500, y: 20, props: { pin: 'p2.2' } }, { id: 'n4', type: 'out', x: 500, y: 110, props: { pin: 'p2.3' } },
+    ], edges: [{ id: 'e1', from: 'n1.v', to: 'n2.a' }, { id: 'e2', from: 'n2.c0', to: 'n3.a' }, { id: 'e3', from: 'n2.c1', to: 'n4.a' }] } }),
   },
   {
     id: 'toggle', cat: 'Logika', title: 'D tároló: be-ki kapcsoló gombbal',

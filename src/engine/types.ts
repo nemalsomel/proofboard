@@ -17,6 +17,7 @@ export interface Wire { a: Hole; b: Hole; color: string; links?: string[] }
 export interface Link { id: string; a: string; b: string; gpio: string | null }
 export interface Note { id: string; r: number; c: number; w: number; h: number; text: string; color: string; target: string | null }
 export interface PwmCfg { duty: number; freq: number }
+/** A régi Jelsorozat beállítása (csak a régi tervek beolvasásához; betöltéskor programmá alakul). */
 export interface SignalCfg { preset: string; custom: string; pins: Array<string | null>; step: number; rate: number; dir: number }
 export interface Settings { usb: boolean; btnMode: 'hold' | 'toggle'; autoRoute: boolean; autoCut?: boolean; vrot?: number }
 export interface BoardSize { rows: number; cols: number; sec: number }
@@ -36,7 +37,6 @@ export interface Design {
   pwm: Record<string, PwmCfg>;
   settings: Settings;
   seq: number;
-  signal?: SignalCfg;
   /** Program (csomópontos adatfolyam), a szimuláció futás közben ebből kapja a GPIO-állapotokat. */
   program?: Program;
 }

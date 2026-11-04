@@ -66,16 +66,17 @@ test('ESP32-C3: az 5V láb közvetlenül az USB-n van, akku mellette hiba; USB n
   expect(r.bat).toEqual([0, true]);
 });
 
-test('vezérlőcsere: a példák ESP32-re cserélve is működnek (PWM-beállítás, Jelsorozat átkerül), visszavonható', async ({ page }) => {
+test('vezérlőcsere: a példák ESP32-re cserélve is működnek (PWM-beállítás, a program az új lábakon), visszavonható', async ({ page }) => {
   const r = await pcb<any>(page, `
     pcb.example('servo'); pcb.swapMcu('PICO', 'esp32'); pcb.sim(true); const servo = pcb.simInfo().servos[0].angle; const sw = pcb.get().parts[0].type; pcb.sim(false);
-    pcb.example('stepper'); const res = pcb.swapMcu('PICO', 'esp32c3'); const pins = pcb.signal().pins; pcb.sim(true); for (let i = 0; i < 5; i++) pcb.sigStep(1);
-    const st = pcb.simInfo().steppers[0].pos, ok = pcb.links().every(l => l.ok); pcb.sim(false);
+    pcb.example('stepper'); const res = pcb.swapMcu('PICO', 'esp32c3'); pcb.progAuto(false); pcb.sim(true); const s0 = pcb.simInfo().steppers[0].pos;
+    const pins = Object.keys(pcb.progState().gpio); for (let i = 0; i < 10; i++) pcb.progStep(62.5);
+    const st = pcb.simInfo().steppers[0].pos - s0, ok = pcb.links().every(l => l.ok); pcb.sim(false);
     pcb.undo(); return { servo, sw, pins, st, ok, dropped: res.dropped, back: pcb.get().parts.map(p => p.type), label: pcb.get().parts[0].label };`);
   expect(r.sw).toBe('esp32');
   expect(r.servo).toBe(90);
   expect(r.pins).toHaveLength(4);
-  for (const k of r.pins) expect(k).toMatch(/^p1\.GPIO\d+$/);
+  for (const k of r.pins) expect(k).toMatch(/^GPIO\d+$/);
   expect(r.st).toBe(5);
   expect(r.ok).toBe(true);
   expect(r.dropped).toEqual([]);

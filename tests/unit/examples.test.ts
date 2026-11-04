@@ -16,7 +16,8 @@ describe('példatár', () => {
       const ids = new Set(e.design.parts.map(p => p.id));
       for (const [a, b] of e.design.links) for (const x of [a, b]) if (x !== 'GND' && x !== 'GPIO') expect(ids.has(x.split('.')[0]), `${e.id}: ${x}`).toBe(true);
       for (const n of e.design.notes) if (n.target) expect(ids.has(n.target), `${e.id}: ${n.target}`).toBe(true);
-      for (const a of e.signal?.from || []) expect(e.design.links.some(([x, y]) => x === a && y === 'GPIO'), `${e.id}: ${a}`).toBe(true);
+      // a program lábhivatkozásai létező alkatrészre mutatnak
+      for (const n of e.design.program?.nodes || []) { const r = (n.props || {}).pin; if (typeof r === 'string' && r) expect(ids.has(r.split('.')[0]), `${e.id}: ${r}`).toBe(true); }
     }
   });
 });

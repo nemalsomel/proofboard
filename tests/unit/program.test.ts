@@ -75,3 +75,29 @@ describe('program réteg', () => {
     expect(o.errors.get('o')).toBe('Nincs kiválasztva láb');
   });
 });
+
+describe('Sorozat blokk, léptetőmotor sablon, régi Jelsorozat', () => {
+  it('felfutó élenként a minta következő sora; vissza bemenet vagy irány visszafelé', async () => {
+    const { NODE_DEFS, seqRows } = await import('../../src/engine/program');
+    const d = NODE_DEFS.seq, st: Record<string, unknown> = {}, p = { preset: 'half', custom: '', dir: 'fwd' };
+    const run = (a: boolean, r = false) => d.eval({ in: { a, r }, p, st, t: 0, read: () => null });
+    expect(run(false)).toMatchObject({ c0: true, c1: false, n: 0 });
+    expect(run(true)).toMatchObject({ c0: true, c1: true, n: 1 });
+    expect(run(true).n).toBe(1); // nyomva tartva nem lép
+    run(false); expect(run(true, true).n).toBe(0); // vissza
+    run(false); expect(run(true, true).n).toBe(7); // körbe
+    expect(seqRows('custom', '1 01 11')).toEqual(['1000', '0100', '1100']);
+  });
+  it('sablon: ütemadó → sorozat → 4 kimenet; a régi Jelsorozat programmá alakul (csak a használt csatornák)', async () => {
+    const { stepperTemplate, signalToProgram, normProgram } = await import('../../src/engine/program');
+    const { prog } = stepperTemplate(undefined, ['a.1', 'a.2', 'a.3', 'a.4']);
+    expect(prog.nodes.map(n => n.type)).toEqual(['blink', 'seq', 'out', 'out', 'out', 'out']);
+    expect(normProgram(prog)!.edges).toHaveLength(5);
+    const pg = signalToProgram({ preset: 'custom', custom: '00 10', pins: ['p1.4', 'p1.5'], step: 0, rate: 2, dir: -1 })!;
+    expect(pg.nodes.map(n => n.type)).toEqual(['blink', 'seq', 'out', 'out']);
+    expect(pg.nodes[0].props.period).toBe(500);
+    expect(pg.nodes[1].props).toMatchObject({ preset: 'custom', custom: '00 10', dir: 'back' });
+    expect(pg.nodes.slice(2).map(n => n.props.pin)).toEqual(['p1.4', 'p1.5']);
+    expect(signalToProgram({ preset: 'half', custom: '', pins: [null], step: 0, rate: 4, dir: 1 })).toBeUndefined();
+  });
+});

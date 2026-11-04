@@ -5,7 +5,7 @@
  */
 export type LayoutId = 'design' | 'prog' | 'sim';
 export type Work = 'board' | 'prog' | 'split';
-export type RightTab = 'design' | 'sim';
+export type RightTab = 'design' | 'sim' | 'code';
 export interface LayoutState {
   /** bal sáv összecsukva */ l: boolean;
   /** jobb sáv összecsukva */ r: boolean;
@@ -17,17 +17,17 @@ export interface LayoutStore { cur: LayoutId; saved: Partial<Record<LayoutId, Pa
 
 export const LAYOUTS: { id: LayoutId; name: string; hint: string }[] = [
   { id: 'design', name: 'Tervezés', hint: 'Alkatrészek lerakása és bekötése' },
-  { id: 'prog', name: 'Program', hint: 'A panel és a program egymás mellett' },
+  { id: 'prog', name: 'Program', hint: 'A panel és a program egymás mellett, jobbra a kód' },
   { id: 'sim', name: 'Szimuláció', hint: 'Vezérlők és GPIO-k; a szimuláció indításakor erre vált' },
 ];
 export const LAYOUT_DEFAULTS: Record<LayoutId, LayoutState> = {
   design: { l: false, r: false, bottom: false, work: 'board', rtab: 'design' },
-  prog: { l: true, r: true, bottom: false, work: 'split', rtab: 'design' },
+  prog: { l: true, r: false, bottom: false, work: 'split', rtab: 'code' },
   sim: { l: true, r: false, bottom: false, work: 'board', rtab: 'sim' },
 };
 const IDS = Object.keys(LAYOUT_DEFAULTS) as LayoutId[];
 const WORKS: Work[] = ['board', 'prog', 'split'];
-const RTABS: RightTab[] = ['design', 'sim'];
+const RTABS: RightTab[] = ['design', 'sim', 'code'];
 export const isLayout = (x: unknown): x is LayoutId => IDS.includes(x as LayoutId);
 
 /** Csak az ismert, helyes típusú mezők maradnak meg (régi vagy sérült tárolt állapotból). */

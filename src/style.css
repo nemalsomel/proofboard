@@ -275,22 +275,6 @@ input:disabled::placeholder{color:var(--muted)}
 .lg-reg{border-style:dashed}
 .note-text{width:100%;font:13px/1.4 var(--display);resize:vertical;margin-top:6px}
 
-/* Jelsorozat (GPIO-léptető) */
-details.sig{border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
-details.sig>summary{cursor:pointer;font-weight:600;font-size:13px;}
-details.sig .row{display:flex;gap:6px;align-items:center;margin:6px 0;}
-details.sig .row label{min-width:44px;font-size:12px;}
-details.sig .row select,details.sig .row input{flex:1;min-width:0;}
-.sig-ch{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 8px;margin:6px 0;}
-.sig-ch label{display:flex;gap:4px;align-items:center;font-size:12px;}
-.sig-ch select{flex:1;min-width:0;}
-.sig-ctl{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0;}
-.sig-rows{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;}
-.sig-row{display:inline-flex;gap:1px;padding:2px 3px;border:1px solid var(--line);border-radius:6px;background:transparent;cursor:pointer;}
-.sig-row.on{border-color:var(--accent,#1c7ed6);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent,#1c7ed6) 30%,transparent);}
-.sig-row:disabled{cursor:default;opacity:.7;}
-.sig-row .lv{min-width:12px;font-size:11px;}
-
 /* Példák */
 .ex-cats{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;}
 .ex-cat{cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--fg);font:inherit;font-size:12px;padding:2px 8px;border-radius:999px;}
@@ -631,3 +615,13 @@ details.sig .row select,details.sig .row input{flex:1;min-width:0;}
 .pr-acts .btn .ic{width:15px;height:15px}
 .pr-more{display:flex;flex-wrap:wrap;gap:6px}
 .pr-more:empty{display:none}
+/* Mindkettő egymás alatt: a panel felül, a program alatta */
+.app.work-split.split-v .scroll{width:auto;flex:0 0 50%}
+.app.work-split.split-v .progview{left:0;top:50%;border-left:0;border-top:1px solid var(--line)}
+.app.work-split.split-v .toolstrip,.app.work-split.split-v .toolstrip.col{bottom:calc(50% + 22px);max-width:calc(100% - 40px)}
+.app.work-split.split-v .intro{right:0;bottom:50%}
+/* Kód a jobb sávban */
+#rpCode{flex:1;min-height:0}
+.codeview{display:flex;flex-direction:column;min-height:0;flex:1;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel2);overflow:hidden}
+.codeview .pg-bar{flex-wrap:wrap}
+.right:has(#rpCode:not([hidden])){overflow:hidden}

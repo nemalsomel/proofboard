@@ -92,6 +92,7 @@
         <button class="btn" data-work="prog" data-kbd="2" aria-pressed="false" title="A program: blokkok, amelyek futás közben a GPIO-kat vezérlik (2)">Program</button>
         <button class="btn desk-only" data-work="split" data-kbd="3" aria-pressed="false" title="A panel és a program egymás mellett (3)">Mindkettő</button>
       </div>
+      <button class="btn icon ghost desk-only" id="splitDir" data-icon="sideR" aria-label="Felosztás iránya" title="Mindkettő: egymás mellett vagy egymás alatt" hidden></button>
       <span class="sp"></span>
       <div class="grp vmodes" role="group" aria-label="A panel megjelenítése" id="vModes">
         <div class="grp seg" role="group" aria-label="Oldal">
@@ -182,11 +183,13 @@
       <button class="rtab" role="tab" data-rtab="props" aria-selected="false" aria-controls="rpProps" hidden>Tulajdonságok</button>
       <button class="rtab on" role="tab" data-rtab="design" aria-selected="true" aria-controls="rpDesign">Kapcsolatok</button>
       <button class="rtab" role="tab" data-rtab="sim" aria-selected="false" aria-controls="rpSim">Szimuláció</button>
+      <button class="rtab" role="tab" data-rtab="code" aria-selected="false" aria-controls="rpCode">Kód</button>
     </div>
     <div class="rail" id="railR" role="toolbar" aria-label="Jobb oldalsáv (összecsukva)">
       <button class="rail-btn" data-expand="r" title="Kinyitás ( ] )" aria-label="Jobb oldalsáv kinyitása">«</button>
       <button class="rail-btn" data-rail-rtab="props" title="Tulajdonságok" aria-label="Tulajdonságok" data-icon="edit" hidden></button>
       <button class="rail-btn" data-rail-rtab="design" title="Kapcsolatok" aria-label="Kapcsolatok" data-icon="list"></button>
+      <button class="rail-btn" data-rail-rtab="code" title="Kód" aria-label="Kód" data-icon="code"></button>
       <button class="rail-btn" data-rail-rtab="sim" title="Szimuláció" aria-label="Szimuláció" data-icon="pulse"></button>
     </div>
     <div class="rpane" id="rpProps" data-rpane="props" role="tabpanel" hidden>
@@ -229,6 +232,9 @@
       </div>
       </details>
     </div>
+    <div class="rpane" id="rpCode" data-rpane="code" role="tabpanel" hidden>
+      <div class="codeview" id="codeView"></div>
+    </div>
     <div class="rpane" id="rpSim" data-rpane="sim" role="tabpanel" hidden>
       <section id="simSec">
       <div style="display:flex;flex-direction:column;gap:10px">
@@ -238,7 +244,6 @@
           <button class="btn" id="mToggle">Kapcsoló</button>
         </div>
         <div id="simCtl"></div>
-        <div id="sigBox"></div>
         <div id="simOut"></div>
       </div>
       </section>

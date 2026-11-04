@@ -7,7 +7,7 @@
  * bemenet); csomópont húzása a fejlécénél; üres helyen húzva a vászon mozog, görgővel nagyít.
  */
 import { icon } from './icons';
-import { NODE_DEFS, type NodeDef, type PEdge, type PNode, type Program, type Val } from '../engine/program';
+import { NODE_DEFS, stepperTemplate, type NodeDef, type PEdge, type PNode, type Program, type Val } from '../engine/program';
 
 export interface PinChoice { ref: string; part: string; name: string; gpio: string | null }
 export interface ProgLive { running: boolean; vals: Record<string, Val>; errors: Record<string, string> }
@@ -90,7 +90,8 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
 
   function renderMenu() {
     menu.innerHTML = CATS.map(c => `<div class="pg-mcat" style="--c:${CAT_COL[c]}">${c}</div>` + Object.entries(NODE_DEFS).filter(([, d]) => d.cat === c)
-      .map(([k, d]) => `<button class="pg-mitem" data-add="${k}" title="${esc(d.help)}">${esc(d.label)}</button>`).join('')).join('');
+      .map(([k, d]) => `<button class="pg-mitem" data-add="${k}" title="${esc(d.help)}">${esc(d.label)}</button>`).join('')).join('')
+      + `<div class="pg-mcat" style="--c:#868e96">Sablon</div><button class="pg-mitem" data-tpl="stepper" title="Ütemadó → Sorozat (félléptetés) → 4 digitális kimenet; ha van ULN2003, az IN1–IN4 lábaira">Léptetőmotor</button>`;
   }
 
   function renderEdges() {
@@ -144,8 +145,9 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     props.hidden = false;
     props.innerHTML = `<p class="h" style="margin:0 0 4px;color:${CAT_COL[d.cat]}">${esc(d.cat)}</p><p style="margin:0 0 6px;font-weight:600">${esc(d.label)}</p>
       <p class="help" style="margin:0 0 8px">${esc(d.help)}</p>
-      ${d.params.map(pr => {
+      ${d.params.filter(pr => !pr.when || String(n.props[pr.when.key]) === pr.when.is).map(pr => {
         const id = 'pgp_' + pr.key, v = n.props[pr.key];
+        if (pr.type === 'text') return `<label class="small" for="${id}">${esc(pr.label)}</label><input type="text" id="${id}" data-pp="${pr.key}" value="${esc(v)}" spellcheck="false">`;
         if (pr.type === 'pin') return `<label class="small" for="${id}">${esc(pr.label)}</label><select id="${id}" data-pp="${pr.key}"><option value="">– válassz lábat –</option>${[...groups].map(([g, ps]) =>
           `<optgroup label="${esc(g)}">${ps.map(p => `<option value="${esc(p.ref)}" ${p.ref === v ? 'selected' : ''}>${esc(p.name)}${p.gpio ? ' → ' + esc(p.gpio) : ' (nincs GPIO-n)'}</option>`).join('')}</optgroup>`).join('')}</select>`;
         if (pr.type === 'select') return `<label class="small" for="${id}">${esc(pr.label)}</label><select id="${id}" data-pp="${pr.key}">${(pr.options || []).map(([k, l]) => `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
@@ -166,6 +168,13 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     while (prog.nodes.some(n => Math.abs(n.x - x) < 20 && Math.abs(n.y - y) < 20)) { x += 24; y += 24; }
     const n: PNode = { id: nextId('n', prog.nodes), type, x, y, props: p };
     prog.nodes.push(n); sel = { kind: 'node', id: n.id }; save(); render();
+  }
+  /** Léptetőmotor sablon: a kimenetek a talált IN1–IN4 lábakra (pl. ULN2003), különben láb nélkül. */
+  function addStepper() {
+    const pins = [1, 2, 3, 4].map(k => { const p = pinCache.find(x => new RegExp('^IN' + k + '\\b').test(x.name)); return p ? p.ref : null; });
+    const y0 = prog.nodes.length ? Math.max(...prog.nodes.map(n => n.y)) + 160 : 40;
+    const r = stepperTemplate(prog, pins, { x: 40, y: y0 });
+    prog = r.prog; sel = { kind: 'node', id: r.ids[1] }; save(); render(); fit();
   }
   function connect(from: string, to: string) {
     if (from.slice(0, from.lastIndexOf('.')) === to.slice(0, to.lastIndexOf('.')) && NODE_DEFS[node(from.slice(0, from.lastIndexOf('.')))!.type].ins.length === 0) return;
@@ -205,6 +214,8 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
   root.addEventListener('click', e => {
     const t = e.target as HTMLElement, b = t.closest('[data-pg]') as HTMLElement | null, add = t.closest('[data-add]') as HTMLElement | null;
     if (add) { menu.hidden = true; $<HTMLElement>('[data-pg="add"]').setAttribute('aria-expanded', 'false'); addNode(add.dataset.add!); return; }
+    const tpl = t.closest('[data-tpl]') as HTMLElement | null;
+    if (tpl) { menu.hidden = true; $<HTMLElement>('[data-pg="add"]').setAttribute('aria-expanded', 'false'); addStepper(); return; }
     if (!b) { if (!t.closest('.pg-add')) menu.hidden = true; return; }
     const a = b.dataset.pg;
     if (a === 'add') { menu.hidden = !menu.hidden; b.setAttribute('aria-expanded', String(!menu.hidden)); }

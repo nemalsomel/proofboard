@@ -43,6 +43,7 @@ Egy dologra egy szó: a felületen, a súgóban, a példák jegyzeteiben és a h
 | **jegyzet** | szöveges cédula a panelon, mutathat egy alkatrészre | megjegyzés, címke |
 | **program** | blokkokból álló vezérlés, amely futás közben a GPIO-kat állítja; a nézet neve is *Program* | vezérlés (régi név) |
 | **blokk** / **él** | a program egy művelete (bemenet, feltétel, időzítő, kimenet…), illetve két blokk összekötése | csomópont, node / kapcsolat (az *kapcsolat* a panelé) |
+| **sorozat** | a minta soronkénti léptetése a kimenetekre (pl. léptetőmotor tekercsei); a régi „Jelsorozat” helyett | jelsorozat, szekvencia |
 | **kód** | a programból generált MicroPython vagy Arduino forrás | szkript |
 | **szimuláció** | a kör egyenáramú számítása, futás közben a programmal | futtatás |
 | **Problémák** | az ellenőrzés eredménye: **hiba** (nem fog működni) és **figyelmeztetés** (gyanús) | Ellenőrzés (régi fülnév), alert |

@@ -140,7 +140,7 @@ test('a rögzített tulajdonságok a bal oldalsávba is áttehetők; ott is saj�
 
 test('programszerkesztő: húzáskor nem nyílik fel a blokk beállítása, csak kattintásra', async ({ page }) => {
   await pcb(page, `pcb.program({ nodes: [{ id: 'n1', type: 'blink', x: 40, y: 40, props: {} }], edges: [] }); pcb.work('prog');`);
-  await expect(page.locator('[data-pvtab="nodes"]')).toHaveText('Blokkok');
+  await expect(page.locator('[data-pg="add"]')).toHaveText('+ Blokk');
   const head = (await page.locator('.pg-node[data-node="n1"] .pg-head').boundingBox())!;
   await page.mouse.move(head.x + 40, head.y + 10); await page.mouse.down(); await page.mouse.move(head.x + 140, head.y + 60, { steps: 5 }); await page.mouse.up();
   await expect(page.locator('.pg-props')).toBeHidden();
