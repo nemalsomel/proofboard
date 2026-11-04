@@ -53,6 +53,13 @@ const P: Record<string, string> = {
   tNote: '<path d="M5 4h14v10l-5 6H5z"/><path d="M14 20v-6h5M8 9h7M8 12.5h4"/>',
   tErase: '<path d="M8 20 3.6 15.6a1.6 1.6 0 0 1 0-2.2L12.9 4a1.6 1.6 0 0 1 2.2 0l4.9 4.9a1.6 1.6 0 0 1 0 2.2L11 20"/><path d="M8 20h12M8.5 9.5l6 6"/>',
   tHand: '<path d="M8 13V6a1.5 1.5 0 0 1 3 0v6M11 11.5V4.5a1.5 1.5 0 0 1 3 0V12M14 11.5V6.5a1.5 1.5 0 0 1 3 0V14c0 4-2.5 7-6 7-2.5 0-4-1-5.5-3l-2-3.3a1.5 1.5 0 0 1 2.4-1.8L8 15"/>',
+  restore: '<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5M12 8v4.5l3 2"/>',
+  swap: '<path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/>',
+  comp: '<rect x="3" y="14" width="18" height="5" rx="1"/><rect x="7" y="6" width="10" height="8" rx="1.5"/><path d="M9 14v-1M15 14v-1"/>',
+  copper: '<rect x="3" y="5" width="18" height="5" rx="1"/><path d="M6 13v6M10 13v6M14 13v6M18 13v6"/>',
+  rats: '<circle cx="5" cy="6" r="2"/><circle cx="19" cy="9" r="2"/><circle cx="9" cy="19" r="2"/><path d="M7 6.5l10 2M17.5 10.5l-7 7" stroke-dasharray="2 2.2"/>',
+  xray: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3" stroke-dasharray="2 1.6"/>',
+  stub: '<circle cx="4" cy="12" r="2"/><circle cx="20" cy="12" r="2"/><path d="M6 12h3M15 12h3M10 15.5l2-7M13 15.5l2-7"/>',
   pulse: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
 };
 export type IconName = keyof typeof P;

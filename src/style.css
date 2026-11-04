@@ -546,8 +546,6 @@ details.sig .row select,details.sig .row input{flex:1;min-width:0;}
 .app.work-prog .zoomctl{display:none}
 @media (max-width:1000px){.zoomctl{display:none}.toolstrip{max-width:calc(100% - 16px)}}
 .toolstrip,.toolstrip.col{left:12px;transform:none;max-width:calc(100% - 184px)}
-.toolstrip kbd{display:none}
-.app.alt .toolstrip kbd{display:inline}
 @media (max-width:1000px){.toolstrip,.toolstrip.col{left:8px;max-width:calc(100% - 16px)}}
 @media (max-width:1000px){.bpanel:not(.open){display:none}}
 
@@ -561,9 +559,9 @@ details.sig .row select,details.sig .row input{flex:1;min-width:0;}
 .toolstrip .ti{position:relative;display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center}
 .toolstrip .ti .ic{width:18px;height:18px}
 .toolstrip .ti kbd{display:none;position:absolute;inset:0;align-items:center;justify-content:center;border:1px solid currentColor;border-radius:4px;font:600 11px var(--mono);color:inherit;padding:0;opacity:.9}
-/* Alt nyomva: az ikon helyén a gyorsbillentyű betűje, a sáv képe alig változik */
-.app.alt .toolstrip .ti .ic{visibility:hidden}
-.app.alt .toolstrip .ti kbd{display:flex}
+/* Ctrl nyomva: az ikon helyén a gyorsbillentyű betűje, a sáv képe alig változik */
+.app.keys .toolstrip .ti .ic{visibility:hidden}
+.app.keys .toolstrip .ti kbd{display:flex}
 .toolstrip.col .tl{display:none}
 @container carea (max-width:820px){.toolstrip .tl{display:none}.toolstrip .tools .btn.tool{padding:6px 7px}}
 .toolstrip .btn.tool:disabled{opacity:.35}
@@ -589,3 +587,16 @@ details.sig .row select,details.sig .row input{flex:1;min-width:0;}
 /* Program és Szimuláció elrendezésben az eszközsávon csak a Kijelölés és a Mozgatás */
 .app.lay-prog .toolstrip .btn.tool:not([data-tool="select"]):not([data-tool="pan"]),.app.lay-sim .toolstrip .btn.tool:not([data-tool="select"]):not([data-tool="pan"]){display:none}
 @media (max-width:1250px){.board-info{display:none}}
+/* gyorsbillentyű-címkék (Ctrl nyomva tartva) */
+.app.keys [data-kbd]{position:relative;overflow:visible}
+.app.keys [data-kbd]::after{content:attr(data-kbd);position:absolute;top:-8px;right:-6px;z-index:30;pointer-events:none;font:600 10px/1 var(--mono);background:var(--fg);color:var(--bg);border-radius:4px;padding:3px 4px;white-space:nowrap;box-shadow:var(--shadow-1)}
+/* vezetékszín az eszközsáv fölött, külön kis sávban */
+.toolstrip .wirecolor{position:absolute;left:0;bottom:calc(100% + 6px);margin:0;padding:6px 10px;border:1px solid var(--line);border-left:1px solid var(--line);border-radius:var(--r-lg);background:var(--panel);box-shadow:var(--shadow-1);flex-wrap:nowrap}
+/* összecsukott eszközsáv rámutatásra kinyílik */
+.toolstrip.col.peek .tools .btn:not(.on){display:inline-flex}
+.toolstrip.col.peek .tl{display:inline}
+.toolstrip.col.peek .ts-tog .ic{transform:none}
+.vmodes .btn .ic{width:15px;height:15px}
+.btn:disabled .ic{opacity:.5}
+.toast{bottom:120px}
+.app.keys .top [data-kbd]::after{top:auto;bottom:-11px;right:50%;transform:translateX(50%)}

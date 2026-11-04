@@ -50,7 +50,7 @@ export function mountCodeView(root: HTMLElement, host: CodeHost): CodeView {
     $<HTMLButtonElement>('[data-pc="dl"]').textContent = lang === 'micropython' ? 'Letöltés (main.py)' : 'Letöltés (.ino)';
     $<HTMLButtonElement>('[data-pc="pio"]').hidden = lang !== 'arduino';
     const pre = $<HTMLPreElement>('.pc-code'), info = $<HTMLDivElement>('.pc-info');
-    if (!cur) { pre.innerHTML = ''; info.innerHTML = '<p class="help">Még nincs program. A Csomópontok fülön rakd össze, és itt megjelenik a kódja.</p>'; return; }
+    if (!cur) { pre.innerHTML = ''; info.innerHTML = '<p class="help">Még nincs program. A Blokkok fülön rakd össze, és itt megjelenik a kódja.</p>'; return; }
     const sel = host.selected(), mark = new Set<number>(), owner = new Map<number, string>();
     for (const [id, rs] of Object.entries(cur.lines)) for (const [a, b] of rs) for (let i = a; i <= b; i++) { owner.set(i, id); if (id === sel) mark.add(i); }
     const t = cur.target;

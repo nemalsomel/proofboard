@@ -87,7 +87,7 @@ export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLan
     if (d.params.some(x => x.type === 'pin')) {
       pin = pinInfo(D, A, n);
       if (!pin) { warnings.push(`${d.label} (${n.id}): ${p.pin ? 'a láb nincs GPIO-ra kötve' : 'nincs kiválasztva láb'}; kimaradt.`); continue; }
-      if (used.has(pin.gpio) && used.get(pin.gpio) !== n.id) warnings.push(`${pin.name}: több csomópont is használja (${used.get(pin.gpio)}, ${n.id}).`);
+      if (used.has(pin.gpio) && used.get(pin.gpio) !== n.id) warnings.push(`${pin.name}: több blokk is használja (${used.get(pin.gpio)}, ${n.id}).`);
       used.set(pin.gpio, n.id);
     }
     const c = (s: string) => (py ? `# ${s}` : `// ${s}`);
@@ -164,16 +164,16 @@ export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLan
   };
   const title = `Proofboard – generált program${board ? ` (${board})` : ''}`;
   if (py) {
-    emit(null, [`# ${title}`, '# Ütemenként (20 ms) beolvassa a bemeneteket, kiszámolja a csomópontokat, és beállítja a kimeneteket.', 'from machine import Pin, ADC, PWM', 'import time', '', '# --- lábak ---'], '');
+    emit(null, [`# ${title}`, '# Ütemenként (20 ms) beolvassa a bemeneteket, kiszámolja a blokkokat, és beállítja a kimeneteket.', 'from machine import Pin, ADC, PWM', 'import time', '', '# --- lábak ---'], '');
     for (const [id, S] of setup) emit(id, S, '');
-    emit(null, ['', '# --- csomópontok értékei és állapota ---'], '');
+    emit(null, ['', '# --- blokkok értékei és állapota ---'], '');
     for (const [id, V] of vars) emit(id, V, '');
     emit(null, ['', 'kezdet = time.ticks_ms()', 'while True:', '    t = time.ticks_diff(time.ticks_ms(), kezdet)'], '');
     for (const [id, L] of step) emit(id, L, '    ');
     emit(null, ['    time.sleep_ms(20)'], '');
   } else {
-    emit(null, [`// ${title}`, '// Ütemenként (20 ms) beolvassa a bemeneteket, kiszámolja a csomópontokat, és beállítja a kimeneteket.',
-      ...(target ? [`// Lap: ${target.fqbn}${target.boardUrl ? ` (alaplapkezelő: ${target.boardUrl})` : ''}`] : []), '', '// --- csomópontok értékei és állapota ---'], '');
+    emit(null, [`// ${title}`, '// Ütemenként (20 ms) beolvassa a bemeneteket, kiszámolja a blokkokat, és beállítja a kimeneteket.',
+      ...(target ? [`// Lap: ${target.fqbn}${target.boardUrl ? ` (alaplapkezelő: ${target.boardUrl})` : ''}`] : []), '', '// --- blokkok értékei és állapota ---'], '');
     for (const [id, V] of vars) emit(id, V, '');
     emit(null, ['', 'void setup() {', '  analogReadResolution(12);'], '');
     for (const [id, S] of setup) emit(id, S, '  ');

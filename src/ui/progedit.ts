@@ -36,8 +36,8 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
   root.classList.add('pg');
   root.innerHTML = `
     <div class="pg-bar" role="toolbar" aria-label="Program">
-      <div class="pg-add"><button class="btn" data-pg="add" aria-haspopup="true" aria-expanded="false">+ Csomópont</button><div class="pg-menu" hidden></div></div>
-      <button class="btn" data-pg="del" disabled title="A kijelölt csomópont vagy él törlése (Delete)">Törlés</button>
+      <div class="pg-add"><button class="btn" data-pg="add" aria-haspopup="true" aria-expanded="false">+ Blokk</button><div class="pg-menu" hidden></div></div>
+      <button class="btn" data-pg="del" disabled title="A kijelölt blokk vagy él törlése (Delete)">Törlés</button>
       <span class="pg-sp"></span>
       <button class="btn" data-pg="zout" aria-label="Kicsinyítés">−</button><button class="btn" data-pg="zin" aria-label="Nagyítás">+</button>
       <button class="btn" data-pg="fit" title="Az egész program látszódjon">Mind</button>
@@ -45,7 +45,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     </div>
     <div class="pg-canvas" tabindex="0" aria-label="Programvászon">
       <div class="pg-layer"><svg class="pg-edges" width="1" height="1"></svg><div class="pg-nodes"></div></div>
-      <p class="pg-empty" hidden>Még nincs program. A <b>+ Csomópont</b> menüből rakj le egy bemenetet (pl. gomb) és egy kimenetet (pl. LED), majd húzz élt a kimeneti pontjától a bemeneti pontig.</p>
+      <p class="pg-empty" hidden>Még nincs program. A <b>+ Blokk</b> menüből rakj le egy bemenetet (pl. gomb) és egy kimenetet (pl. LED), majd húzz élt a kimeneti pontjától a bemeneti pontig.</p>
     </div>
     <aside class="pg-props" hidden></aside>`;
   const $ = <T extends HTMLElement>(s: string) => root.querySelector(s) as T;
@@ -152,7 +152,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
         return `<label class="small" for="${id}">${esc(pr.label)}</label><div class="row"><input type="number" id="${id}" data-pp="${pr.key}" value="${esc(v)}" ${pr.min != null ? `min="${pr.min}"` : ''} ${pr.max != null ? `max="${pr.max}"` : ''} step="any" style="width:96px"><span class="muted small">${esc(pr.unit || '')}</span></div>`;
       }).join('')}
       ${err ? `<p class="pg-err" style="margin-top:6px">${esc(err)}</p>` : ''}
-      <div class="row" style="margin-top:8px"><button class="btn danger" data-pg="del">Csomópont törlése</button></div>`;
+      <div class="row" style="margin-top:8px"><button class="btn danger" data-pg="del">Blokk törlése</button></div>`;
   }
 
   function render() { applyView(); renderNodes(); renderEdges(); renderProps(); renderRun(); }
@@ -239,7 +239,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     if (edge) { select({ kind: 'edge', id: (edge as HTMLElement).dataset.edge! }); return; }
     if (head) {
       const n = node(head.dataset.node!)!;
-      if (!sel || sel.kind !== 'node' || sel.id !== n.id) select({ kind: 'node', id: n.id });
+      // a kijelölés (és vele a beállításai) csak elengedéskor, ha nem mozdult: húzás közben nem ugrik fel
       // a csomópont bárhol megfogható, ahol nincs interaktív elem (a port fent már elkapta)
       drag = { kind: 'move', id: n.id, x0: e.clientX, y0: e.clientY, nx: n.x, ny: n.y, moved: false }; canvas.setPointerCapture(e.pointerId);
       return;
@@ -267,6 +267,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     const d = drag; drag = null; tmp = null; root.classList.remove('wiring');
     if (!d) return;
     if (d.kind === 'move' && d.moved) save(true);
+    if (d.kind === 'move' && !d.moved && (!sel || sel.kind !== 'node' || sel.id !== d.id)) select({ kind: 'node', id: d.id });
     if (d.kind === 'wire') {
       if (!d.moved) { pending = pending === d.from ? null : d.from; renderNodes(); renderEdges(); return; } // érintés: kimenet kiválasztva, a következő bemenetre köt
       const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-port]') as HTMLElement | null;

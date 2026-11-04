@@ -218,7 +218,7 @@ export function evalProgram(D: Design, A: Netlist, prog: Program, rt: ProgRuntim
     if (!g) continue;
     const key = resolve(g.ref, n.id);
     if (!key) continue;
-    if (out.gpio[key] && out.gpio[key] !== g.mode) out.errors.set(n.id, 'Ezt a GPIO-t egy másik csomópont is használja');
+    if (out.gpio[key] && out.gpio[key] !== g.mode) out.errors.set(n.id, 'Ezt a GPIO-t egy másik blokk is használja');
     out.gpio[key] = g.mode;
     if (g.pwm) out.pwm[key] = g.pwm;
   }

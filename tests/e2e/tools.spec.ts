@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
 test.afterEach(async ({ page }) => expect(errors.get(page), 'futásidejű hibák').toEqual([]));
 const pcb = <T>(page: Page, body: string): Promise<T> => page.evaluate(`(() => { const pcb = window.pcb; ${body} })()`) as Promise<T>;
 
-test('eszközsáv: ikon és név, súgóban a gyorsbillentyű; Alt nyomva az ikon helyén a betű', async ({ page }) => {
+test('eszközsáv: ikon és név, súgóban a gyorsbillentyű; Ctrl nyomva tartva az ikon helyén a betű, máshol címke', async ({ page }) => {
   const tools = page.locator('#tools [data-tool]');
   await expect(tools).toHaveCount(8);
   for (const b of await tools.all()) {
@@ -22,12 +22,13 @@ test('eszközsáv: ikon és név, súgóban a gyorsbillentyű; Alt nyomva az iko
   }
   const sel = page.locator('#tools [data-tool="select"]');
   await expect(sel.locator('kbd')).toBeHidden();
-  await page.keyboard.down('Alt');
+  await page.keyboard.down('Control');
   await expect(sel.locator('kbd')).toBeVisible();
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector('#bSim')!, '::after').content)).toBe('"S"');
   await expect(sel.locator('kbd')).toHaveText('V');
   await expect(sel.locator('svg.ic')).toBeHidden();
   const box1 = (await sel.boundingBox())!;
-  await page.keyboard.up('Alt');
+  await page.keyboard.up('Control');
   await expect(sel.locator('svg.ic')).toBeVisible();
   const box0 = (await sel.boundingBox())!;
   expect(Math.abs(box1.width - box0.width)).toBeLessThan(1); // a sáv képe nem ugrik
@@ -85,4 +86,58 @@ test('fejléc: oldalsáv- és alsópanel-kapcsolók; Panel beállításai a Fáj
   await expect(page.locator('#colB')).toHaveAttribute('aria-pressed', 'true');
   await page.click('#colL');
   expect(await pcb(page, `return pcb.sides().l;`)).toBe(false);
+});
+
+test('összecsukott eszközsáv rámutatásra nyílik; vezetékszín a sáv fölött; a kurzor az eszközt mutatja', async ({ page }) => {
+  await pcb(page, `pcb.preset();`);
+  await page.click('#tsTog');
+  const wire = page.locator('#tools [data-tool="wire"]');
+  await expect(wire).toBeHidden();
+  await page.mouse.move(10, 400); // el a sávtól, majd vissza
+  await page.locator('#toolstrip').hover();
+  await expect(wire).toBeVisible();
+  await wire.click();
+  await expect(page.locator('#tools [data-tool="select"]')).toBeHidden(); // választás után újra összecsukva
+  const sw = (await page.locator('#wireColorRow').boundingBox())!, ts = (await page.locator('#toolstrip').boundingBox())!;
+  expect(sw.y + sw.height).toBeLessThanOrEqual(ts.y); // a színek a sáv fölött
+  expect(await page.evaluate(() => (document.querySelector('#cv') as HTMLElement).style.cursor)).toContain('url(');
+  await page.mouse.move(10, 400);
+  await page.keyboard.press('v');
+  expect(await page.evaluate(() => (document.querySelector('#cv') as HTMLElement).style.cursor)).toBe('');
+});
+
+test('visszavonás és újra csak akkor aktív, ha van mit', async ({ page }) => {
+  await pcb(page, `pcb.preset();`);
+  await expect(page.locator('#bUndo')).toBeDisabled();
+  await expect(page.locator('#bRedo')).toBeDisabled();
+  await pcb(page, `pcb.move('K1', 0, 1);`);
+  await expect(page.locator('#bUndo')).toBeEnabled();
+  await page.click('#bUndo');
+  await expect(page.locator('#bUndo')).toBeDisabled();
+  await expect(page.locator('#bRedo')).toBeEnabled();
+});
+
+test('a rögzített tulajdonságok a bal oldalsávba is áttehetők; ott is saját fül', async ({ page }) => {
+  await pcb(page, `pcb.preset(); pcb.select(['K1']);`);
+  await page.click('#pwDock');
+  await expect(page.locator('.right .rtab.on')).toHaveText('Tulajdonságok');
+  await page.click('#pwSwap');
+  await expect(page.locator('[data-rtab="props"]')).toBeHidden();
+  await expect(page.locator('.left .rtab.on')).toHaveText('Tulajdonságok');
+  await expect(page.locator('#lpProps #pLabel')).toHaveValue('K1');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.left .rtab.on')).toHaveText('Alkatrészek');
+  await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
+  await pcb(page, `pcb.select(['K2']);`);
+  await expect(page.locator('#lpProps #pLabel')).toHaveValue('K2');
+});
+
+test('programszerkesztő: húzáskor nem nyílik fel a blokk beállítása, csak kattintásra', async ({ page }) => {
+  await pcb(page, `pcb.program({ nodes: [{ id: 'n1', type: 'blink', x: 40, y: 40, props: {} }], edges: [] }); pcb.work('prog');`);
+  await expect(page.locator('[data-pvtab="nodes"]')).toHaveText('Blokkok');
+  const head = (await page.locator('.pg-node[data-node="n1"] .pg-head').boundingBox())!;
+  await page.mouse.move(head.x + 40, head.y + 10); await page.mouse.down(); await page.mouse.move(head.x + 140, head.y + 60, { steps: 5 }); await page.mouse.up();
+  await expect(page.locator('.pg-props')).toBeHidden();
+  await page.locator('.pg-node[data-node="n1"] .pg-head').click();
+  await expect(page.locator('.pg-props')).toBeVisible();
 });
