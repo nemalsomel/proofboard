@@ -105,7 +105,7 @@ function resize(){
   let W=bw(),H=bh();if(VR()&1){const t=W;W=H;H=t;}
   cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';
   // szabad vászon: a panel körül a látómező nagyjának megfelelő üres tér, így bárhová húzható
-  const sc=$('#scroll'),px=Math.round(sc.clientWidth*0.6),py=Math.round(sc.clientHeight*0.6);
+  const sc=$('#scroll'),px=Math.round(sc.clientWidth*0.35),py=Math.round(sc.clientHeight*0.35);
   if(px!==ui.padX||py!==ui.padY){const dx=px-(ui.padX||0),dy=py-(ui.padY||0);ui.padX=px;ui.padY=py;cv.style.margin=`${py}px ${px}px`;sc.scrollLeft+=dx;sc.scrollTop+=dy;}
   $('#zLbl').textContent=Math.round(ui.zoom*100)+'%';draw();
 }
@@ -209,7 +209,7 @@ function draw0(){
   if(hv&&inb(hv.r,hv.c)&&!ui.placing&&ui.tool!=='pan'){ctx.strokeStyle=css('--accent');ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(hx(hv.c),hy(hv.r),P*0.42,0,7);ctx.stroke();}
   if(ui.progHi){const q=findPin(ui.progHi);if(q){ring(q.r,q.c,css('--accent'),P*0.62,3.5);ring(q.r,q.c,'rgba(255,255,255,.8)',P*0.78,1.5);}} // a programban kijelölt csomópont lába
   if(ui.flash&&performance.now()<ui.flash.until){for(const [r,c] of ui.flash.holes)ring(r,c,'#e03131',P*0.62,3);}
-  if(ui.drag&&ui.drag.kind==='box'){const a=ui.drag.h0,b2=ui.drag.h1;const x1=hx(Math.min(a.cf,b2.cf)),x2=hx(Math.max(a.cf,b2.cf)),y1=hy(Math.min(a.rf,b2.rf)),y2=hy(Math.max(a.rf,b2.rf));ctx.save();ctx.setLineDash([6,4]);ctx.strokeStyle=css('--accent');ctx.lineWidth=1.5;ctx.fillStyle='rgba(168,87,31,.08)';ctx.beginPath();ctx.rect(Math.min(x1,x2),y1,Math.abs(x2-x1),y2-y1);ctx.fill();ctx.stroke();ctx.restore();}
+  if(ui.drag&&ui.drag.kind==='box'){const a=ui.drag.h0,b2=ui.drag.h1;const x1=hx(Math.min(a.cf,b2.cf)),x2=hx(Math.max(a.cf,b2.cf)),y1=hy(Math.min(a.rf,b2.rf)),y2=hy(Math.max(a.rf,b2.rf));ctx.save();ctx.setLineDash([6,4]);ctx.strokeStyle=css('--accent');ctx.lineWidth=1.5;ctx.fillStyle=rgba(css('--accent'),.08);ctx.beginPath();ctx.rect(Math.min(x1,x2),y1,Math.abs(x2-x1),y2-y1);ctx.fill();ctx.stroke();ctx.restore();}
   ctx.restore();
 }
 function rr(x,y,w,h,r){ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);}
@@ -932,7 +932,7 @@ $('#vXray').onclick=()=>toggleXray();
 function toggleXray(){ui.xray=!ui.xray;$('#vXray').classList.toggle('on',ui.xray);draw();}
 function rotView(){D.settings.vrot=(VR()+1)&3;save();resize();homeView();}
 $('#vComp').onclick=()=>setView('comp');$('#vCu').onclick=()=>setView('cu');
-$('#zIn').onclick=()=>zoomTo(ui.zoom*1.2);$('#zOut').onclick=()=>zoomTo(ui.zoom/1.2);$('#zLbl').onclick=()=>fitView();
+$('#zIn').onclick=()=>zoomTo(ui.zoom*1.2);$('#zOut').onclick=()=>zoomTo(ui.zoom/1.2);$('#zLbl').onclick=()=>fitView();$('#zFit').onclick=()=>fitView();
 $('#bUndo').onclick=undo;$('#bRedo').onclick=redo;
 $('#bSim').onclick=()=>setSim(!ui.sim);
 function simBtn(){const b=$('#bSim');b.classList.toggle('on',!!ui.sim);b.innerHTML=ui.sim?icon('stop')+'Szimuláció leállítása':icon('play')+'Szimuláció';}

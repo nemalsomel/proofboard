@@ -8,9 +8,9 @@ img{max-width:100%}
 :root{
   /* felületek és szöveg */
   --bg:#e9ece6; --panel:#f7f8f5; --panel2:#ffffff; --fg:#1d231f; --muted:#5d6961; --line:#d2d8d0; --stage:#dde2da;
-  /* elsődleges szín (réz): műveletek, aktív eszköz, fülek; másodlagos (kékeszöld): kijelölés, fókusz, tájékoztatás */
-  --primary:#a8571f; --primary-fg:#ffffff; --primary-soft:#f3e2d4;
-  --secondary:#0e7490; --secondary-fg:#ffffff; --secondary-soft:#d6edf2;
+  /* elsődleges szín (mély kékeszöld): műveletek, aktív eszköz, fülek, kijelölés a panelon; másodlagos (réz): kiemelés a listákban, fókusz */
+  --primary:#0f5c66; --primary-fg:#ffffff; --primary-soft:#d3e7ea;
+  --secondary:#a8571f; --secondary-fg:#ffffff; --secondary-soft:#f3e2d4;
   --err:#c42b2b; --warn:#9a6300; --ok:#2b7a4b;
   /* lépték */
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
@@ -24,13 +24,13 @@ img{max-width:100%}
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#121513; --panel:#181c19; --panel2:#202521; --fg:#e3e9e4; --muted:#98a49b; --line:#2d3530; --stage:#0d100e;
-  --primary:#e08a50; --primary-fg:#1b0f07; --primary-soft:#3b2619;
-  --secondary:#4cc3d9; --secondary-fg:#062228; --secondary-soft:#11343b;
+  --primary:#3aa9b8; --primary-fg:#041a1e; --primary-soft:#0f3138;
+  --secondary:#e08a50; --secondary-fg:#1b0f07; --secondary-soft:#3b2619;
   --err:#ff7070; --warn:#f0b45a; --ok:#62c48f; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#121513; --panel:#181c19; --panel2:#202521; --fg:#e3e9e4; --muted:#98a49b; --line:#2d3530; --stage:#0d100e;
-  --primary:#e08a50; --primary-fg:#1b0f07; --primary-soft:#3b2619;
-  --secondary:#4cc3d9; --secondary-fg:#062228; --secondary-soft:#11343b;
+  --primary:#3aa9b8; --primary-fg:#041a1e; --primary-soft:#0f3138;
+  --secondary:#e08a50; --secondary-fg:#1b0f07; --secondary-soft:#3b2619;
   --err:#ff7070; --warn:#f0b45a; --ok:#62c48f; color-scheme:dark}
 :root[data-theme="light"]{color-scheme:light}
 html,body{height:100%}
@@ -409,7 +409,7 @@ details.sig .row select,details.sig .row input{flex:1;min-width:0;}
 .zlbl{min-width:58px;font:500 12px var(--mono)}
 /* márkajel */
 .brand{display:flex;align-items:center;gap:var(--sp-2)}
-.brand-mark{width:18px;height:18px;border-radius:5px;background:radial-gradient(circle at 50% 50%,var(--primary) 0 3px,transparent 3.5px),radial-gradient(circle,#4a3c24 1.3px,transparent 1.7px) 0 0/6px 6px,#ead6a8;flex:none}
+.brand-mark{width:18px;height:18px;border-radius:5px;background:radial-gradient(circle at 50% 50%,#a8571f 0 3px,transparent 3.5px),radial-gradient(circle,#4a3c24 1.3px,transparent 1.7px) 0 0/6px 6px,#ead6a8;flex:none}
 .brand small{margin-left:4px}
 /* menü */
 .menuwrap{position:relative}
@@ -453,6 +453,7 @@ details.sig .row select,details.sig .row input{flex:1;min-width:0;}
 @media (max-width:560px){.intro-act{grid-template-columns:1fr}}
 /* szabad vászon: a panel körül üres tér, abba is lehet húzni */
 .scroll{position:relative}
+.app.work-split .intro{right:50%}
 .scroll.panning,.scroll.panning #cv,.app.space #cv{cursor:grab}
 .scroll.panning:active,.scroll.panning #cv:active{cursor:grabbing}
 .examples .ex-list{max-height:none}
