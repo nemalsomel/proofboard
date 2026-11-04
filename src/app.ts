@@ -22,6 +22,7 @@ import { matchingSocket, plugOf, pluggedInto, plugPairs, plugRedundantLinks, plu
 import { xf, xv, ixf, placedPins as gpins } from './engine/geometry';
 import { analyze as analyzeNet, layoutOf, pinLabel } from './engine/netlist';
 import { checkAll as checkAllOf } from './engine/check';
+import { evalProgram, newRuntime, normProgram, withProgram } from './engine/program';
 import { emptyDesign, normalize, normCutList, rekeyAgainstLibrary, NOTE_COL } from './engine/design';
 import { SIG_PRESETS, SIG_NAMES, sigCfg as sigCfgOf, sigRows, sigApplyTo } from './engine/signal';
 import { swapMcu as swapMcuOf } from './engine/swap';
@@ -69,13 +70,15 @@ function offPinAt(r,c){for(const p of D.parts){if(!isOff(p))continue;for(const q
 function analyze(press){return analyzeNet(D,{pressed:press?p=>!!ui.pressed[p.id]:undefined,hidden:autoHidden});}
 
 /* ---------- Áramkör-szimuláció: engine/simulate.ts ---------- */
-const gpioMode=(p,id,q,A)=>gpioModeOf(D,p,id,q,A);
-const pwmCfg=key=>pwmCfgOf(D,key);
-function simulate(A,slow){return simulateOf(D,A,{running:ui.sim,slow});}
+/* Futás közben a program GPIO-beállításai a terv fölé kerülnek (engine/program.ts). */
+const DP=()=>ui.sim&&ui.prog?withProgram(D,ui.prog.out):D;
+const gpioMode=(p,id,q,A)=>gpioModeOf(DP(),p,id,q,A);
+const pwmCfg=key=>pwmCfgOf(DP(),key);
+function simulate(A,slow){return simulateOf(DP(),A,{running:ui.sim,slow});}
 const logic=gpioLevel;
 
 /* ---------- Ellenőrzés: engine/check.ts ---------- */
-function checkAll(){return checkAllOf(D,{A0,AS,SIM,linkState:ui.linkState});}
+function checkAll(){return checkAllOf(DP(),{A0,AS,SIM,linkState:ui.linkState});}
 
 /* ---------- Rajzolás ---------- */
 const cv=$('#cv'),ctx=cv.getContext('2d');
@@ -559,7 +562,17 @@ document.querySelector('.ltabs').addEventListener('click',e=>{const b=e.target.c
 ltab(uiPref().ltab==='lib'?'lib':'edit',false);
 function setSim(on){if(!on)sigPlay(false);if(on&&!ui.sim){LSTATE.clear();STSTATE.clear();ui.rtabBack=ui.rtab;rtab('sim',false);}else if(!on&&ui.sim&&ui.rtab==='sim')rtab(ui.rtabBack&&ui.rtabBack!=='sim'?ui.rtabBack:'design',false);
   ui.sim=on;if(!on){ui.pressed={};ui.holdPtr.clear();}ui.wireStart=null;ui.placing=null;const b=$('#bSim');b.classList.toggle('on',on);b.textContent=on?'■ Szimuláció leállítása':'▶ Szimuláció';
-  if(on&&D.signal&&(D.signal.pins||[]).some(Boolean))sigApply();else recompute();renderLeft();}
+  progStart(on);
+  if(on&&D.signal&&(D.signal.pins||[]).some(Boolean))sigApply();else recompute();if(on&&ui.prog)progTick(0);renderLeft();}
+/* ---------- Program futtatása: ütemenként kiértékel, és ha a GPIO-beállítások változnak, újraszámol ---------- */
+const PROG_MS=20;
+function progStart(on){if(ui.progTimer){clearInterval(ui.progTimer);ui.progTimer=null;}
+  ui.prog=on&&D.program&&D.program.nodes.length?{rt:newRuntime(),t:0,out:null,key:''}:null;
+  if(ui.prog&&ui.progAuto!==false){let last=performance.now();ui.progTimer=setInterval(()=>{const n=performance.now(),dt=Math.min(200,n-last);last=n;progTick(dt);},PROG_MS);}}
+function progTick(dt){const P=ui.prog;if(!P||!ui.sim)return;P.t+=dt;
+  const lv=new Map((SIM?SIM.gpios:[]).map(g=>[g.p.id+'.'+g.q.id,{level:!g.powered||g.float?null:g.V>=2?1:g.V<=0.8?0:null,V:g.V}]));
+  P.out=evalProgram(D,A0||analyze(false),D.program,P.rt,P.t,k=>lv.get(k)||null);
+  const key=JSON.stringify([P.out.gpio,P.out.pwm]);if(key!==P.key){P.key=key;recompute();}}
 let msgTimer;function flashMsg(m){const s=$('#status');s.textContent=m;s.style.color='var(--err)';clearTimeout(msgTimer);msgTimer=setTimeout(()=>{s.style.color='';status();},1800);}
 
 document.addEventListener('keydown',ev=>{
@@ -1146,6 +1159,14 @@ $('#bdApply').onclick=()=>{
 window.pcb={
   load(d){D=normalize(typeof d==='string'?JSON.parse(d):d);ui.sel=null;commit();return true;},
   get(){return JSON.parse(JSON.stringify(D));},
+  /** Program (csomópontok, élek): lekérdezés, vagy beállítás (visszavonható). */
+  program(p){if(p===undefined)return D.program?JSON.parse(JSON.stringify(D.program)):null;pushUndo();const n=normProgram(p);if(n&&n.nodes.length)D.program=n;else delete D.program;if(ui.sim)progStart(true);commit();return pcb.program();},
+  /** Program léptetése kézzel: ms idővel előre (a valós idejű futás a progAuto(false)-szal állítható le). */
+  progStep(ms=PROG_MS){progTick(ms);return pcb.progState();},
+  progAuto(on){ui.progAuto=!!on;if(ui.sim)progStart(true);},
+  /** A program állapota: csomópont-kimenetek, hibák, a beállított GPIO-módok (lábnévvel). */
+  progState(){const P=ui.prog;if(!P||!P.out)return null;const nm=k=>{const q=findPin(k);return q?q.name:k;};
+    return{t:P.t,vals:Object.fromEntries(P.rt.vals),errors:Object.fromEntries(P.out.errors),gpio:Object.fromEntries(Object.entries(P.out.gpio).map(([k,v])=>[nm(k),v])),pwm:Object.fromEntries(Object.entries(P.out.pwm).map(([k,v])=>[nm(k),v]))};},
   /** Külső alkatrész csatlakozója: a tüskesor címkéje és a lábpárok (külső láb → tüskesor láb), vagy null. */
   plug(label){const p=D.parts.find(x=>x.label===label);const h=p&&plugOf(D,p);return h?{header:h.label,pins:plugPairs(D,p).map(([q,x])=>({from:q.id,to:x.id,name:x.name,r:x.r,c:x.c}))}:null;},
   /** Csatlakozó készítése a külső alkatrészhez (ha még nincs); a tüskesor címkéje vagy null. */

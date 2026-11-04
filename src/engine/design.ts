@@ -4,7 +4,9 @@ import { hasErrors, validatePartDef } from '../core/validate';
 import { PARTS } from '../parts/builtin';
 import type { Cut } from './board';
 import { DEFS, libraryParts, syncDefs } from './defs';
+import { normProgram } from './program';
 import type { AutoBridge, Bridge, Design, Hole, Link, Note, Wire } from './types';
+
 
 /** Jegyzetszínek: [szín, név]. */
 export const NOTE_COL: ReadonlyArray<readonly [string, string]> = [['#fff3bf', 'sárga'], ['#d3f9d8', 'zöld'], ['#d0ebff', 'kék'], ['#ffe3e3', 'piros'], ['#f1f3f5', 'szürke']];
@@ -59,6 +61,7 @@ export function normalize(d: unknown): Design {
     cuts: normCutList(au.cuts),
   };
   o.cuts = normCutList(r.cuts);
+  { const pg = normProgram(r.program); if (pg && pg.nodes.length) o.program = pg; }
   if (r.signal && typeof r.signal === 'object') {
     const s = r.signal as Raw;
     o.signal = { preset: String(s.preset || 'half'), custom: String(s.custom || ''), pins: (Array.isArray(s.pins) ? s.pins : []).slice(0, 8).map((x: unknown) => (x ? String(x) : null)),

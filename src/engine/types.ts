@@ -4,6 +4,7 @@
  */
 import type { LocalPin, PartDef, PartInstance } from '../core/schema';
 import type { Cut } from './board';
+import type { Program } from './program';
 
 /** Kézi forrasztóhíd: [sor1, oszlop1, sor2, oszlop2]. */
 export type Bridge = [number, number, number, number];
@@ -36,6 +37,8 @@ export interface Design {
   settings: Settings;
   seq: number;
   signal?: SignalCfg;
+  /** Program (csomópontos adatfolyam), a szimuláció futás közben ebből kapja a GPIO-állapotokat. */
+  program?: Program;
 }
 
 /** Elhelyezett láb: panel-koordinátákkal és az alkatrésszel. */
