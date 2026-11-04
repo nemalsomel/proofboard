@@ -101,3 +101,17 @@ test('felület: a motor csak a panel mellé rakható, vezeték köthető a kivez
   await at(56, 3);
   expect(await pcb(page, `return pcb.get().wires.map(w => w.a.join(':') + '-' + w.b.join(':'));`)).toEqual(['56:-6-56:3']);
 });
+
+test('PWM: gyorsan a kitöltéssel arányos átlag, lassan (25 Hz alatt) valós időben villog', async ({ page }) => {
+  await pcb(page, `pcb.example('mosfet-pwm'); pcb.sim(true);`);
+  const fast = await pcb<number[]>(page, `return [10, 50, 100].map(d => { pcb.pwm('GP15', d, 1000); return pcb.ledView()[0].I; });`);
+  expect(fast[1]).toBeCloseTo(fast[2] / 2, 4);
+  expect(fast[0]).toBeCloseTo(fast[2] / 10, 4);
+  await pcb(page, `pcb.pwm('GP15', 50, 2);`);
+  const seen: number[] = [];
+  for (let i = 0; i < 12; i++) { await page.waitForTimeout(80); seen.push(await pcb<number>(page, `return pcb.ledView()[0].I;`)); }
+  expect(Math.max(...seen)).toBeCloseTo(fast[2], 4); // be: teljes áram
+  expect(Math.min(...seen)).toBeLessThan(1e-4); // ki
+  expect(await pcb<number>(page, `return pcb.simInfo().leds[0].I;`)).toBeCloseTo(fast[1], 4); // a panel és az ellenőrzés az átlagot látja
+  await expect(page.locator('#simOut')).toContainText('villog');
+});

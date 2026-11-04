@@ -23,6 +23,8 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
 /* ---------- Alkatrész-definíciók ---------- */
+/** LED látható fényereje 0…1: a szem kb. az áram négyzetgyöke szerint érzékel, ~15 mA-nél telítve. */
+const ledLevel=I=>Math.sqrt(Math.max(0,Math.min(1,I/0.015)));
 const rgba=(hex,a)=>{const n=parseInt(hex.slice(1),16);return`rgba(${n>>16},${(n>>8)&255},${n&255},${a})`;};
 const ROLEC={out:'#e8590c',c:'#868e96',cp:'#e03131',cn:'#1f2328',col:'#5c666e',base:'#2563eb',emit:'#1f2328',vin:'#d6336c',pout:'#e8590c',chg:'#e8590c',sig:'#2563eb',adc:'#0ca678',nc:'#adb5bd',j:'#aeb5bb',s:'#1f2328',g:'#2563eb',d:'#868e96',A:'#2563eb',B:'#d97706',an:'#e03131',ka:'#1f2328',gnd:'#1f2328',p33:'#e03131',pwr:'#be4bdb',gpio:'#2563eb',misc:'#868e96',r:'#868e96',h:'#868e96',bp:'#e03131',bn:'#1f2328'};
 const DEFS=compileAll(PARTS);
@@ -174,13 +176,17 @@ const RBE=20,RCE=1; // NPN: bázis-emitter és telítési soros ellenállás (Ω
    kitöltéseiből szakaszok lesznek (mindegyikben fix magas/alacsony szintek); az eredmény a szakaszok
    idővel súlyozott átlaga, a GPIO- és forrásáramoknál a csúcsérték. */
 const pwmCfg=key=>({duty:50,freq:1000,...((D.pwm||{})[key]||{})});
-function simulate(A){
-  const pw=[];for(const p of D.parts)for(const q of A.byPart.get(p.id).pins)if(q.role==='gpio'&&gpioMode(p,q.id,q,A)==='pwm')pw.push({key:p.id+'.'+q.id,q,...pwmCfg(p.id+'.'+q.id)});
+/** Ennél lassabb PWM-et a szimuláció nem átlagolja, hanem valós időben villogtatja (a szem kb. 25 Hz alatt látja a villogást). */
+const BLINK_HZ=25;
+/** slow: a lassú PWM-lábak közül az éppen magas szintűek (villogtatás); elhagyva minden PWM a kitöltés szerint átlagolódik. */
+function simulate(A,slow){
+  const all=[];for(const p of D.parts)for(const q of A.byPart.get(p.id).pins)if(q.role==='gpio'&&gpioMode(p,q.id,q,A)==='pwm')all.push({key:p.id+'.'+q.id,q,...pwmCfg(p.id+'.'+q.id)});
+  const pw=slow?all.filter(x=>+x.freq>=BLINK_HZ):all,fixed=slow||new Set();
   const cuts=[...new Set(pw.map(x=>Math.max(0,Math.min(100,+x.duty||0))))].filter(d=>d>0&&d<100).sort((a,b)=>a-b),bounds=[0,...cuts,100],runs=[];
-  const runAll=()=>{const runs=[];for(let i=0;i+1<bounds.length;i++){const lo=bounds[i],w=(bounds[i+1]-lo)/100;if(w<=0)continue;runs.push({w,o:simulate1(A,new Set(pw.filter(x=>x.duty>lo).map(x=>x.key)))});}return mergeSims(runs);};
+  const runAll=()=>{const runs=[];for(let i=0;i+1<bounds.length;i++){const lo=bounds[i],w=(bounds[i+1]-lo)/100;if(w<=0)continue;runs.push({w,o:simulate1(A,new Set([...fixed,...pw.filter(x=>x.duty>lo).map(x=>x.key)]))});}return mergeSims(runs);};
   // órajeles logika: két beállt állapot között az órajel élén a tárolók átveszik a D értékét, utána újraszámol (kaszkád: legfeljebb 16 kör)
   let out=runAll();for(let pass=0;pass<16&&clockStep(out);pass++)out=runAll();
-  out.pwm=new Map(pw.map(x=>[x.q.net,x]));
+  out.pwm=new Map(all.map(x=>[x.q.net,x]));
   stepperStep(out);
   // szervó: a jelvezetéken érkező PWM impulzusszélessége → szög
   for(const s of out.servos){const x=out.pwm.get(s.sigNet);s.pulse=x?x.duty/100/Math.max(1e-9,x.freq)*1000:null;
@@ -511,7 +517,9 @@ function netTint(root,A){
   const g=pq.find(q=>q.role==='gpio');if(g)return`hsla(${((g.num??(+String(g.name).replace(/\D/g,'')||0))*67)%360},65%,48%,A)`;
   return`hsla(${(root*137.5)%360},55%,50%,A)`;
 }
-function draw(){
+/** A rajz villogtatás közben a pillanatnyi szimulációt mutatja. */
+function draw(){const keep=SIM;if(ui.sim&&ui.blinkSim)SIM=ui.blinkSim;try{draw0();}finally{SIM=keep;}}
+function draw0(){
   if(!D||!A0)return;
   const B=D.board,A=ui.sim?AS:A0,C=cu();
   ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -690,7 +698,7 @@ function drawPrim(p,g,o){
       break;}
     case 'radial':{const e=ends(),nx=-e.uy,ny=e.ux,fc=col(st.fill)||'#e03131',R=P*N(st.rad||0.62);
       if(e.len>1.3*P){ctx.strokeStyle='#8d959c';ctx.lineWidth=P*0.1;line(e.x1,e.y1,e.x2,e.y2);}
-      if(st.glow&&SIM&&ui.sim){const l=SIM.leds.find(x=>x.p===p);if(l&&l.I>2e-4){const k=Math.min(1,l.I/0.004);const gr=ctx.createRadialGradient(e.mx,e.my,0,e.mx,e.my,P*2.6);gr.addColorStop(0,'rgba(255,255,255,.95)');gr.addColorStop(0.18,rgba(fc,.95));gr.addColorStop(0.5,rgba(fc,.45));gr.addColorStop(1,rgba(fc,0));ctx.save();ctx.globalAlpha=o.alpha*(0.6+0.4*k);ctx.fillStyle=gr;ctx.beginPath();ctx.arc(e.mx,e.my,P*2.6,0,7);ctx.fill();ctx.restore();}}
+      if(st.glow&&SIM&&ui.sim){const l=SIM.leds.find(x=>x.p===p);if(l&&l.I>2e-4){const k=ledLevel(l.I),R=P*(0.9+2.7*k);const gr=ctx.createRadialGradient(e.mx,e.my,0,e.mx,e.my,R);gr.addColorStop(0,`rgba(255,255,255,${(0.15+0.8*k*k).toFixed(3)})`);gr.addColorStop(0.18,rgba(fc,(0.55+0.4*k).toFixed(3)));gr.addColorStop(0.5,rgba(fc,(0.15+0.35*k).toFixed(3)));gr.addColorStop(1,rgba(fc,0));ctx.save();ctx.globalAlpha=o.alpha*(0.35+0.65*k);ctx.fillStyle=gr;ctx.beginPath();ctx.arc(e.mx,e.my,R,0,7);ctx.fill();ctx.restore();}}
       ctx.beginPath();ctx.arc(e.mx,e.my,R,0,7);
       if(m==='solid'){ctx.fillStyle=fc;ctx.globalAlpha=o.alpha*0.85;ctx.fill();ctx.globalAlpha=o.alpha;ctx.strokeStyle='rgba(0,0,0,.55)';ctx.lineWidth=1.5;ctx.stroke();}
       else if(m==='xr'){ctx.fillStyle=fc;ctx.globalAlpha=o.alpha*0.2;ctx.fill();ctx.globalAlpha=o.alpha;ctx.setLineDash([3,3]);ctx.strokeStyle='rgba(0,0,0,.6)';ctx.lineWidth=1.4;ctx.stroke();ctx.setLineDash([]);}
@@ -1117,7 +1125,7 @@ function renderRight0(){
   if(used.length){h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>GPIO</th><th>Mód</th><th>U</th><th>Szint</th></tr></thead><tbody>`;
     for(const g of used){const key=g.p.id+'.'+g.q.id,l=logic(g);
       h+=`<tr><td title="${esc(pinFns(g.q).join(', '))}">${g.q.name}</td><td><select data-gpio="${key}" aria-label="${g.q.name} mód">${GPIO_MODES.filter(x=>gpioModeOk(g.q,x[0])).map(([v,t])=>`<option value="${v}" ${g.mode===v?'selected':''}>${t}</option>`).join('')}</select></td><td>${g.powered&&!g.float?g.V.toFixed(2):'–'}</td><td><span class="lv ${l==='1'?'lv1':l==='0'?'lv0':'lvq'}">${l}</span>${Math.abs(g.I)>1e-4?` <span class="muted">${(Math.abs(g.I)*1000).toFixed(1)} mA</span>`:''}</td></tr>`
-      if(g.mode==='pwm'){const c=pwmCfg(key),sid=key.replace('.','_');h+=`<tr class="pwmrow"><td></td><td colspan="3"><label class="small" for="pwmd_${sid}">kitöltés</label> <input type="number" id="pwmd_${sid}" data-pwm="${key}" data-pf="duty" min="0" max="100" step="1" value="${c.duty}" style="width:58px"> % <label class="small" for="pwmf_${sid}">frekv.</label> <input type="number" id="pwmf_${sid}" data-pwm="${key}" data-pf="freq" min="1" max="100000" step="1" value="${c.freq}" style="width:76px"> Hz</td></tr>`;}}
+      if(g.mode==='pwm'){const c=pwmCfg(key),sid=key.replace('.','_');h+=`<tr class="pwmrow"><td></td><td colspan="3"><label class="small" for="pwmd_${sid}">kitöltés</label> <input type="number" id="pwmd_${sid}" data-pwm="${key}" data-pf="duty" min="0" max="100" step="1" value="${c.duty}" style="width:58px"> % <label class="small" for="pwmf_${sid}">frekv.</label> <input type="number" id="pwmf_${sid}" data-pwm="${key}" data-pf="freq" min="1" max="100000" step="1" value="${c.freq}" style="width:76px"> Hz <span class="small muted" title="${+c.freq<BLINK_HZ?'Lassú PWM: a panelon valós időben villog; a táblázat az átlagot mutatja.':'Gyors PWM: a szem az átlagot látja, a szimuláció is átlagol.'}">${+c.freq<BLINK_HZ?'· villog':'· átlagolva'}</span></td></tr>`;}}
     h+='</tbody></table>';}
   const lights=SIM.leds.filter(l=>l.light);
   if(SIM.fets.length)h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>FET</th><th>U<sub>GS</sub></th><th>I<sub>D</sub></th><th>Állapot</th></tr></thead><tbody>`+SIM.fets.map(f=>`<tr><td>${esc(f.p.label)}</td><td>${f.floatGate?'lebeg':f.vgs.toFixed(2)+' V'}</td><td>${fmtSI(Math.abs(f.I))}A</td><td>${f.on?'<span class="c-ok">nyitva</span>':'<span class="muted">zárva</span>'}</td></tr>`).join('')+'</tbody></table>';
@@ -1202,11 +1210,20 @@ function status(){
   if(ui.sim&&SIM&&qs.length)t+=SIM.floating.has(root)?' · lebeg':` · ${(SIM.netV.get(root)||0).toFixed(2)} V`;
   s.textContent=t;
 }
-function recompute(){A0=analyze(false);AS=ui.sim?analyze(true):A0;SIM=simulate(AS);linkStates();ISSUES=checkAll();renderRight();renderLinks();status();draw();animate();}
+function recompute(){A0=analyze(false);AS=ui.sim?analyze(true):A0;SIM=simulate(AS);ui.simGen=(ui.simGen||0)+1;ui.blinkSim=null;linkStates();ISSUES=checkAll();renderRight();renderLinks();status();draw();animate();blink();}
+/* lassú PWM (BLINK_HZ alatt): a kijelzés valós időben követi a magas/alacsony szakaszokat; az ellenőrzés és a panel az átlagot mutatja */
+const slowPwm=()=>{const out=[];if(!ui.sim||!AS)return out;for(const p of D.parts){if(!isMcu(p))continue;for(const q of AS.byPart.get(p.id).pins)if(q.role==='gpio'&&gpioMode(p,q.id,q,AS)==='pwm'){const k=p.id+'.'+q.id,c=pwmCfg(k);if(+c.freq<BLINK_HZ)out.push({key:k,freq:+c.freq,duty:+c.duty||0});}}return out;};
+function blink(){if(ui.blinkOn||!slowPwm().length)return;ui.blinkOn=true;const t0=performance.now();let last=null;
+  const stop=()=>{ui.blinkOn=false;ui.blinkSim=null;draw();};
+  const step=t=>{if(!ui.sim)return stop();const sl=slowPwm();if(!sl.length)return stop();
+    const s=(t-t0)/1000,hi=new Set(sl.filter(x=>((s*x.freq)%1)<x.duty/100).map(x=>x.key)),key=[...hi].sort().join('|')+'#'+ui.simGen;
+    if(key!==last){last=key;ui.blinkSim=simulate(AS,hi);draw();}
+    requestAnimationFrame(step);};
+  requestAnimationFrame(step);}
 /* motorok forgása szimuláció közben (kb. 30 kép/s, csak amíg valami forog) */
 function animate(){if(ui.anim||!ui.sim||!SIM||!SIM.motors.some(m=>Math.abs(m.speed)>0.02))return;ui.anim=true;let last=performance.now();
   const step=t=>{if(!ui.sim||!SIM||!SIM.motors.some(m=>Math.abs(m.speed)>0.02)){ui.anim=false;return;}
-    if(t-last>=33){const dt=Math.min(0.2,(t-last)/1000);last=t;for(const m of SIM.motors)ui.phase[m.p.id]=((ui.phase[m.p.id]||0)+m.speed*dt*2*Math.PI*1.5)%(2*Math.PI);draw();}
+    if(t-last>=33){const dt=Math.min(0.2,(t-last)/1000);last=t;for(const m of (ui.blinkSim||SIM).motors)ui.phase[m.p.id]=((ui.phase[m.p.id]||0)+m.speed*dt*2*Math.PI*1.5)%(2*Math.PI);draw();}
     requestAnimationFrame(step);};requestAnimationFrame(step);}
 
 /* ---------- Felső sáv ---------- */
@@ -1767,6 +1784,8 @@ window.pcb={
   // --- tesztekhez és szkripteléshez ---
   select(labels){const ids=D.parts.filter(p=>labels.includes(p.label)).map(p=>p.id);ui.sel=ids.length?grp(ids):null;if(ids.length)ltab('edit');renderLeft();draw();return ids.length;},
   rotate(){rotate();},mirror(){mirror();},undo(){undo();},redo(){redo();},
+  /** A rajzon éppen látható LED-áramok (lassú PWM-nél a pillanatnyi, egyébként az átlag). */
+  ledView(){const S=ui.sim&&ui.blinkSim||SIM;return S?S.leds.map(l=>({label:l.p.label,I:l.I})):[];},
   simInfo(){return SIM?{leds:SIM.leds.map(l=>({label:l.p.label,I:l.I,light:!!l.light})),fets:SIM.fets.map(f=>({label:f.p.label,on:f.on,vgs:f.vgs,I:f.I,floatGate:f.floatGate})),bats:SIM.bats.map(b=>({label:b.p.label,I:b.I,kind:b.kind})),picos:SIM.picos.map(x=>({label:x.p.label,powered:x.powered})),caps:SIM.caps.map(k=>({label:k.p.label,U:k.U,R:k.R,tau:k.tau})),bjts:SIM.bjts.map(t=>({label:t.p.label,st:t.st,ib:t.ib,ic:t.ic,vbe:t.vbe,vce:t.vce})),motors:SIM.motors.map(m=>({label:m.p.label,U:m.U,I:m.I,speed:m.speed})),logics:SIM.logics.map(L=>({label:L.p.label,vdd:L.vdd,ins:Object.fromEntries(L.ins.map(x=>[x.name,x.lv])),outs:Object.fromEntries(L.outs.map(o=>[o.name,o.st])),regs:Object.fromEntries(L.regs.map(r=>[r.name,r.val]))})),servos:SIM.servos.map(s=>({label:s.p.label,U:s.U,pulse:s.pulse,angle:s.angle})),steppers:SIM.steppers.map(s=>({label:s.p.label,pos:s.pos,angle:s.angle,coils:s.coils}))}:null;},
   /** Jelsorozat: beállítás (preset, custom, pins: GPIO-nevek vagy kulcsok, rate) és léptetés. */
   signal(cfg){if(cfg){const c={...sigCfg(),...cfg};if(cfg.pins)c.pins=cfg.pins.map(x=>{if(!x)return null;const g=sigGpios().find(g=>g.key===x||g.name===x);return g?g.key:null;});D.signal=c;if(ui.sim)sigApply();else{save();renderRight();}}const c=sigCfg();return{...c,rows:sigRows(c).rows,playing:!!ui.sigTimer};},
