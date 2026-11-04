@@ -48,7 +48,7 @@ test('a könyvtár terv váltásakor és újratöltéskor is megmarad; a terv cs
 test('könyvtár export és import a tervtől függetlenül; keresés és kedvencek', async ({ page }, info) => {
   await pcb(page, `pcb.addPart(${JSON.stringify(part('Fényérzékelő'))}); pcb.addPart(${JSON.stringify(part('Kijelző modul'))});`);
   await page.click('[data-ltab="lib"]');
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bLibExp')]);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bFile').then(() => page.click('#bLibExp'))]);
   const file = info.outputPath('lib.json'); await dl.saveAs(file);
   const lib = JSON.parse(readFileSync(file, 'utf8'));
   expect(Object.keys(lib.parts).sort()).toEqual(['c_fenyerzekelo', 'c_kijelzo_modul']);

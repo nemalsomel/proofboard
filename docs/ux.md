@@ -15,12 +15,13 @@ mi került a felületre, hova, és milyen kérdést hagyott nyitva. A felülvizs
 
 | Elem | Állapot | Megjegyzés |
 | --- | --- | --- |
-| Összecsukható oldalsávok (`[` és `]`) | kész | ikonsáv a fülekkel, az Ellenőrzésen hibaszám |
-| Harmonikák a jobb sávban (Kapcsolatok, Panel, Terv) | kész | állapotuk megmarad |
-| Fülek: Szerkesztés / Alkatrészek, Terv / Ellenőrzés / Szimuláció | kész | szimuláció indításakor a Szimuláció fülre vált |
-| Munkamódok (Tervezés, Bekötés, Program, Szimuláció) | terv | minden mód csak a hozzá tartozó paneleket mutatja |
+| Összecsukható oldalsávok (`[` és `]`) | kész | ikonsáv a fülekkel, a Problémákon hibaszám |
+| Harmonikák a jobb sávban (Kapcsolatok, Panel) | kész | állapotuk megmarad; a Terv harmonika tartalma a Fájl menübe került |
+| Fülek: Szerkesztés / Alkatrészek, Terv / Problémák / Szimuláció | kész | szimuláció indításakor a Szimuláció fülre vált |
+| Elrendezések (Tervezés, Program, Szimuláció) | terv (5.2) | a döntések a UX-felülvizsgálat dokumentumban |
 | Parancspaletta (pl. Ctrl+K) | terv | alkatrész, eszköz, példa és beállítás keresése egy helyen |
-| Első indítás: „Kezdd egy példával” | terv | rövid bemutató a fő lépésekről |
+| Kezdőkép üres tervnél | kész (5.1) | bevezető, Tiszta sablon panelválasztással, Példa betöltése |
+| Fájl menü, téma, állapotsor, szabad vászon | kész (5.1) | tokenek (elsődleges/másodlagos szín, lépték), komponenskészlet, ikonok, fogalomtár |
 | Láb-súgó rámutatásra | részben | az állapotsor mutatja a GPIO funkcióit (I²C, SPI, UART, PWM, ADC) |
 | Mobil: alsó lapok, lebegő gombok | kész | külön vizsgálni a sűrűségüket |
 
@@ -31,6 +32,7 @@ mi került a felületre, hova, és milyen kérdést hagyott nyitva. A felülvizs
 | Példatár | Példák a Terv harmonikában, kategóriákkal | Első indításkor is ajánlani? |
 | Vezérlők | Vezérlőcsere a tulajdonságpanelen | A csere nem látszik, amíg nincs kijelölve a vezérlő |
 | Lezáró kör | Összecsukható sávok, lábfunkciók az állapotsorban és a GPIO-táblában | Kell-e láb-súgó buborék a vásznon? |
+| Alapozó kör (5.1) | Fájl menü (új, megnyitás, mentés, példák, könyvtár, JSON, téma), kezdőkép, állapotsor, szabad vászon, értesítés, ikonok, fogalomtár; „Vezérlés” → „Program”, „Ellenőrzés” → „Problémák”, „Forrasztóhíd” → „Híd” | A nézet-gombsor (Alkatrészoldal…Röntgen) az 5.2–5.3-ban rendeződik |
 | Alkatrész-kör | Keresőmező, Kedvencek / Legutóbb használt / Projekt / Saját könyvtár csoportok (összecsukhatók), tervtől független könyvtár; szerkesztőben MCU-modell, képességek, buszfunkció | Húzással is lehessen lerakni? Kell-e a kategóriákra szűrő gomb a keresés mellé? |
 
 ## Felülvizsgálati szempontlista

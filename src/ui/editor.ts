@@ -324,7 +324,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         <div class="pe-right">
           <canvas class="pe-cv" data-ref="cv" aria-label="Előnézet"></canvas>
           <p class="help" data-ref="cvhelp">Kattints egy üres lyukra: új láb oda. Kattints egy lábra: kijelölés a táblázatban.</p>
-          <p class="h" style="margin:12px 0 6px">Ellenőrzés</p>
+          <p class="h" style="margin:12px 0 6px">Problémák</p>
           <ul class="issues" data-ref="probs"></ul>
         </div>
       </div>

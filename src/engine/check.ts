@@ -52,7 +52,7 @@ export function checkAll(D: Design, { A0: A, AS, SIM, linkState }: CheckCtx): Is
     const LY = layoutOf(D);
     for (const [k, a] of hole) { const q = a[0]; if (LY.drilled(q.r, q.c)) add('err', `${pinLabel(q)} kifúrt lyukban van (${k}), nincs alatta réz: a láb sehová sem csatlakozik`, at(q)); }
     for (const w of D.wires) for (const e of [w.a, w.b]) if (inb(e[0], e[1]) && LY.drilled(e[0], e[1])) add('warn', `Vezetékvég kifúrt lyukban (${e[0]}:${e[1]}): nincs alatta réz`, [e]);
-    for (const b of D.bridges) if (LY.drilled(b[0], b[1]) || LY.drilled(b[2], b[3])) add('warn', `Forrasztóhíd kifúrt lyuknál (${b[0]}:${b[1]}–${b[2]}:${b[3]})`, [[b[0], b[1]]]);
+    for (const b of D.bridges) if (LY.drilled(b[0], b[1]) || LY.drilled(b[2], b[3])) add('warn', `Híd kifúrt lyuknál (${b[0]}:${b[1]}–${b[2]}:${b[3]})`, [[b[0], b[1]]]);
   }
   // alkatrészen belüli rövidzár (vezérlőlap kivételével)
   for (const p of D.parts) {

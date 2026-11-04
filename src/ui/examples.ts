@@ -59,7 +59,7 @@ export const EXAMPLES: Example[] = [
     freeze: true,
     design: {
       board: { ...SMALL }, parts: ledParts, links: ledLinks, settings: { autoRoute: false },
-      notes: [note(1, 12, 13, 8, 'Kézi hidak\nA réz 3 lyukas szakaszokból áll; a hidak (Forrasztóhíd eszköz, B) kötik össze a szomszédos szakaszokat.\nAz áramkör: akku + → R1 → LED1 → akku −.'),
+      notes: [note(1, 12, 13, 8, 'Kézi hidak\nA réz 3 lyukas szakaszokból áll; a hidak (Híd eszköz, B) kötik össze a szomszédos szakaszokat.\nAz áramkör: akku + → R1 → LED1 → akku −.'),
         note(11, 12, 13, 8, 'Próbáld ki\nIndítsd a szimulációt: a LED világít, kb. 6 mA folyik.\nTörölj ki egy hidat (E): a kör megszakad, a LED kialszik.', GRN, 'p3')],
     },
   },
@@ -105,7 +105,7 @@ export const EXAMPLES: Example[] = [
         { id: 'p2', type: 'button', label: 'SW1', r: 17, c: 4 }, res('p3', 'R1', 17, 16, 330), led('p4', 'LED1', 22, 20, 'green')],
       links: [['p2.A1', 'GPIO'], ['p2.B1', 'GND'], ['p3.1', 'GPIO'], ['p3.2', 'p4.A'], ['p4.K', 'GND']],
       notes: [note(26, 1, 14, 9, 'C3 SuperMini\nAz 5V láb az USB-re csatlakozik, dióda nélkül: akkut USB mellett ne köss rá. A GPIO8-on a beépített LED, a GPIO9-en a BOOT gomb van; mindkettő indítási láb.', YEL, 'p1'),
-        note(26, 16, 13, 9, 'Próbáld ki\nIndítsd a szimulációt: a LED világít. Kösd át a gombot a GPIO9-re (Kapcsolat eszköz): az Ellenőrzés figyelmeztet.', GRN)],
+        note(26, 16, 13, 9, 'Próbáld ki\nIndítsd a szimulációt: a LED világít. Kösd át a gombot a GPIO9-re (Kapcsolat eszköz): a Problémák között figyelmeztetés jelenik meg.', GRN)],
     },
   },
   /* ---------- Bemenet ---------- */
@@ -135,7 +135,7 @@ export const EXAMPLES: Example[] = [
     desc: 'Az első program: egy ütemadó csomópont fél másodpercenként ki-be kapcsolja a LED-et.',
     design: pico([res('p2', 'R1', 20, 26, 330), led('p3', 'LED1', 26, 30)],
       [['p2.1', 'GPIO'], ['p2.2', 'p3.A'], ['p3.K', 'GND']], [
-        note(31, 2, 17, 9, 'Program\nA Vezérlés nézetben (fent: Vezérlés vagy Mindkettő) két csomópont van: Ütemadó → Digitális kimenet. A kimenet az R1 lábára hivatkozik; hogy ez melyik GPIO, azt a bekötés dönti el.', YEL),
+        note(31, 2, 17, 9, 'Program\nA Program nézetben (fent: Program vagy Mindkettő) két csomópont van: Ütemadó → Digitális kimenet. A kimenet az R1 lábára hivatkozik; hogy ez melyik GPIO, azt a bekötés dönti el.', YEL),
         note(31, 21, 15, 9, 'Próbáld ki\nIndítsd a szimulációt: a LED villog. Az Ütemadó periódusát vagy kitöltését átírva gyorsabb vagy lassabb lesz.', GRN, 'p3'),
       ], { program: { nodes: [
         { id: 'n1', type: 'blink', x: 40, y: 60, props: { period: 1000, duty: 50 } },
@@ -148,7 +148,7 @@ export const EXAMPLES: Example[] = [
     design: pico([{ id: 'p2', type: 'button', label: 'SW1', r: 20, c: 8 }, res('p3', 'R1', 20, 26, 330), led('p4', 'LED1', 26, 30)],
       [['p2.A1', 'GPIO'], ['p2.B1', 'GND'], ['p3.1', 'GPIO'], ['p3.2', 'p4.A'], ['p4.K', 'GND']], [
         note(31, 2, 17, 9, 'Élre vált\nA gomb felhúzott bemenet: lenyomva alacsony, ezért a bemenet csomópont „aktív alacsony”. A váltókapcsoló csak a lenyomás pillanatában (felfutó élen) vált, nyomva tartva nem.', YEL, 'p2'),
-        note(31, 21, 15, 9, 'Próbáld ki\nSzimulációban kattints a gombra: a LED be-, majd újra kattintva kikapcsol. A Vezérlés nézetben látszik az élek értéke.', GRN, 'p4'),
+        note(31, 21, 15, 9, 'Próbáld ki\nSzimulációban kattints a gombra: a LED be-, majd újra kattintva kikapcsol. A Program nézetben látszik az élek értéke.', GRN, 'p4'),
       ], { program: { nodes: [
         { id: 'n1', type: 'in', x: 40, y: 60, props: { pin: 'p2.A1', pull: 'pullup', active: 'low' } },
         { id: 'n2', type: 'toggle', x: 300, y: 60 },

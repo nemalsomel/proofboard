@@ -12,11 +12,33 @@
 <body>
 <div class="app">
   <header class="top">
-    <div class="brand">Proofboard<small id="boardInfo"></small></div>
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Proofboard<small id="boardInfo"></small></div>
+    <div class="menuwrap">
+      <button class="btn ghost" id="bFile" aria-haspopup="menu" aria-expanded="false" aria-controls="fileMenu">Fájl<span data-icon="down" class="caret"></span></button>
+      <div class="menu" id="fileMenu" role="menu" aria-label="Fájl" hidden>
+        <button class="menu-item" role="menuitem" id="bNew" data-icon="filePlus">Új terv…<kbd>Alt+N</kbd></button>
+        <button class="menu-item" role="menuitem" id="bOpenFile" data-icon="open" title="Terv betöltése fájlból; a saját alkatrészeid megmaradnak">Megnyitás…<kbd>Ctrl+O</kbd></button>
+        <button class="menu-item" role="menuitem" id="bSaveFile" data-icon="save" title="A teljes terv (a benne használt saját alkatrészekkel együtt) fájlba">Mentés fájlba<kbd>Ctrl+S</kbd></button>
+        <button class="menu-item" role="menuitem" id="bExamples" data-icon="book">Példák…</button>
+        <div class="menu-sep" role="separator"></div>
+        <p class="menu-h">Saját alkatrészkönyvtár</p>
+        <button class="menu-item" role="menuitem" id="bLibExp" data-icon="save" title="A saját könyvtár mentése fájlba (a tervtől függetlenül)">Könyvtár exportálása</button>
+        <button class="menu-item" role="menuitem" id="bLibImp" data-icon="load" title="Alkatrészek betöltése fájlból a saját könyvtárba">Könyvtár importálása…</button>
+        <div class="menu-sep" role="separator"></div>
+        <button class="menu-item" role="menuitem" id="bJson" data-icon="code">JSON export / import…</button>
+        <div class="menu-sep" role="separator"></div>
+        <p class="menu-h">Téma</p>
+        <div class="seg menu-seg" role="group" aria-label="Téma">
+          <button class="btn" data-theme-set="auto" data-icon="auto" title="A rendszer beállítása szerint">Auto</button>
+          <button class="btn" data-theme-set="light" data-icon="sun">Világos</button>
+          <button class="btn" data-theme-set="dark" data-icon="moon">Sötét</button>
+        </div>
+      </div>
+    </div>
     <div class="grp seg" role="group" aria-label="Munkaterület" id="workSw">
       <button class="btn on" data-work="board" aria-pressed="true" title="A panel (alkatrészek, bekötés)">Panel</button>
-      <button class="btn" data-work="prog" aria-pressed="false" title="A program: csomópontok, amelyek futás közben a GPIO-kat vezérlik">Vezérlés</button>
-      <button class="btn desk-only" data-work="split" aria-pressed="false" title="A panel és a vezérlés egymás mellett">Mindkettő</button>
+      <button class="btn" data-work="prog" aria-pressed="false" title="A program: csomópontok, amelyek futás közben a GPIO-kat vezérlik">Program</button>
+      <button class="btn desk-only" data-work="split" aria-pressed="false" title="A panel és a program egymás mellett">Mindkettő</button>
     </div>
     <div class="grp" role="group" aria-label="Nézet">
       <button class="btn" id="vComp" title="Alkatrészoldal (F)">Alkatrészoldal</button>
@@ -24,19 +46,19 @@
       <button class="btn" id="vRats" title="Kapcsolati vonalak mutatása (N)">Kapcsolati nézet</button>
       <button class="btn" id="vXray" title="Minden alkatrész röntgen nézetben: csak körvonal, lábak és lábnevek (X)">Röntgen</button>
       <button class="btn" id="vStub" title="Hosszú vezetékek rövidítve: csak a két vég látszik szakadásjellel; rámutatva vagy kijelölve a teljes vonal">Vezeték: rövid</button>
-      <button class="btn" id="vRot" title="A panel nézetének elforgatása 90°-kal (T)">⟳ Panel 90°</button>
+      <button class="btn" id="vRot" data-icon="rotate" title="A panel nézetének elforgatása 90°-kal (T)">Panel 90°</button>
     </div>
-    <div class="grp">
-      <button class="btn" id="zOut" aria-label="Kicsinyítés">−</button>
-      <span class="mono small" id="zLbl">100%</span>
-      <button class="btn" id="zIn" aria-label="Nagyítás">+</button>
+    <div class="grp seg" role="group" aria-label="Nagyítás">
+      <button class="btn icon" id="zOut" data-icon="zoomOut" aria-label="Kicsinyítés" title="Kicsinyítés (Ctrl+görgő)"></button>
+      <button class="btn mono small zlbl" id="zLbl" title="Az egész panel látszódjon (0)">100%</button>
+      <button class="btn icon" id="zIn" data-icon="zoomIn" aria-label="Nagyítás" title="Nagyítás (Ctrl+görgő)"></button>
     </div>
-    <div class="grp">
-      <button class="btn" id="bUndo" title="Visszavonás (Ctrl+Z)">↶</button>
-      <button class="btn" id="bRedo" title="Újra (Ctrl+Y)">↷</button>
+    <div class="grp seg" role="group" aria-label="Visszavonás">
+      <button class="btn icon" id="bUndo" data-icon="undo" aria-label="Visszavonás" title="Visszavonás (Ctrl+Z)"></button>
+      <button class="btn icon" id="bRedo" data-icon="redo" aria-label="Újra" title="Újra (Ctrl+Y)"></button>
     </div>
     <div class="grp" style="margin-left:auto">
-      <button class="btn sim" id="bSim" title="Szimuláció (S)">▶ Szimuláció</button>
+      <button class="btn primary sim" id="bSim" title="Szimuláció (S)"></button>
     </div>
   </header>
 
@@ -48,8 +70,8 @@
     </div>
     <div class="rail" id="railL" role="toolbar" aria-label="Bal oldalsáv (összecsukva)">
       <button class="rail-btn" data-expand="l" title="Kinyitás ( [ )" aria-label="Bal oldalsáv kinyitása">»</button>
-      <button class="rail-btn" data-rail-ltab="edit" title="Szerkesztés" aria-label="Szerkesztés">✎</button>
-      <button class="rail-btn" data-rail-ltab="lib" title="Alkatrészek" aria-label="Alkatrészek">▦</button>
+      <button class="rail-btn" data-rail-ltab="edit" title="Szerkesztés" aria-label="Szerkesztés" data-icon="edit"></button>
+      <button class="rail-btn" data-rail-ltab="lib" title="Alkatrészek" aria-label="Alkatrészek" data-icon="parts"></button>
     </div>
     <div class="rpane" id="lpEdit" data-lpane="edit" role="tabpanel">
       <section>
@@ -84,13 +106,10 @@
       <div class="lib-search"><input type="search" id="libSearch" placeholder="Keresés: név, láb, funkció (pl. i2c, adc, motor)" aria-label="Alkatrész keresése" autocomplete="off"></div>
       <div class="lib" id="lib"></div>
       <div class="grp" style="margin-top:8px">
-        <button class="btn" id="bNewPart">+ Saját alkatrész</button>
-        <button class="btn" id="bLibExp" title="A saját könyvtár mentése fájlba (a tervtől függetlenül)">Könyvtár export</button>
-        <button class="btn" id="bLibImp" title="Alkatrészek betöltése fájlból a saját könyvtárba">Könyvtár import</button>
-        <input type="file" id="libFile" accept=".json,application/json" hidden>
+        <button class="btn" id="bNewPart" data-icon="plus">Saját alkatrész</button>
       </div>
       <p class="help" id="libMsg" aria-live="polite" style="margin-top:6px"></p>
-      <p class="help" style="margin-top:6px">A <b>saját könyvtár</b> a böngésződben marad, terv váltásakor is. Amit egy tervbe leraksz, az a terv része lesz (<b>Projekt</b>), így a tervfájllal együtt utazik.</p>
+      <p class="help" style="margin-top:6px">A <b>saját könyvtár</b> a böngésződben marad, terv váltásakor is; exportálni és importálni a Fájl menüben lehet. Amit egy tervbe leraksz, az a terv része lesz (<b>Projekt</b>), így a tervfájllal együtt utazik.</p>
       <p class="help" style="margin-top:8px">Lerakás közben: <kbd>R</kbd> forgatás, <kbd>M</kbd> tükrözés, <kbd>Esc</kbd> mégse.</p>
       </section>
     </div>
@@ -100,8 +119,37 @@
   <main class="stage">
     <div class="scroll" id="scroll"><canvas id="cv"></canvas></div>
     <div class="fab" id="fab" role="toolbar" aria-label="Műveletek a kijelöléssel" hidden></div>
-    <section class="progview" id="progView" aria-label="Vezérlés: program" hidden></section>
-    <div class="status" id="status">—</div>
+    <section class="intro" id="intro" aria-labelledby="introTitle" hidden>
+      <div class="intro-card">
+        <h1 id="introTitle">Kezdjünk egy panelt</h1>
+        <p>A Proofboarddal próbanyákot tervezel és ki is próbálod, mielőtt forrasztanál.</p>
+        <ol class="intro-steps">
+          <li><b>Alkatrészek</b> – a bal oldali könyvtárból rakd le őket a panelra.</li>
+          <li><b>Bekötés</b> – kapcsolatokkal (az útvonalat a program keresi meg), vagy kézzel hidakkal és vezetékekkel.</li>
+          <li><b>Kipróbálás</b> – a szimuláció megmutatja a feszültségeket, a Problémák a hibákat; a program a vezérlőlapot működteti.</li>
+        </ol>
+        <div class="intro-act">
+          <div class="intro-opt">
+            <label for="introBoard" class="small muted">Panel</label>
+            <select id="introBoard"></select>
+            <button class="btn primary" id="introBlank" data-icon="board">Tiszta sablon</button>
+          </div>
+          <div class="intro-opt">
+            <span class="small muted">vagy nézd meg, hogyan készül</span>
+            <button class="btn secondary" id="introEx" data-icon="book">Példa betöltése</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="progview" id="progView" aria-label="Program" hidden></section>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <footer class="status" id="statusbar">
+      <span class="sb-msg" id="status">—</span>
+      <span class="sb-item" id="sbTool"></span>
+      <span class="sb-item" id="sbSel"></span>
+      <button class="sb-item sb-btn" id="sbIss" title="A Problémák megnyitása"></button>
+      <span class="sb-item" id="sbSim"></span>
+    </footer>
   </main>
   <div class="gutter" id="gR" role="separator" aria-orientation="vertical" aria-label="Jobb oldalsáv szélessége" tabindex="0" title="Húzd a szélesség állításához, dupla kattintás: alapméret"></div>
 
@@ -109,14 +157,14 @@
     <div class="rtabs" role="tablist" aria-label="Jobb oldali panel">
       <button class="side-tog" id="colR" title="Oldalsáv összecsukása ( ] )" aria-label="Jobb oldalsáv összecsukása" aria-expanded="true">»</button>
       <button class="rtab on" role="tab" data-rtab="design" aria-selected="true" aria-controls="rpDesign">Terv</button>
-      <button class="rtab" role="tab" data-rtab="check" aria-selected="false" aria-controls="rpCheck">Ellenőrzés <span id="issueSum"></span></button>
+      <button class="rtab" role="tab" data-rtab="check" aria-selected="false" aria-controls="rpCheck">Problémák <span id="issueSum"></span></button>
       <button class="rtab" role="tab" data-rtab="sim" aria-selected="false" aria-controls="rpSim">Szimuláció</button>
     </div>
     <div class="rail" id="railR" role="toolbar" aria-label="Jobb oldalsáv (összecsukva)">
       <button class="rail-btn" data-expand="r" title="Kinyitás ( ] )" aria-label="Jobb oldalsáv kinyitása">«</button>
-      <button class="rail-btn" data-rail-rtab="design" title="Terv" aria-label="Terv">☰</button>
-      <button class="rail-btn" data-rail-rtab="check" title="Ellenőrzés" aria-label="Ellenőrzés">✓<span class="badge" id="railIss"></span></button>
-      <button class="rail-btn" data-rail-rtab="sim" title="Szimuláció" aria-label="Szimuláció">▶</button>
+      <button class="rail-btn" data-rail-rtab="design" title="Terv" aria-label="Terv" data-icon="list"></button>
+      <button class="rail-btn" data-rail-rtab="check" title="Problémák" aria-label="Problémák" data-icon="warn"><span class="badge" id="railIss"></span></button>
+      <button class="rail-btn" data-rail-rtab="sim" title="Szimuláció" aria-label="Szimuláció" data-icon="pulse"></button>
     </div>
     <div class="rpane" id="rpDesign" data-rpane="design" role="tabpanel">
       <details class="acc" id="accLinks" open>
@@ -141,32 +189,6 @@
         <div class="row"><label for="bdSec">Szekció</label><select id="bdSec" style="flex:1"><option value="1">nincs (pontraszter)</option><option value="2">1×2</option><option value="3">1×3</option><option value="4">1×4</option><option value="5">1×5</option><option value="0">teljes csík (stripboard)</option></select></div>
         <div class="row"><button class="btn" id="bdApply">Alkalmaz</button><span class="muted small" id="bdMm"></span></div>
       </div>
-      </details>
-      <details class="acc" id="accPlan">
-        <summary><span class="h">Terv</span><span class="muted small">példák, mentés</span></summary>
-      <p class="h" style="margin:0 0 6px">Példák</p>
-      <div id="examples" class="examples"></div>
-      <p class="help" id="exMsg" aria-live="polite"></p>
-      <div class="grp" style="margin-top:8px">
-        <button class="btn danger" id="bClear">Üres panel</button>
-      </div>
-      <p class="h" style="margin:12px 0 6px">Mentés és megosztás</p>
-      <div class="grp">
-        <button class="btn" id="bSaveFile" title="A teljes terv (a benne használt saját alkatrészekkel együtt) fájlba">Terv mentése fájlba</button>
-        <button class="btn" id="bOpenFile" title="Terv betöltése fájlból; a saját alkatrészeid megmaradnak">Terv megnyitása</button>
-        <input type="file" id="planFile" accept=".json,application/json" hidden>
-      </div>
-      <p class="help" id="planMsg" aria-live="polite" style="margin-top:6px">A fájlban a terv saját alkatrészei is benne vannak, így máshol is ugyanígy betölthető.</p>
-      <details id="jsonBox">
-        <summary>JSON export / import</summary>
-        <div class="grp" style="margin-top:8px">
-          <button class="btn" id="bExport">Export</button>
-          <button class="btn" id="bCopy">Másolás</button>
-          <button class="btn" id="bImport">Import</button>
-        </div>
-        <textarea id="json" spellcheck="false" aria-label="Terv JSON"></textarea>
-        <p class="help" id="jsonMsg">Formátum: parts[{type,label,r,c,rot,mir,props}], bridges[[r1,c1,r2,c2]], wires[{a:[r,c],b:[r,c],color}], gpio{"partId.lábszám":"pullup|pulldown|float|out_high|out_low"}. Koordináta: sor:oszlop.</p>
-      </details>
       </details>
     </div>
     <div class="rpane" id="rpCheck" data-rpane="check" role="tabpanel" hidden>
@@ -193,6 +215,33 @@
     <button class="tab" data-sheet="right" aria-pressed="false">Részletek <span class="badge" id="tabIss"></span></button>
   </nav>
 </div>
+<input type="file" id="planFile" accept=".json,application/json" hidden>
+<input type="file" id="libFile" accept=".json,application/json" hidden>
+<dialog class="dlg" id="dlgEx" aria-labelledby="dlgExT">
+  <header class="dlg-head"><h2 id="dlgExT">Példák</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <div class="dlg-body"><div id="examples" class="examples"></div></div>
+  <footer class="dlg-foot"><span class="help">A betöltés visszavonható (Ctrl+Z).</span></footer>
+</dialog>
+<dialog class="dlg dlg-sm" id="dlgNew" aria-labelledby="dlgNewT">
+  <header class="dlg-head"><h2 id="dlgNewT">Új terv</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <div class="dlg-body">
+    <div class="row"><label for="newBoard" class="small muted">Panel</label><select id="newBoard"></select></div>
+    <p class="help">A mostani terv visszavonással (Ctrl+Z) visszahozható; a saját könyvtárad nem változik.</p>
+  </div>
+  <footer class="dlg-foot"><button class="btn ghost" data-close>Mégse</button><button class="btn primary" id="bNewOk" data-icon="filePlus">Létrehozás</button></footer>
+</dialog>
+<dialog class="dlg" id="dlgJson" aria-labelledby="dlgJsonT">
+  <header class="dlg-head"><h2 id="dlgJsonT">JSON export / import</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <div class="dlg-body">
+    <div class="grp">
+      <button class="btn" id="bExport" data-icon="save">Export</button>
+      <button class="btn" id="bCopy">Másolás</button>
+      <button class="btn" id="bImport" data-icon="load">Import</button>
+    </div>
+    <textarea id="json" spellcheck="false" aria-label="Terv JSON"></textarea>
+    <p class="help" id="jsonMsg">Formátum: parts[{type,label,r,c,rot,mir,props}], bridges[[r1,c1,r2,c2]], wires[{a:[r,c],b:[r,c],color}], gpio{"partId.lábszám":"pullup|pulldown|float|out_high|out_low"}. Koordináta: sor:oszlop.</p>
+  </div>
+</dialog>
 <script type="module" src="/src/app.ts"></script>
 </body>
 </html>

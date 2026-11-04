@@ -21,8 +21,7 @@ test('terv fájlba és vissza: a használt saját alkatrészek a tervvel utaznak
   const t = await pcb<string>(page, `pcb.load({ board: { rows: 30, cols: 20, sec: 3 }, parts: [], bridges: [], wires: [], links: [], settings: {}, seq: 1 });
     const t = pcb.addPart(${JSON.stringify(part('Barát modulja'))}).type; pcb.addPart(${JSON.stringify(part('Nem használt'))});
     const d = pcb.get(); d.parts.push({ id: 'p1', type: t, label: 'X1', r: 5, c: 5, rot: 0, mir: false, props: {} }); pcb.load(d); return t;`);
-  await page.click('#accPlan summary');
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bSaveFile')]);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bFile').then(() => page.click('#bSaveFile'))]);
   expect(dl.suggestedFilename()).toMatch(/^proofboard-terv-\d{8}\.json$/);
   const file = info.outputPath('terv.json');
   await dl.saveAs(file);

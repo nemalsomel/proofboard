@@ -69,7 +69,7 @@ test('hibás leírás nem menthető, a hibát érthetően jelzi', async ({ page 
 
 test('alkatrészkönyvtár: export fájlba, import vissza, ütköző kulcs átnevezésével', async ({ page }, info) => {
   expect(await pcb<any>(page, `return pcb.addPart(${JSON.stringify(nokia)}).type;`)).toBe('c_nokia_5110_kijelzo');
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bLibExp')]);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bFile').then(() => page.click('#bLibExp'))]);
   expect(dl.suggestedFilename()).toBe('proofboard-alkatreszek.json');
   const file = info.outputPath('lib.json');
   await dl.saveAs(file);

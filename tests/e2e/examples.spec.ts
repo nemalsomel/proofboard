@@ -67,13 +67,16 @@ test('léptetőmotor: a Jelsorozat félléptetésben lépteti, visszafelé is; a
   expect(await pcb(page, `return pcb.signal().playing;`)).toBe(false);
 });
 
-test('példatár a Terv fülön: kategória, betöltés, visszavonás', async ({ page }) => {
+test('példatár a Fájl menüből: kategória, betöltés, visszavonás', async ({ page }) => {
   await pcb(page, `pcb.example('rc');`);
-  await page.click('#accPlan summary');
+  await page.click('#bFile');
+  await page.click('#bExamples');
+  await expect(page.locator('#dlgEx')).toBeVisible();
   await page.click('.ex-cat[data-excat="Motor"]');
   await expect(page.locator('.ex-item')).toHaveCount(3);
   await page.click('.ex-item[data-ex="servo"]');
-  await expect(page.locator('#exMsg')).toContainText('Betöltve: Szervó');
+  await expect(page.locator('#toast')).toContainText('Betöltve: Szervó');
+  await expect(page.locator('#dlgEx')).toBeHidden();
   expect(await pcb(page, `return pcb.get().parts.map(p => p.type).sort();`)).toEqual(['header', 'pico', 'servo']); // a szervó kábele tüskesorba dugva
   await pcb(page, `pcb.undo();`);
   expect(await pcb(page, `return pcb.get().parts.map(p => p.type).sort();`)).toEqual(['elko', 'pico', 'res']);
