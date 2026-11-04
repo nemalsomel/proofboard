@@ -105,3 +105,15 @@ test('hosszan nyomva kijelölő keret, a szimulációban a gomb nyomva tartható
   await touch('touchEnd', []);
   expect(await lvl()).toBe('1');
 });
+
+test('mobilon a tulajdonságok a Részletek lapon (saját fülön); a lap lefelé nyíllal csukható', async ({ page }) => {
+  await pcb(page, 'pcb.preset(); pcb.select(["K1"]);');
+  await expect(page.locator('#propWin')).toBeHidden();
+  await page.locator('#fab [data-fab="props"]').tap();
+  await expect(page.locator('.app')).toHaveClass(/sheet-right/);
+  await expect(page.locator('.right .rtab.on')).toHaveText('Tulajdonságok');
+  await expect(page.locator('#rpProps #pLabel')).toHaveValue('K1');
+  await page.locator('.right [data-sheet-close]').tap();
+  await expect(page.locator('.app')).not.toHaveClass(/sheet-right/);
+  await expect(page.locator('#tabbar [data-sheet=""]')).toHaveCount(0); // nincs külön Panel fül
+});

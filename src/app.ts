@@ -690,16 +690,17 @@ const MOB=window.matchMedia('(max-width:1000px)');
 function sheet(name){const app=$('.app');app.classList.toggle('sheet-left',name==='left');app.classList.toggle('sheet-right',name==='right');
   document.querySelectorAll('#tabbar [data-sheet]').forEach(b=>{const on=b.dataset.sheet===(name||'');b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});}
 const sheetOpen=()=>{const c=$('.app').classList;return c.contains('sheet-left')||c.contains('sheet-right');};
+document.querySelectorAll('[data-sheet-close]').forEach(b=>b.addEventListener('click',()=>sheet('')));
 $('#tabbar').addEventListener('click',e=>{const b=e.target.closest('[data-sheet]');if(!b)return;const n=b.dataset.sheet;sheet(b.classList.contains('on')&&n?'':n);});
 function renderFab(){const f=$('#fab');if(!f)return;const B=(a,l,cls='')=>`<button class="btn ${cls}" data-fab="${a}">${l}</button>`;let h='';
   if(ui.sim)h='';
   else if(ui.placing)h=B('rot','⟳ Forgatás')+B('mir','⇋ Tükrözés')+B('esc','✕ Mégse');
   else if(ui.wireStart||ui.linkStart)h=B('esc','✕ Mégse');
-  else if(ui.sel){const p=selPart();h=isGroup()&&ui.sel.parts.size?B('rot','⟳ Forgatás')+B('mir','⇋ Tükrözés')+(p?B('dup','⧉ Másolat')+B('props','⚙ Beállítás'):''):'';h+=B('del','Törlés','danger');}
+  else if(ui.sel){const p=selPart();h=isGroup()&&ui.sel.parts.size?B('rot','⟳ Forgatás')+B('mir','⇋ Tükrözés')+(p?B('dup','⧉ Másolat')+B('props','⚙ Tulajdonságok'):''):'';h+=B('del','Törlés','danger');}
   f.innerHTML=h;f.hidden=!h;}
 $('#fab').addEventListener('click',e=>{const b=e.target.closest('[data-fab]');if(!b)return;const a=b.dataset.fab;
   if(a==='rot')rotate();else if(a==='mir')mirror();else if(a==='del')delSel();else if(a==='dup')duplicate(selPart());
-  else if(a==='props'){ui.pwMob=true;PW.collapse(false);pwUpdate();}
+  else if(a==='props'){rtab('props',false);sheet('right');}
   else if(a==='esc'){ui.placing=null;ui.wireStart=null;ui.linkStart=null;ui.hover=null;setTool(ui.tool==='place'?'select':ui.tool);}
   renderFab();});
 function paramUI(p){const def=DEFS[p.type].def,E=penv(p);let h=def.meta&&typeof def.meta.help==='string'?`<p class="help" style="margin:4px 0 8px">${esc(def.meta.help)}</p>`:'';
@@ -1091,7 +1092,9 @@ strip(!!uiPref().strip);
 /* ---------- Lebegő tulajdonságablak (alapból lebeg; a jobb sávba rögzíthető) ---------- */
 const PWKEY='proofboard.ui.propwin';
 /** Melyik oldalsávba van rögzítve: 'r' (alapból) vagy 'l'. */
-const dockSide=()=>uiPref().dockSide==='l'?'l':'r';
+const dockSide=()=>MOB.matches?'r':uiPref().dockSide==='l'?'l':'r';
+/** Rögzítve van-e (mobilon mindig: a Részletek lap Tulajdonságok fülén). */
+const isDocked=()=>PW.state().docked||MOB.matches;
 /** Oldalsáv füle: a bal sávon 'lib' | 'props', a jobbon 'design' | 'sim' | 'props'. */
 function sideTab(k,name){if(k==='l')ltab(name);else rtab(name,false);}
 const sideCur=k=>k==='l'?ui.ltab:ui.rtab;
@@ -1106,17 +1109,18 @@ const PW=mountFloatWin({win:$('#propWin'),head:$('#pwHead'),body:$('#pwBody'),ar
   save:st=>{try{localStorage.setItem(PWKEY,JSON.stringify(st));}catch(e){}},
   onDock:d=>{pwPlace(d);ui.pwHad=false;if(d)sideCollapse(dockSide(),false);renderLeft();},
   compact:()=>MOB.matches});
-pwPlace(PW.state().docked);
+pwPlace(isDocked());
+MOB.addEventListener('change',()=>{pwPlace(isDocked());renderLeft();});
 $('#pwCol').onclick=()=>{PW.collapse();pwUpdate();};$('#pwDock').onclick=()=>PW.dock(true);$('#pwUndock').onclick=()=>PW.dock(false);
 /* áttétel a másik oldalsávba (a bal sáv is fogadhatja) */
 $('#pwSwap').onclick=()=>{const was=dockSide(),to=was==='l'?'r':'l';const on=sideCur(was)==='props';uiPrefSet({dockSide:to});pwPlace(true);sideCollapse(to,false);
   if(on){if(to==='r'){ui.rtabProps=ui.rtab==='props'?ui.rtabProps:ui.rtab;}sideTab(to,'props');}};
 /** A lebegő ablak kijelöléskor (vagy félkész kapcsolatnál) látszik; mobilon csak a Beállítás gombra. */
-function pwUpdate(){const has=!!(ui.sel||ui.linkStart);if(!has)ui.pwMob=false;PW.show(has&&(!MOB.matches||!!ui.pwMob));
+function pwUpdate(){const has=!!(ui.sel||ui.linkStart);PW.show(has&&!MOB.matches);
   $('#pwTitle').textContent=ui.linkStart&&!ui.sel?'Kapcsolat':'Kijelölés';$('#dockSumm').textContent=$('#selSumm').textContent;
   $('#pwCol').setAttribute('aria-expanded',String(!PW.state().collapsed));
   // rögzítve: kijelöléskor a Tulajdonságok fülre vált, a kijelölés megszűntével vissza oda, ahonnan jött
-  if(PW.state().docked&&has!==!!ui.pwHad){const k=dockSide();
+  if(isDocked()&&has!==!!ui.pwHad){const k=dockSide();
     if(k==='r'){if(has&&ui.rtab!=='props'){ui.rtabProps=ui.rtab;rtab('props',false);}else if(!has&&ui.rtab==='props')rtab(ui.rtabProps||'design',false);}
     else{if(has&&ui.ltab!=='props')ltab('props');else if(!has&&ui.ltab==='props')ltab('lib');}}
   ui.pwHad=has;}
@@ -1124,7 +1128,7 @@ window.addEventListener('resize',()=>PW.place());
 /* Ctrl nyomva tartva (kis késleltetéssel, más billentyű nélkül): a gyorsbillentyűk láthatók.
    Az eszközsávon az ikon helyén a betű, máshol kis címke a gombon. (Az Alt a böngésző menüjét fókuszálná.) */
 {let t=0;const app=$('.app'),off=()=>{clearTimeout(t);t=0;app.classList.remove('keys');};
-  document.addEventListener('keydown',e=>{if(e.key==='Control'&&!e.repeat){clearTimeout(t);t=setTimeout(()=>app.classList.add('keys'),350);}else off();});
+  document.addEventListener('keydown',e=>{if(e.key==='Control'){if(!e.repeat){clearTimeout(t);t=setTimeout(()=>app.classList.add('keys'),350);}}else off();}); // a nyomva tartott Ctrl ismétlődő eseménye nem kapcsolja ki
   document.addEventListener('keyup',e=>{if(e.key==='Control')off();});
   document.addEventListener('pointerdown',off,true);document.addEventListener('wheel',off,{capture:true,passive:true});
   window.addEventListener('blur',off);}

@@ -37,6 +37,16 @@
       </div>
     </div>
     <span class="top-sp"></span>
+    <div class="grp vmodes desk-flex" role="group" aria-label="A panel megjelenítése" id="vModes">
+      <div class="grp seg" role="group" aria-label="Oldal">
+        <button class="btn" id="vComp" data-kbd="F" data-icon="comp" title="Alkatrészoldal (F)">Alkatrészoldal</button>
+        <button class="btn" id="vCu" data-kbd="F" data-icon="copper" title="Rézoldal, tükrözve (F)">Rézoldal</button>
+      </div>
+      <button class="btn" id="vRats" data-kbd="N" data-icon="rats" title="Kapcsolati vonalak: a kapcsolatok egyenes vonallal a két láb között (N)">Vonalak</button>
+      <button class="btn" id="vXray" data-kbd="X" data-icon="xray" title="Minden alkatrész röntgen nézetben: csak körvonal, lábak és lábnevek (X)">Röntgen</button>
+      <button class="btn" id="vStub" data-icon="stub" title="Rövid vezeték: a hosszú vezetékekből csak a két vég látszik szakadásjellel; rámutatva vagy kijelölve a teljes vonal">Rövid vezeték</button>
+      <button class="btn icon" id="vRot" data-kbd="T" data-icon="rotate" aria-label="Panel elforgatása 90°-kal" title="A panel nézetének elforgatása 90°-kal (T)"></button>
+    </div>
     <div class="grp seg desk-only" role="group" aria-label="Elrendezés" id="laySw">
       <button class="btn" data-layout="design" data-kbd="Alt+1" title="Tervezés: alkatrészek és bekötés (Alt+1)">Tervezés</button>
       <button class="btn" data-layout="prog" data-kbd="Alt+2" title="Program: a panel és a program egymás mellett (Alt+2)">Program</button>
@@ -58,6 +68,7 @@
   </header>
 
   <aside class="left">
+    <button class="sheet-close" data-sheet-close aria-label="Bezárás" data-icon="down"></button>
     <div class="rtabs ltabs" role="tablist" aria-label="Bal oldali panel">
       <button class="rtab" role="tab" data-ltab="props" aria-selected="false" aria-controls="lpProps" hidden>Tulajdonságok</button>
       <button class="rtab on" role="tab" data-ltab="lib" aria-selected="true" aria-controls="lpLib">Alkatrészek</button>
@@ -90,14 +101,6 @@
         <button class="btn on" data-work="board" aria-pressed="true" title="A panel (alkatrészek, bekötés)">Panel</button>
         <button class="btn" data-work="prog" aria-pressed="false" title="A program: blokkok, amelyek futás közben a GPIO-kat vezérlik">Program</button>
         <button class="btn desk-only" data-work="split" aria-pressed="false" title="A panel és a program egymás mellett">Mindkettő</button>
-      </div>
-      <div class="grp vmodes" role="group" aria-label="A panel megjelenítése" id="vModes">
-        <button class="btn" id="vComp" data-kbd="F" data-icon="comp" title="Alkatrészoldal (F)">Alkatrészoldal</button>
-        <button class="btn" id="vCu" data-kbd="F" data-icon="copper" title="Rézoldal, tükrözve (F)">Rézoldal</button>
-        <button class="btn" id="vRats" data-kbd="N" data-icon="rats" title="Kapcsolati vonalak mutatása (N)">Kapcsolati nézet</button>
-        <button class="btn" id="vXray" data-kbd="X" data-icon="xray" title="Minden alkatrész röntgen nézetben: csak körvonal, lábak és lábnevek (X)">Röntgen</button>
-        <button class="btn" id="vStub" data-icon="stub" title="Hosszú vezetékek rövidítve: csak a két vég látszik szakadásjellel; rámutatva vagy kijelölve a teljes vonal">Vezeték: rövid</button>
-        <button class="btn icon" id="vRot" data-kbd="T" data-icon="rotate" aria-label="Panel elforgatása 90°-kal" title="A panel nézetének elforgatása 90°-kal (T)"></button>
       </div>
     </div>
     <div class="carea" id="carea">
@@ -173,6 +176,7 @@
   <div class="gutter" id="gR" role="separator" aria-orientation="vertical" aria-label="Jobb oldalsáv szélessége" tabindex="0" title="Húzd a szélesség állításához, dupla kattintás: alapméret"></div>
 
   <aside class="right">
+    <button class="sheet-close" data-sheet-close aria-label="Bezárás" data-icon="down"></button>
     <div class="rtabs" role="tablist" aria-label="Jobb oldali panel">
       <button class="rtab" role="tab" data-rtab="props" aria-selected="false" aria-controls="rpProps" hidden>Tulajdonságok</button>
       <button class="rtab on" role="tab" data-rtab="design" aria-selected="true" aria-controls="rpDesign">Kapcsolatok</button>
@@ -240,7 +244,6 @@
     </div>
   </aside>
   <nav class="tabbar" id="tabbar" aria-label="Panelek">
-    <button class="tab on" data-sheet="" aria-pressed="true">Panel</button>
     <button class="tab" data-sheet="left" aria-pressed="false">Alkatrészek</button>
     <button class="tab" data-sheet="right" aria-pressed="false">Részletek <span class="badge" id="tabIss"></span></button>
   </nav>

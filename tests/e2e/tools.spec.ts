@@ -25,6 +25,9 @@ test('eszközsáv: ikon és név, súgóban a gyorsbillentyű; Ctrl nyomva tartv
   await page.keyboard.down('Control');
   await expect(sel.locator('kbd')).toBeVisible();
   expect(await page.evaluate(() => getComputedStyle(document.querySelector('#bSim')!, '::after').content)).toBe('"S"');
+  // a nyomva tartott Ctrl ismétlődő eseménye (Windows) nem tünteti el a címkéket
+  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Control', ctrlKey: true, repeat: true })));
+  await expect(sel.locator('kbd')).toBeVisible();
   await expect(sel.locator('kbd')).toHaveText('V');
   await expect(sel.locator('svg.ic')).toBeHidden();
   const box1 = (await sel.boundingBox())!;
@@ -100,6 +103,9 @@ test('összecsukott eszközsáv rámutatásra nyílik; vezetékszín a sáv föl
   await expect(page.locator('#tools [data-tool="select"]')).toBeHidden(); // választás után újra összecsukva
   const sw = (await page.locator('#wireColorRow').boundingBox())!, ts = (await page.locator('#toolstrip').boundingBox())!;
   expect(sw.y + sw.height).toBeLessThanOrEqual(ts.y); // a színek a sáv fölött
+  await expect(page.locator('#swatches .sw')).toHaveCount(7);
+  await expect(page.locator('#swatches .sw:visible')).toHaveCount(1); // összecsukva csak az aktuális szín
+  await expect(page.locator('#swatches .sw.on')).toBeVisible();
   expect(await page.evaluate(() => (document.querySelector('#cv') as HTMLElement).style.cursor)).toContain('url(');
   await page.mouse.move(10, 400);
   await page.keyboard.press('v');
@@ -140,4 +146,14 @@ test('programszerkesztő: húzáskor nem nyílik fel a blokk beállítása, csak
   await expect(page.locator('.pg-props')).toBeHidden();
   await page.locator('.pg-node[data-node="n1"] .pg-head').click();
   await expect(page.locator('.pg-props')).toBeVisible();
+});
+
+test('nézetmódok a fejlécben: Alkatrészoldal és Rézoldal egy csoportban, egyszerre csak az egyik', async ({ page }) => {
+  await expect(page.locator('.top #vModes')).toBeVisible();
+  await expect(page.locator('#vComp')).toHaveClass(/on/);
+  await page.click('#vCu');
+  await expect(page.locator('#vCu')).toHaveClass(/on/);
+  await expect(page.locator('#vComp')).not.toHaveClass(/on/);
+  const a = (await page.locator('#vComp').boundingBox())!, b = (await page.locator('#vCu').boundingBox())!;
+  expect(Math.abs(a.x + a.width - b.x)).toBeLessThan(2); // összefüggő gombsor
 });
