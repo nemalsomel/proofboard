@@ -218,7 +218,8 @@ input:disabled::placeholder{color:var(--muted)}
 .rtab{flex:1;font:600 13px var(--display);padding:8px 6px;border:0;background:var(--panel2);color:var(--muted);cursor:pointer;display:inline-flex;gap:6px;align-items:center;justify-content:center;white-space:nowrap}
 .rtab+.rtab{border-left:1px solid var(--line)}
 .rtab.on{background:var(--panel);color:var(--fg);box-shadow:inset 0 -3px 0 var(--accent)}
-.rtab .chip{font-size:10px;padding:0 6px}
+.rtab .chip{font-size:10px;padding:0 5px}
+.right .rtab{padding:8px 4px;gap:4px}
 .rpane{display:flex;flex-direction:column;gap:10px}
 .rpane[hidden]{display:none}
 .acc{border:1px solid var(--line);border-radius:8px;background:var(--panel)}
@@ -265,3 +266,23 @@ details.sig .row select,details.sig .row input{flex:1;min-width:0;}
 .ex-item{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;cursor:pointer;font:inherit;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
 .ex-item:hover,.ex-item:focus-visible{border-color:var(--accent);}
 .ex-item b{font-size:13px;}
+
+/* összecsukható oldalsávok */
+.rail{display:none;flex-direction:column;align-items:center;gap:8px}
+.side-tog{flex:0 0 auto;width:26px;padding:0;border:0;border-left:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer;font:600 15px var(--display)}
+.right .side-tog{border-left:0;border-right:1px solid var(--line)}
+.side-tog:hover,.side-tog:focus-visible{color:var(--fg)}
+.rail-btn{position:relative;width:34px;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--fg);cursor:pointer;font:600 15px var(--display);display:flex;align-items:center;justify-content:center;padding:0}
+.rail-btn:hover,.rail-btn:focus-visible{border-color:var(--accent)}
+.left .rail-btn.on{box-shadow:inset 3px 0 0 var(--accent)}
+.right .rail-btn.on{box-shadow:inset -3px 0 0 var(--accent)}
+.rail-btn .badge{position:absolute;top:-7px;right:-9px;display:inline-block;min-width:16px;padding:0 4px;border-radius:8px;background:var(--warn);color:#1b1206;font:600 10px/16px var(--mono)}
+.rail-btn .badge:empty{display:none}
+.rail-btn .badge.err{background:var(--err);color:#fff}
+@media (min-width:1001px){
+  .app.colL .left>*:not(.rail),.app.colR .right>*:not(.rail){display:none}
+  .app.colL .left,.app.colR .right{padding:12px 6px;overflow:visible}
+  .app.colL .left>.rail,.app.colR .right>.rail{display:flex}
+  .app.colL #gL,.app.colR #gR{visibility:hidden;pointer-events:none}
+}
+@media (max-width:1000px){.side-tog{display:none}}

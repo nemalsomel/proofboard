@@ -101,3 +101,29 @@ test('útvonalkereső: konkrét GPIO-lábra mutató kapcsolat célját más szab
   expect(r.iss).toEqual([]);
   expect(r.g).not.toContain('GP26');
 });
+
+test('buszfunkciók: az I²C-kijelző egy buszra és megfelelő lábakra kerül; rossz lábon és PWM-szelet ütközésnél figyelmeztet', async ({ page }) => {
+  const OLED = part('p2', 'ssd1306', 'OLED1', 24, 12);
+  const base = (gpio: object, pwm: object, parts: object[], links: Array<[string, string]>) => `pcb.load({ board: { rows: 48, cols: 39, sec: 3 }, customParts: {}, bridges: [], wires: [], gpio: ${JSON.stringify(gpio)}, pwm: ${JSON.stringify(pwm)}, seq: 100, auto: { bridges: [], wires: [] },
+      parts: [${JSON.stringify(part('p1', 'pico', 'PICO', 12, 30, { span: 6 }, 2))}, ...${JSON.stringify(parts)}],
+      links: ${JSON.stringify(links)}.map(([a, b], i) => ({ id: 'l' + (10 + i), a, b, gpio: null })), settings: { usb: true, btnMode: 'hold', autoRoute: true } }); pcb.route();`;
+  const r = await pcb<any>(page, base({}, {}, [OLED], [['p2.GND', 'GND'], ['p2.VCC', 'p1.36'], ['p2.SCL', 'GPIO'], ['p2.SDA', 'GPIO']]) + `
+    const ls = pcb.links(), o = { ok: ls.every(l => l.ok), scl: ls.find(l => l.a === 'p2.SCL').gpio, sda: ls.find(l => l.a === 'p2.SDA').gpio, iss: pcb.issues().map(i => i.msg) };
+    ${base({}, {}, [OLED], [['p2.GND', 'GND'], ['p2.VCC', 'p1.36'], ['p2.SCL', 'p1.4'], ['p2.SDA', 'p1.9']])} o.bad = pcb.issues().map(i => i.msg);
+    ${base({ 'p1.1': 'pwm', 'p1.2': 'pwm' }, { 'p1.1': { duty: 50, freq: 1000 }, 'p1.2': { duty: 50, freq: 50 } }, [part('p3', 'res', 'R1', 24, 4, { ohm: 1000, dr: 0, dc: 4 }), part('p4', 'res', 'R2', 30, 4, { ohm: 1000, dr: 0, dc: 4 })], [['p3.1', 'p1.1'], ['p3.2', 'GND'], ['p4.1', 'p1.2'], ['p4.2', 'GND']])} o.pwm = pcb.issues().map(i => i.msg);
+    return o;`);
+  expect(r.ok).toBe(true);
+  expect(r.iss).toEqual([]);
+  const n = (g: string) => +g.replace(/\D/g, '');
+  expect(n(r.scl) & 1).toBe(1); // SCL páratlan GP
+  expect(n(r.sda) & 1).toBe(0);
+  expect((n(r.scl) >> 1) & 1).toBe((n(r.sda) >> 1) & 1); // azonos I2C-busz
+  expect(r.bad).toEqual([expect.stringMatching(/^OLED1\.SCL \(I2C SCL\) → GP2: ez a láb nem I2C SCL/)]);
+  expect(r.pwm).toEqual(['GP0 és GP1 ugyanazon a PWM-szeleten (PWM0) van, csak azonos frekvenciával működhetnek (most: 1000 Hz, 50 Hz).']);
+});
+
+test('kábel a modul csatlakozójába: a léptetőmotor kábelei a ULN2003 kimeneti lábain végződnek', async ({ page }) => {
+  const r = await pcb<any>(page, `pcb.example('stepper'); const d = pcb.get(), u = pcb.pins('U1'), at = id => { const q = u.find(x => x.id === id); return q.r + ':' + q.c; };
+    const ends = d.auto.wires.map(w => w.b.join(':')); return { ends, want: ['A', 'B', 'C', 'D', 'COM'].map(at) };`);
+  for (const w of r.want) expect(r.ends).toContain(w);
+});

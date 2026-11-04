@@ -110,3 +110,15 @@ describe('kondenzátor és NPN', () => {
     }
   });
 });
+
+describe('RP2040 lábfunkciók', () => {
+  it('az adatlap szerinti I2C/SPI/UART/PWM kiosztás', async () => {
+    const { picoFns } = await import('../../src/parts/builtin');
+    expect(picoFns(0)).toEqual(['i2c0.sda', 'spi0.miso', 'uart0.tx', 'pwm0.a']);
+    expect(picoFns(5)).toEqual(['i2c0.scl', 'spi0.cs', 'uart1.rx', 'pwm2.b']);
+    expect(picoFns(11)).toEqual(['i2c1.scl', 'spi1.mosi', 'pwm5.b']);
+    expect(picoFns(18)).toEqual(['i2c1.sda', 'spi0.sck', 'pwm1.a']);
+    expect(picoFns(26)).toEqual(['i2c1.sda', 'spi1.sck', 'pwm5.a']);
+    expect(picoFns(28)).toEqual(['i2c0.sda', 'spi1.miso', 'uart0.tx', 'pwm6.a']);
+  });
+});

@@ -21,7 +21,17 @@ export const LEDC: Record<string, { vf: number; c: string; l: string }> = {red:{
 /** Analóg mérésre alkalmas GPIO-k (ADC0–ADC2). */
 export const PICO_ADC = new Set(['GP26', 'GP27', 'GP28']);
 const PICO_TABLE: Record<string, readonly [string, string] | readonly [string, string, readonly string[]]> = {};
-for(const k in PICO_NAMES){const n=PICO_NAMES[k];PICO_TABLE[k]=PICO_ADC.has(n)?[n,picoRole(n),['adc']]:[n,picoRole(n)];}
+/**
+ * RP2040 lábfunkciók GPn szerint (adatlap, 1.4.3): I2C (bus = (n>>1)&1), SPI (GP0–7 és 16–23: SPI0, egyébként SPI1;
+ * n&3: 0 MISO, 1 CS, 2 SCK, 3 MOSI), UART (bus = ((n>>2)^(n>>3))&1; n&3: 0 TX, 1 RX), PWM-szelet (n>>1)&7, csatorna A/B.
+ */
+export function picoFns(n: number): string[] {
+  const o = [`i2c${(n >> 1) & 1}.${n & 1 ? 'scl' : 'sda'}`, `spi${(n >> 3) & 1}.${['miso', 'cs', 'sck', 'mosi'][n & 3]}`];
+  if ((n & 3) < 2) o.push(`uart${((n >> 2) ^ (n >> 3)) & 1}.${n & 1 ? 'rx' : 'tx'}`);
+  o.push(`pwm${(n >> 1) & 7}.${n & 1 ? 'b' : 'a'}`);
+  return o;
+}
+for(const k in PICO_NAMES){const n=PICO_NAMES[k],gpn=/^GP(\d+)$/.exec(n),caps=[...(PICO_ADC.has(n)?['adc']:[]),...(gpn?picoFns(+gpn[1]):[])];PICO_TABLE[k]=caps.length?[n,picoRole(n),caps]:[n,picoRole(n)];}
 const TO92: Array<[number, number]> =Array.from({length:13},(_,k)=>{const a=Math.PI*k/12;return[+(0.35-1.25*Math.sin(a)).toFixed(3),+(1+1.45*Math.cos(a)).toFixed(3)];});
 /**
  * DIP-tok (felülnézet, a bevágás balra): az 1. láb lent balra, a számozás az óramutatóval ellentétesen;
@@ -79,14 +89,14 @@ const mcuPins = (top: McuPin[], bottom: McuPin[]) => [
   ...bottom.map(([id, name, role, caps], i) => ({ id, name, role, lr: '{span}', lc: i, ...(caps && caps.length ? { caps: [...caps] } : {}) })),
 ];
 /** DOIT ESP32 DevKit V1, 30 láb (felülről nézve, antenna jobbra): felső sor = a lap bal oldali lábsora, alsó sor = jobb oldali. */
-const ESP32_TOP: McuPin[] = [['VIN', 'VIN', 'pwr'], ['GND', 'GND', 'gnd'], gp(13, 'adc2'), gp(12, 'adc2', 'strap'), gp(14, 'adc2'), gp(27, 'adc2'), gp(26, 'adc2'), gp(25, 'adc2'), gp(33, 'adc'), gp(32, 'adc'),
+const ESP32_TOP: McuPin[] = [['VIN', 'VIN', 'pwr'], ['GND', 'GND', 'gnd'], gp(13, 'adc2', 'spi2.mosi'), gp(12, 'adc2', 'strap', 'spi2.miso'), gp(14, 'adc2', 'spi2.sck'), gp(27, 'adc2'), gp(26, 'adc2', 'dac'), gp(25, 'adc2', 'dac'), gp(33, 'adc'), gp(32, 'adc'),
   gp(35, 'adc', 'in', 'nopull'), gp(34, 'adc', 'in', 'nopull'), gp(39, 'adc', 'in', 'nopull'), gp(36, 'adc', 'in', 'nopull'), ['EN', 'EN', 'misc']];
-const ESP32_BOTTOM: McuPin[] = [['3V3', '3V3', 'p33'], ['GND2', 'GND', 'gnd'], gp(15, 'adc2', 'strap'), gp(2, 'adc2', 'strap', 'led'), gp(4, 'adc2'), gp(16), gp(17), gp(5, 'strap'), gp(18), gp(19), gp(21), gp(3, 'uart0'), gp(1, 'uart0'), gp(22), gp(23)];
+const ESP32_BOTTOM: McuPin[] = [['3V3', '3V3', 'p33'], ['GND2', 'GND', 'gnd'], gp(15, 'adc2', 'strap', 'spi2.cs'), gp(2, 'adc2', 'strap', 'led'), gp(4, 'adc2'), gp(16, 'uart2.rx'), gp(17, 'uart2.tx'), gp(5, 'strap', 'spi3.cs'), gp(18, 'spi3.sck'), gp(19, 'spi3.miso'), gp(21, 'i2c0.sda'), gp(3, 'uart0', 'uart0.rx'), gp(1, 'uart0', 'uart0.tx'), gp(22, 'i2c0.scl'), gp(23, 'spi3.mosi')];
 const ESP32_RENAME: Record<string, string> = { GPIO36: 'VP', GPIO39: 'VN', GPIO1: 'TX0', GPIO3: 'RX0', GPIO16: 'RX2', GPIO17: 'TX2' };
 for (const [, n] of [...ESP32_TOP, ...ESP32_BOTTOM]) if (/^GPIO\d+$/.test(n) && !(n in ESP32_RENAME)) ESP32_RENAME[n] = 'D' + n.slice(4);
 /** ESP32-C3 SuperMini (alkatrészoldal felül): felső sor 5V…GPIO0, alsó sor GPIO5…GPIO21. */
-const C3_TOP: McuPin[] = [['5V', '5V', 'pwr'], ['GND', 'GND', 'gnd'], ['3V3', '3V3', 'p33'], gp(4, 'adc'), gp(3, 'adc'), gp(2, 'adc', 'strap'), gp(1, 'adc'), gp(0, 'adc')];
-const C3_BOTTOM: McuPin[] = [gp(5, 'adc2'), gp(6), gp(7), gp(8, 'strap', 'led'), gp(9, 'strap'), gp(10), gp(20, 'uart0'), gp(21, 'uart0')];
+const C3_TOP: McuPin[] = [['5V', '5V', 'pwr'], ['GND', 'GND', 'gnd'], ['3V3', '3V3', 'p33'], gp(4, 'adc', 'spi2.sck'), gp(3, 'adc'), gp(2, 'adc', 'strap'), gp(1, 'adc'), gp(0, 'adc')];
+const C3_BOTTOM: McuPin[] = [gp(5, 'adc2', 'spi2.miso'), gp(6, 'spi2.mosi'), gp(7, 'spi2.cs'), gp(8, 'strap', 'led', 'i2c0.sda'), gp(9, 'strap', 'i2c0.scl'), gp(10), gp(20, 'uart0', 'uart0.rx'), gp(21, 'uart0', 'uart0.tx')];
 const C3_RENAME: Record<string, string> = {};
 for (const [, n] of [...C3_TOP, ...C3_BOTTOM]) if (/^GPIO\d+$/.test(n)) C3_RENAME[n] = n.slice(4);
 const SPAN_HELP = 'A két lábsor távolsága lyukban (0 → {span}). Vonalzóval mérd le a sajátodat: a lapok gyártónként eltérhetnek.';
@@ -134,7 +144,7 @@ export const PARTS: Record<string, PartDef> = {
         GPIO5:'indítási (strapping) láb: bekapcsoláskor magasnak kell lennie (belső felhúzás). Ne húzd le.',
         GPIO1:'TX0: a soros port (USB-soros átalakító) használja, feltöltéskor és soros kiíráskor zavarhat. Ha lehet, válassz másik GPIO-t.',
         GPIO3:'RX0: a soros port (USB-soros átalakító) használja, feltöltéskor és soros kiíráskor zavarhat. Ha lehet, válassz másik GPIO-t.'}},
-    model:[{el:'mcu',gnd:'GND',vsys:'VIN',v33:'3V3',vreg:4.2,vmax:12,igpio:0.02}]},
+    model:[{el:'mcu',gnd:'GND',vsys:'VIN',v33:'3V3',vreg:4.2,vmax:12,igpio:0.02,mux:'matrix'}]},
   esp32c3:{name:'ESP32-C3 SuperMini',fp:'2×8 láb, sortáv 6',prefix:'ESP',cat:'Vezérlő',
     params:[{key:'span',label:'Sortáv (osztás)',type:'int',default:6,min:3,max:16,step:1,geo:true,help:'Általában 15,24 mm = 6 osztás (a lap 18 mm széles). '+SPAN_HELP}],
     pins:mcuPins(C3_TOP,C3_BOTTOM),
@@ -155,7 +165,7 @@ export const PARTS: Record<string, PartDef> = {
         GPIO9:'a lap BOOT gombja is ezen van (lenyomva a földre húz), és indítási láb: ha bekapcsoláskor alacsony, a lap letöltő módba kerül. Gombnak jó, ha induláskor nincs lenyomva.',
         GPIO20:'RX (UART0): ha a soros kiírás nem a natív USB-n megy, a soros port használja.',
         GPIO21:'TX (UART0): ha a soros kiírás nem a natív USB-n megy, a soros port használja.'}},
-    model:[{el:'mcu',gnd:'GND',vbus:'5V',vsys:'5V',v33:'3V3',vreg:3.5,vmax:6,igpio:0.02}]},
+    model:[{el:'mcu',gnd:'GND',vbus:'5V',vsys:'5V',v33:'3V3',vreg:3.5,vmax:6,igpio:0.02,mux:'matrix'}]},
   button:{name:'Nyomógomb 12 mm',fp:'A 0:0, 0:5 · B 2:0, 2:5',prefix:'S',cat:'Bemenet',
     pins:[{id:'A1',lr:0,lc:0,role:'A'},{id:'A2',lr:0,lc:5,role:'A'},{id:'B1',lr:2,lc:0,role:'B'},{id:'B2',lr:2,lc:5,role:'B'}],
     groups:[['A1','A2'],['B1','B2']],
@@ -345,7 +355,7 @@ export const PARTS: Record<string, PartDef> = {
            {el:'diode',a:'IN+',k:'B+',vf:0.8,ron:1},
            {el:'resistor',a:'B-',b:'OUT-',ohm:0.05}]},
   nokia5110:{name:'Nokia 5110 kijelző',fp:'8 láb egy sorban · VCC 2,7–3,3 V',prefix:'LCD',cat:'Modul',
-    pins:['RST','CE','DC','DIN','CLK','VCC','BL','GND'].map((n,i)=>(n==='VCC'?{id:n,lr:0,lc:i,role:'vin',vmin:2.7,vmax:3.6}:{id:n,lr:0,lc:i,role:n==='GND'?'gnd':'sig'})),
+    pins:['RST','CE','DC','DIN','CLK','VCC','BL','GND'].map((n,i)=>(n==='VCC'?{id:n,lr:0,lc:i,role:'vin',vmin:2.7,vmax:3.6}:{id:n,lr:0,lc:i,role:n==='GND'?'gnd':'sig',...(n==='DIN'?{fn:'spi.mosi'}:n==='CLK'?{fn:'spi.sck'}:{})})),
     bounds:{r:[-1.3,15.9],c:[-4.6,11.6]},
     graphics:[
       {shape:'rect',layer:'body',r:[-1.3,15.9],c:[-4.6,11.6],fill:'#b8282d',stroke:'#7d1a1e',width:1.2,xray:{stroke:'#b8282d'}},
@@ -357,6 +367,18 @@ export const PARTS: Record<string, PartDef> = {
     pinLabels:{mode:'name',off:-0.85,colors:{vin:'#ffd6e0',gnd:'#f1f3f5',sig:'#f8f9fa'}},
     model:[{el:'resistor',a:'VCC',b:'GND',ohm:10000},
            {el:'diode',a:'BL',k:'GND',vf:2.6,ron:60,light:true}]},
+  ssd1306:{name:'OLED kijelző 0,96" (SSD1306, I²C)',fp:'GND · VCC · SCL · SDA egy sorban',prefix:'OLED',cat:'Modul',
+    pins:[{id:'GND',lr:0,lc:0,role:'gnd'},{id:'VCC',lr:0,lc:1,role:'vin',vmin:3,vmax:5.5},{id:'SCL',lr:0,lc:2,role:'sig',fn:'i2c.scl'},{id:'SDA',lr:0,lc:3,role:'sig',fn:'i2c.sda'}],
+    bounds:{r:[-0.8,10.4],c:[-3.4,6.4]},
+    graphics:[
+      {shape:'rect',layer:'body',r:[-0.8,10.4],c:[-3.4,6.4],fill:'#1f4f8a',stroke:'#123155',width:1.2,xray:{stroke:'#1f4f8a'}},
+      {shape:'rect',layer:'detail',r:[1.4,8.4],c:[-3.0,6.0],fill:'#111418',stroke:'#3d4450'},
+      {shape:'rect',layer:'detail',r:[2.2,6.9],c:[-2.6,5.6],fill:'#0b0d10',lit:{fill:'#123049'},xray:{fill:null,stroke:'#3d4450',dash:true}},
+      {shape:'text',layer:'detail',at:[4.6,1.5],text:'128×64',size:0.6,min:7,color:'#4dabf7'},
+      {shape:'text',layer:'label',at:[9.5,1.5],text:'{label}',size:0.45,color:'#d0ebff',xray:{color:'#1f4f8a'}}],
+    pinLabels:{mode:'name',off:-0.85,colors:{vin:'#ffd6e0',gnd:'#f1f3f5',sig:'#f8f9fa'}},
+    meta:{help:'128×64 pontos OLED kijelző I²C-buszon (alapcím 0x3C). A modulon felhúzó ellenállások vannak az SCL- és SDA-vonalon. Táp 3,3–5 V; a kijelző tartalmát a szimuláció nem rajzolja ki.'},
+    model:[{el:'resistor',a:'VCC',b:'GND',ohm:330}]},
   joystick:{name:'Joystick (KY-023)',fp:'GND · +5V · VRx · VRy · SW egy sorban',prefix:'JS',cat:'Bemenet',
     params:[{key:'x',label:'X állás',type:'number',unit:'%',default:0,min:-100,max:100,step:5,help:'−100 % bal, +100 % jobb. Szimuláció közben csúszkával is állítható.'},
             {key:'y',label:'Y állás',type:'number',unit:'%',default:0,min:-100,max:100,step:5,help:'−100 % le, +100 % fel.'}],

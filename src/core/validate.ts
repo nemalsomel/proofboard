@@ -30,6 +30,9 @@ const MODEL_NUMS: Record<ModelEl['el'], string[]> = {
   resistor: ['ohm'], diode: ['vf', 'ron', 'imax'], source: ['v', 'rint'], nmos: ['vth', 'ron', 'imax'], capacitor: ['f', 'vmax'], npn: ['beta', 'vbe', 'vcesat', 'imax'], motor: ['ohm', 'vnom'], servo: ['ohm', 'pmin', 'pmax'], logic: ['vih', 'vil', 'rout', 'imax'], stepper: ['ohm', 'steps', 'rotor'], mcu: ['vreg', 'vmax', 'igpio'],
 };
 
+/** Perifériaoldali buszfunkciók (PinSpec.fn). */
+export const BUS_FNS = ['i2c.sda', 'i2c.scl', 'spi.mosi', 'spi.miso', 'spi.sck', 'spi.cs', 'uart.rx', 'uart.tx'];
+
 const isObj = (x: unknown): x is Record<string, any> => !!x && typeof x === 'object' && !Array.isArray(x);
 
 /**
@@ -85,6 +88,7 @@ export function validatePartDef(def: unknown): Problem[] {
     pos.set(k, q.id);
     for (const f of ['vmin', 'vmax'] as const) if (q[f] != null && !isFinite(q[f]!)) err(`pins[${i}].${f}`, `${q.id}: ${f} nem szám.`);
     if (q.vmin != null && q.vmax != null && q.vmin >= q.vmax) err(`pins[${i}]`, `${q.id}: a minimális feszültség nem lehet nagyobb a maximálisnál.`);
+    if (q.fn != null && !BUS_FNS.includes(q.fn)) warn(`pins[${i}].fn`, `${q.id}: ismeretlen buszfunkció: ${q.fn} (lehet: ${BUS_FNS.join(', ')})`);
     if ((q.vmin != null || q.vmax != null) && q.role !== 'vin') warn(`pins[${i}]`, `${q.id}: feszültségtartomány csak tápbemenetnél (vin) számít.`);
   });
   if (pins.some(q => q.role === 'vin') && !pins.some(q => q.role === 'gnd'))

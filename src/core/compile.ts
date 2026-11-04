@@ -51,6 +51,7 @@ export function compilePart(type: string, def: PartDef): CompiledPart {
     if (/^\d+$/.test(id)) o.num = +id;
     const caps = sp.caps || (t && t[2]);
     if (caps && caps.length) o.caps = [...caps];
+    if (sp.fn) o.fn = sp.fn;
     if (sp.vmin != null) o.vmin = num(sp.vmin, env);
     if (sp.vmax != null) o.vmax = num(sp.vmax, env);
     return o;

@@ -43,6 +43,17 @@ const SPECIAL_CAPS=[['strap','indítási (strapping) láb: bekapcsoláskor szám
   ['uart0','a soros port (USB-soros átalakító) használja: feltöltéskor és soros kiíráskor zavarhat. Ha lehet, válassz másik GPIO-t.'],
   ['usb','a beépített USB használja. Ha lehet, válassz másik GPIO-t.'],
   ['led','a lap beépített LED-je is ezen a lábon van.']];
+/* Buszfunkciók: a periféria lába (fn: 'spi.mosi'…) a vezérlő megfelelő képességű GPIO-jára (caps: 'spi0.mosi'…) kerüljön.
+   A periféria UART RX-e a vezérlő TX-ére megy, és fordítva. 'matrix' vezérlőn (ESP32) bármely láb kiosztható, a képesség az alapértelmezés. */
+const FN_WANT={'uart.rx':'uart.tx','uart.tx':'uart.rx'};
+const fnWant=fn=>FN_WANT[fn]||fn;
+const fnCaps=(q,fn)=>{const [bus,sig]=fnWant(fn).split('.');const re=new RegExp('^'+bus+'\\d+\\.'+sig+'$');return (q&&q.caps||[]).filter(c=>re.test(c));};
+const mcuMux=p=>((DEFS[p.type].def.model||[]).find(e=>e.el==='mcu')||{}).mux||'fixed';
+const capLabel=c=>{const m=/^(i2c|spi|uart|pwm)(\d*)\.([a-z]+)$/.exec(c);return m?`${m[1].toUpperCase()}${m[2]} ${m[3].toUpperCase()}`:c.toUpperCase();};
+const fnName=fn=>capLabel(fn);
+/** A vezérlőláb funkciói olvasható formában (busz, PWM, DAC, ADC). */
+const pinFns=q=>[...(hasCap(q,'adc')?['ADC']:hasCap(q,'adc2')?['ADC2']:[]),...(q.caps||[]).filter(c=>c.includes('.')||c==='dac').map(capLabel),...(hasCap(q,'in')?['csak bemenet']:[])];
+const fnPenalty=(fn,q)=>!fn||!q||fnCaps(q,fn).length?0:mcuMux(q.part)==='matrix'?10:16;
 const gpioPenalty=q=>q&&SPECIAL_CAPS.some(x=>hasCap(q,x[0]))?10:0;
 /** Szabad GPIO-kapcsolatra alkalmas láb: analóghoz ADC1 kell, digitálishoz nem lehet csak bemeneti. */
 const gpioFits=(q,an)=>!!q&&isMcu(q.part)&&q.role==='gpio'&&(an?hasCap(q,'adc'):!hasCap(q,'in'));
@@ -442,6 +453,18 @@ function checkAll(){
   for(const p of D.parts){if(!isMcu(p))continue;const notes=(DEFS[p.type].def.meta||{}).pinNotes||{};
     for(const q of A.byPart.get(p.id).pins){if(q.role!=='gpio'||!q.on)continue;const used=(A.netPins.get(q.net)||[]).length>1||(A.netSecs.get(q.net)||0)>1;if(!used)continue;
       const c=SPECIAL_CAPS.find(x=>hasCap(q,x[0]));if(c)add('warn',`${p.label}.${q.name}: ${notes[q.name]||c[1]}`,[[q.r,q.c]]);}}
+  // buszfunkciók (I²C, SPI, UART): a periféria lába a vezérlő megfelelő lábán, egy perifériához egy busz
+  for(const p of D.parts){if(isMcu(p))continue;const used=new Map();
+    for(const q of A.byPart.get(p.id).pins){if(!q.fn)continue;const g=(A.netPins.get(q.net)||[]).find(x=>isMcu(x.part)&&x.role==='gpio');if(!g)continue;
+      const m=fnCaps(g,q.fn),bus=q.fn.split('.')[0],want=fnName(fnWant(q.fn));
+      if(!m.length){if(mcuMux(g.part)!=='matrix'){const ok=[...new Set(gpins(g.part).filter(x=>x.role==='gpio'&&fnCaps(x,q.fn).length).map(x=>x.name))];
+          add('warn',`${p.label}.${q.name} (${fnName(q.fn)}) → ${g.name}: ez a láb nem ${want}, így a hardveres ${bus.toUpperCase()} nem használható rajta, csak szoftveres. Alkalmas lábak: ${ok.slice(0,8).join(', ')}`,[[g.r,g.c]]);}continue;}
+      if(!used.has(bus))used.set(bus,[]);used.get(bus).push({q,g,b:new Set(m.map(c=>c.split('.')[0]))});}
+    for(const [bus,list] of used){if(list.length<2||mcuMux(list[0].g.part)==='matrix')continue;let inter=null;for(const x of list)inter=inter?new Set([...inter].filter(b=>x.b.has(b))):new Set(x.b);
+      if(!inter.size)add('warn',`${p.label}: az ${bus.toUpperCase()}-lábai különböző buszokra kerültek (${list.map(x=>`${x.q.name} → ${x.g.name}: ${[...x.b].map(b=>b.toUpperCase()).join('/')}`).join(', ')}). Egy perifériát egy buszra köss.`,list.map(x=>[x.g.r,x.g.c]));}}
+  // PWM-szeletek (Pico): egy szelet két csatornája csak azonos frekvencián mehet
+  {const sl=new Map();for(const p of D.parts){if(!isMcu(p))continue;for(const q of A.byPart.get(p.id).pins){if(q.role!=='gpio'||gpioMode(p,q.id,q,A)!=='pwm')continue;const c=(q.caps||[]).find(x=>/^pwm\d+\.[ab]$/.test(x));if(!c)continue;const k=p.id+':'+c.split('.')[0];if(!sl.has(k))sl.set(k,[]);sl.get(k).push({q,f:pwmCfg(p.id+'.'+q.id).freq,c});}}
+    for(const [,list] of sl){if(list.length<2)continue;const fs=[...new Set(list.map(x=>+x.f))];if(fs.length>1)add('warn',`${list.map(x=>x.q.name).join(' és ')} ugyanazon a PWM-szeleten (${list[0].c.split('.')[0].toUpperCase()}) van, csak azonos frekvenciával működhetnek (most: ${list.map(x=>x.f+' Hz').join(', ')}).`,list.map(x=>[x.q.r,x.q.c]));}}
   // analóg jelek: csak ADC-képes GPIO-ra
   for(const [,qs] of A.netPins){const an=qs.filter(q=>q.role==='adc');if(!an.length)continue;
     for(const g of qs.filter(q=>q.role==='gpio')){const at=[[g.r,g.c]],src=an.map(pinLabel).join(', ');
@@ -911,6 +934,7 @@ const uiPrefSet=o=>{try{localStorage.setItem(UIKEY,JSON.stringify({...uiPref(),.
 function rtab(name,remember=true){ui.rtab=name;
   document.querySelectorAll('[data-rtab]').forEach(b=>{const on=b.dataset.rtab===name;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
   document.querySelectorAll('[data-rpane]').forEach(p=>{p.hidden=p.dataset.rpane!==name;});
+  document.querySelectorAll('[data-rail-rtab]').forEach(b=>b.classList.toggle('on',b.dataset.railRtab===name));
   if(remember&&name!=='sim')uiPrefSet({tab:name});}
 document.querySelector('.right .rtabs').addEventListener('click',e=>{const b=e.target.closest('[data-rtab]');if(b)rtab(b.dataset.rtab);});
 document.querySelector('.right .rtabs').addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;const ts=[...document.querySelectorAll('[data-rtab]')],i=ts.findIndex(b=>b.classList.contains('on')),n=ts[(i+(e.key==='ArrowRight'?1:ts.length-1))%ts.length];rtab(n.dataset.rtab);n.focus();e.preventDefault();});
@@ -922,6 +946,7 @@ $('#vStub').onclick=()=>{ui.stub=!ui.stub;$('#vStub').classList.toggle('on',ui.s
 function ltab(name,remember=true){ui.ltab=name;
   document.querySelectorAll('[data-ltab]').forEach(b=>{const on=b.dataset.ltab===name;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
   document.querySelectorAll('[data-lpane]').forEach(p=>{p.hidden=p.dataset.lpane!==name;});
+  document.querySelectorAll('[data-rail-ltab]').forEach(b=>b.classList.toggle('on',b.dataset.railLtab===name));
   if(remember)uiPrefSet({ltab:name});}
 document.querySelector('.ltabs').addEventListener('click',e=>{const b=e.target.closest('[data-ltab]');if(b)ltab(b.dataset.ltab);});
 ltab(uiPref().ltab==='lib'?'lib':'edit',false);
@@ -1068,7 +1093,7 @@ $('#swatches').addEventListener('click',e=>{const b=e.target.closest('[data-col]
 function renderRight(){const fk=focusKey();renderRight0();restoreFocus(fk);}
 function renderRight0(){
   const ne=ISSUES.filter(i=>i.sev==='err').length,nw=ISSUES.length-ne;
-  {const t=$('#tabIss');t.textContent=ISSUES.length?String(ISSUES.length):'';t.classList.toggle('err',ne>0);}
+  for(const t of [$('#tabIss'),$('#railIss')]){t.textContent=ISSUES.length?String(ISSUES.length):'';t.classList.toggle('err',ne>0);}
   $('#issueSum').innerHTML=ISSUES.length?`${ne?`<span class="chip c-err">${ne} hiba</span> `:''}${nw?`<span class="chip c-warn">${nw} figyelmeztetés</span>`:''}`:'<span class="chip c-ok">Rendben</span>';
   $('#issues').innerHTML=ISSUES.length?ISSUES.map((x,i)=>`<li data-i="${i}" class="${x.sev==='err'?'c-err':'c-warn'}"><span class="dot"></span><span style="color:var(--fg)">${esc(x.msg)}</span></li>`).join(''):'<li class="muted" style="cursor:default">Nincs zárlat vagy bekötési hiba.</li>';
   $('#usb').checked=!!D.settings.usb;
@@ -1091,7 +1116,7 @@ function renderRight0(){
   const used=SIM.gpios.filter(g=>{const net=A.pins.find(q=>q.part===g.q.part&&q.id===g.q.id).net;return (A0.netPins.get(A0.pins.find(q=>q.part===g.q.part&&q.id===g.q.id).net)||[]).length>1||(A0.netSecs.get(A0.pins.find(q=>q.part===g.q.part&&q.id===g.q.id).net)||0)>1;});
   if(used.length){h+=`<table class="tbl" style="margin-top:10px"><thead><tr><th>GPIO</th><th>Mód</th><th>U</th><th>Szint</th></tr></thead><tbody>`;
     for(const g of used){const key=g.p.id+'.'+g.q.id,l=logic(g);
-      h+=`<tr><td>${g.q.name}</td><td><select data-gpio="${key}" aria-label="${g.q.name} mód">${GPIO_MODES.filter(x=>gpioModeOk(g.q,x[0])).map(([v,t])=>`<option value="${v}" ${g.mode===v?'selected':''}>${t}</option>`).join('')}</select></td><td>${g.powered&&!g.float?g.V.toFixed(2):'–'}</td><td><span class="lv ${l==='1'?'lv1':l==='0'?'lv0':'lvq'}">${l}</span>${Math.abs(g.I)>1e-4?` <span class="muted">${(Math.abs(g.I)*1000).toFixed(1)} mA</span>`:''}</td></tr>`
+      h+=`<tr><td title="${esc(pinFns(g.q).join(', '))}">${g.q.name}</td><td><select data-gpio="${key}" aria-label="${g.q.name} mód">${GPIO_MODES.filter(x=>gpioModeOk(g.q,x[0])).map(([v,t])=>`<option value="${v}" ${g.mode===v?'selected':''}>${t}</option>`).join('')}</select></td><td>${g.powered&&!g.float?g.V.toFixed(2):'–'}</td><td><span class="lv ${l==='1'?'lv1':l==='0'?'lv0':'lvq'}">${l}</span>${Math.abs(g.I)>1e-4?` <span class="muted">${(Math.abs(g.I)*1000).toFixed(1)} mA</span>`:''}</td></tr>`
       if(g.mode==='pwm'){const c=pwmCfg(key),sid=key.replace('.','_');h+=`<tr class="pwmrow"><td></td><td colspan="3"><label class="small" for="pwmd_${sid}">kitöltés</label> <input type="number" id="pwmd_${sid}" data-pwm="${key}" data-pf="duty" min="0" max="100" step="1" value="${c.duty}" style="width:58px"> % <label class="small" for="pwmf_${sid}">frekv.</label> <input type="number" id="pwmf_${sid}" data-pwm="${key}" data-pf="freq" min="1" max="100000" step="1" value="${c.freq}" style="width:76px"> Hz</td></tr>`;}}
     h+='</tbody></table>';}
   const lights=SIM.leds.filter(l=>l.light);
@@ -1173,6 +1198,7 @@ function status(){
   const A=ui.sim?AS:A0,root=A.find(A.sid(h.r,h.c)),qs=A.netPins.get(root)||[],sg=segOf(h.r,h.c);
   let t=sg.drilled?`${h.r}:${h.c} · kifúrt lyuk (nincs réz)`:`${h.r}:${h.c} · ${D.board.sec>=D.board.rows||sg.r1-sg.r0+1<Math.min(D.board.sec,D.board.rows-sg.r0)?'csík':'szekció'} ${sg.r0}–${sg.r1}:${h.c}`;
   if(qs.length)t+=` · net: ${qs.slice(0,7).map(pinLabel).join(', ')}${qs.length>7?` +${qs.length-7}`:''}`;
+  {const here=A.pins.find(q=>q.on&&q.r===h.r&&q.c===h.c);if(here&&isMcu(here.part)&&here.role==='gpio'){const f=pinFns(here);if(f.length)t+=` · ${here.name}: ${f.join(', ')}`;}else if(here&&here.fn)t+=` · ${pinLabel(here)}: ${fnName(here.fn)}`;}
   if(ui.sim&&SIM&&qs.length)t+=SIM.floating.has(root)?' · lebeg':` · ${(SIM.netV.get(root)||0).toFixed(2)} V`;
   s.textContent=t;
 }
@@ -1410,7 +1436,7 @@ function suggestCuts(){
   for(const l of D.links){const a=keyOf(l.a);if(!a)continue;
     if(l.b==='GND')u(a,'GND');
     else if(l.b==='GPIO'){const qa=findPin(l.a);if(!qa||!inb(qa.r,qa.c))continue;const an=qa.role==='adc',cell=L0.cell(qa.r,qa.c);
-      const same=pins.map(x=>x.q).filter(q=>gpioFits(q,an)&&!claimed.has(q.part.id+'.'+q.id)&&L0.cell(q.r,q.c)===cell).sort((x,y)=>gpioPenalty(x)-gpioPenalty(y)||Math.abs(x.r-qa.r)-Math.abs(y.r-qa.r));
+      const same=pins.map(x=>x.q).filter(q=>gpioFits(q,an)&&!claimed.has(q.part.id+'.'+q.id)&&L0.cell(q.r,q.c)===cell).sort((x,y)=>gpioPenalty(x)+fnPenalty(qa.fn,x)-gpioPenalty(y)-fnPenalty(qa.fn,y)||Math.abs(x.r-qa.r)-Math.abs(y.r-qa.r));
       const pref=l.gpio&&same.find(q=>q.part.id+'.'+q.id===l.gpio),g=pref||same[0];
       if(g){const ref=g.part.id+'.'+g.id;claimed.add(ref);l.gpio=ref;u(a,keyOf(ref));}}
     else{const b=keyOf(l.b);if(b)u(a,b);}}
@@ -1464,8 +1490,13 @@ function route(opts){
     const other=new Set(pico.filter(q=>q.role!=='gnd').map(q=>q.part.id+'.'+q.id));if((gnd&&other.size)||other.size>1)return true;
     const seen=new Map();for(const q of qs){if(isMcu(q.part))continue;const g=PG.get(q.part.id)[q.id];if(seen.has(q.part.id)&&seen.get(q.part.id)!==g)return true;seen.set(q.part.id,g);}return false;};
   const geo=(a,b)=>LY.edge(a,b).br;
+  // ugyanannak a perifériának a már bekötött, azonos buszú (I²C/SPI/UART) lábai: melyik buszszámon vannak
+  const busOf=(S,I,l)=>{const a=pinByRef.get(l.a);if(!a||!a.fn||l.b!=='GPIO')return null;const bt=a.fn.split('.')[0];let set=null;
+    for(const o of links){if(o===l||o.b!=='GPIO')continue;const x=pinByRef.get(o.a);if(!x||x.part!==a.part||!x.fn||x.fn.split('.')[0]!==bt)continue;
+      const g=(I.get(srcOf(S,o))||[]).find(q=>isMcu(q.part)&&q.role==='gpio');if(!g)continue;const b=new Set(fnCaps(g,x.fn).map(c=>c.split('.')[0]));set=set?new Set([...set].filter(v=>b.has(v))):b;}
+    return set;};
   function routeOne(S,l){
-    const I=info(S),src=srcOf(S,l);
+    const I=info(S),src=srcOf(S,l),busPref=busOf(S,I,l),fnA=(pinByRef.get(l.a)||{}).fn;
     if(sat(S,l,I))return{ok:true,n:0};
     const pred=predFor(S,l,I);
     const spare=l.b==='GPIO'&&!needAdc(l); // az ADC-képes GPIO-kat az analóg jeleknek tartogatja
@@ -1479,7 +1510,7 @@ function route(opts){
       const cell=(s/5)|0,dir=s%5;
       for(const e of LY.adj(cell)){const k=e.dir,n=e.to,rn=S.find(n);if(rn===src)continue;
         const step=1+(dir!==4&&dir!==k?0.6:0);
-        if(S.used[n]||S.sz[rn]>1){if(pred(rn)){const tq=(I.get(rn)||[])[0],tc=d+step+(prefRoot>=0&&rn!==prefRoot?14:0)+(spare&&hasCap(tq,'adc')?12:0)+(l.b==='GPIO'&&rn!==prefRoot?gpioPenalty(tq):0);if(tc<bc){bc=tc;best={s,n};}}continue;}
+        if(S.used[n]||S.sz[rn]>1){if(pred(rn)){const tq=(I.get(rn)||[])[0],tc=d+step+(prefRoot>=0&&rn!==prefRoot?14:0)+(spare&&hasCap(tq,'adc')?12:0)+(l.b==='GPIO'&&rn!==prefRoot?gpioPenalty(tq)+fnPenalty(fnA,tq)+(busPref&&busPref.size&&tq&&mcuMux(tq.part)!=='matrix'&&!fnCaps(tq,fnA).some(c=>busPref.has(c.split('.')[0]))?12:0):0);if(tc<bc){bc=tc;best={s,n};}}continue;}
         const ns=n*5+k,nd=d+step;if(nd<dist[ns]){dist[ns]=nd;prev[ns]=s;push(nd,ns);}}}
     if(!best)return{ok:false};
     const cells=[best.n];let s=best.s;while(s>=0){cells.push((s/5)|0);s=prev[s];}
@@ -1497,7 +1528,10 @@ function route(opts){
     for(let att=0;att<60;att++){
       const S=base([],[]),fails=[];let nb=0;
       for(const l of order){const r=routeOne(S,l);if(!r.ok)fails.push(l);else nb+=r.n||0;}
-      const score=fails.length*10000+nb;
+      // buszfunkció-hibák (nem megfelelő láb vagy szétszórt busz, fix lábkiosztású vezérlőn) a pontszámba
+      let busBad=0;{const I=info(S);for(const l of links){const a=pinByRef.get(l.a);if(!a||!a.fn||l.b!=='GPIO')continue;const g=(I.get(srcOf(S,l))||[]).find(q=>isMcu(q.part)&&q.role==='gpio');
+        if(!g||mcuMux(g.part)==='matrix')continue;if(!fnCaps(g,a.fn).length){busBad++;continue;}const bp=busOf(S,I,l);if(bp&&bp.size===0)busBad++;else if(bp&&!fnCaps(g,a.fn).some(c=>bp.has(c.split('.')[0])))busBad++;}}
+      const score=fails.length*10000+busBad*300+nb;
       if(!best||score<best.score)best={score,S,fails};
       if(!fails.length&&firstOk<0)firstOk=att;
       if(firstOk>=0&&att>=firstOk+14)break;
@@ -1543,6 +1577,9 @@ function route(opts){
   const offByRef=new Map();for(const p of D.parts)if(isOff(p))for(const q of gpins(p))offByRef.set(p.id+'.'+q.id,q);
   const cables=D.links.filter(l=>offByRef.has(l.a)||offByRef.has(l.b)).sort((x,y)=>prio(x)-prio(y));
   const takenG=new Set();
+  // a panelra ültetett alkatrészek teste: a kábel vége lehetőleg ne kerüljön alá
+  const bodies=D.parts.filter(p=>!isOff(p)).map(p=>{const b=DEFS[p.type].bounds(p),pts=[[b.r0,b.c0],[b.r1,b.c1]].map(([r,c])=>xf(p,r,c));return[Math.min(pts[0][0],pts[1][0]),Math.max(pts[0][0],pts[1][0]),Math.min(pts[0][1],pts[1][1]),Math.max(pts[0][1],pts[1][1])];});
+  const covered=h=>bodies.some(([r0,r1,c0,c1])=>h[0]>r0&&h[0]<r1&&h[1]>c0&&h[1]<c1);
   for(const l of cables){
     const T=offByRef.get(l.a)||offByRef.get(l.b),other=offByRef.has(l.a)?l.b:l.a;
     if(offByRef.has(other)){const U=offByRef.get(other);S.wires.push({a:[T.r,T.c],b:[U.r,U.c],color:'#495057',links:[l.id]});continue;}
@@ -1552,12 +1589,14 @@ function route(opts){
     if(other==='GND')ok=r=>isGnd(I.get(r));
     else if(other==='GPIO'){const an=T.role==='adc';
       if(l.gpio&&pinByRef.has(l.gpio)){const g=pinByRef.get(l.gpio);pref=S.find(cellOf(g.r,g.c));}
-      ok=r=>{const qs=I.get(r);if(takenG.has(r)||!freeGpio(qs,r,S))return false;return an?hasCap(qs[0],'adc'):true;};}
+      ok=r=>{const qs=I.get(r);if(takenG.has(r)||!freeGpio(qs,r,S))return false;const q=qs[0];if(claimedG.has(q.part.id+'.'+q.id))return false;return an?hasCap(q,'adc'):!hasCap(q,'in');};}
     else{const X=pinByRef.get(other);if(!X)continue;const t=S.find(cellOf(X.r,X.c));ok=r=>r===t;}
     let best=null,bd=1e9;
-    for(let i=0;i<NC;i++){const r=S.find(i);if(!ok(r))continue;
-      const spare=other==='GPIO'&&T.role!=='adc'&&hasCap((I.get(r)||[])[0],'adc')?6:0,bonus=r===pref?-1e4:0;
-      for(const h of freeHoles(i)){const d=Math.hypot(h[0]-T.r,h[1]-T.c)+spare+bonus;if(d<bd){bd=d;best={h,r};}}}
+    for(let i=0;i<NC;i++){const r=S.find(i);if(!ok(r))continue;const tq=(I.get(r)||[])[0];
+      const spare=other==='GPIO'&&T.role!=='adc'&&hasCap(tq,'adc')?6:0,bonus=r===pref?-1e4:0,gp=other==='GPIO'?gpioPenalty(tq)+fnPenalty(T.fn,tq):0;
+      for(const h of freeHoles(i)){const d=Math.hypot(h[0]-T.r,h[1]-T.c)+spare+bonus+gp+(covered(h)?20:0);if(d<bd){bd=d;best={h,r};}}}
+    // modul lábára mutató kábel: ha a szekció szabad lyukai a test alatt vannak, a kábel a lábba (csatlakozóba) dugva végződik
+    {const X=other!=='GND'&&other!=='GPIO'?pinByRef.get(other):null;if(X&&!isMcu(X.part)){const own=freeHoles(cellOf(X.r,X.c)).some(h=>!covered(h)),d=Math.hypot(X.r-T.r,X.c-T.c)+(own?3:-5);if(d<bd&&!S.wireEnds.has(X.r+':'+X.c)){bd=d;best={h:[X.r,X.c],r:S.find(cellOf(X.r,X.c))};}}}
     if(!best)continue;
     S.wires.push({a:[T.r,T.c],b:best.h,color,links:[l.id]});S.wireEnds.add(best.h.join(':'));
     if(other==='GPIO'){takenG.add(best.r);const g=(I.get(best.r)||[]).find(q=>q.role==='gpio');if(g)l.gpio=g.part.id+'.'+g.id;}
@@ -1648,12 +1687,24 @@ $('#libFile').addEventListener('change',async e=>{const f=e.target.files&&e.targ
     libMsg(`${n} alkatrész betöltve${res.rejected.length?`, ${res.rejected.length} hibás kihagyva (${res.rejected.map(r=>r.key).join(', ')})`:''}.`);}
   catch(err){libMsg('Nem sikerült betölteni: '+err.message);}});
 
-/* ---------- Oldalsávok méretezése ---------- */
+/* ---------- Oldalsávok méretezése és összecsukása ---------- */
+let sideCollapse=()=>null;
 (function(){
   const app=$('.app'),DEF={l:250,r:320},LIM={l:[180,560],r:[220,640]};let w={...DEF};
   try{const v=JSON.parse(localStorage.getItem('proofboard.ui.sides')||'null');if(v&&v.l&&v.r)w={l:+v.l,r:+v.r};}catch(e){}
   const clamp=(k,v)=>Math.max(LIM[k][0],Math.min(LIM[k][1],Math.round(v)));
-  const apply=()=>{w.l=clamp('l',w.l);w.r=clamp('r',w.r);app.style.setProperty('--lw',w.l+'px');app.style.setProperty('--rw',w.r+'px');};
+  // összecsukás: keskeny ikonsáv (asztali nézetben), állapota a felületi beállítások között
+  const col={l:!!uiPref().colL,r:!!uiPref().colR},RAIL=46;
+  const apply=()=>{w.l=clamp('l',w.l);w.r=clamp('r',w.r);app.style.setProperty('--lw',(col.l?RAIL:w.l)+'px');app.style.setProperty('--rw',(col.r?RAIL:w.r)+'px');
+    app.classList.toggle('colL',col.l);app.classList.toggle('colR',col.r);
+    $('#colL').setAttribute('aria-expanded',String(!col.l));$('#colR').setAttribute('aria-expanded',String(!col.r));};
+  sideCollapse=(k,on)=>{col[k]=on==null?!col[k]:!!on;apply();uiPrefSet(k==='l'?{colL:col.l}:{colR:col.r});draw();return{...col};};
+  $('#colL').onclick=()=>sideCollapse('l',true);$('#colR').onclick=()=>sideCollapse('r',true);
+  for(const b of document.querySelectorAll('[data-expand]'))b.onclick=()=>sideCollapse(b.dataset.expand,false);
+  for(const b of document.querySelectorAll('[data-rail-ltab]'))b.onclick=()=>{ltab(b.dataset.railLtab);sideCollapse('l',false);};
+  for(const b of document.querySelectorAll('[data-rail-rtab]'))b.onclick=()=>{rtab(b.dataset.railRtab,b.dataset.railRtab!=='sim');sideCollapse('r',false);};
+  document.addEventListener('keydown',ev=>{const t=ev.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'))return;if(ev.ctrlKey||ev.metaKey||ev.altKey)return;
+    if(ev.key==='[')sideCollapse('l');else if(ev.key===']')sideCollapse('r');});
   const store=()=>{try{localStorage.setItem('proofboard.ui.sides',JSON.stringify(w));}catch(e){}};
   apply();
   for(const [id,k] of [['#gL','l'],['#gR','r']]){const g=$(id),sgn=k==='l'?1:-1;
@@ -1699,6 +1750,8 @@ window.pcb={
   preset(){D=keepLib(presetMacropad());commit();},
   /** Vezérlőcsere: a címkéjű vezérlőlapot a megadott típusra cseréli. */
   swapMcu(label,type){const p=D.parts.find(x=>x.label===label);return p?swapMcu(p.id,type):null;},
+  /** Oldalsáv összecsukása: k = 'l' | 'r', on = true/false (elhagyva: vált). */
+  sides(k,on){return k?sideCollapse(k,on):{l:$('.app').classList.contains('colL'),r:$('.app').classList.contains('colR')};},
   examples(){return EXAMPLES.map(e=>({id:e.id,cat:e.cat,title:e.title}));},
   example(id){return loadExample(id);},
   sim(on=true){setSim(!!on);},

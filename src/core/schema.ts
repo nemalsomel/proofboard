@@ -24,6 +24,11 @@ export interface PinSpec {
   repeat?: Num;
   /** Képességek, pl. 'adc' (analóg mérésre alkalmas GPIO). */
   caps?: string[];
+  /**
+   * Buszfunkció, amire a láb vár (perifériánál): 'i2c.sda', 'i2c.scl', 'spi.mosi', 'spi.miso', 'spi.sck', 'spi.cs',
+   * 'uart.rx', 'uart.tx'. A vezérlő GPIO-in a megfelelő képesség pl. 'i2c0.sda', 'spi1.mosi', 'uart0.tx' (a periféria RX-e a vezérlő TX-ére megy).
+   */
+  fn?: string;
   /** Tápbemenetnél (role 'vin') a megengedett feszültség a saját GND-lábhoz képest. */
   vmin?: Num;
   vmax?: Num;
@@ -117,7 +122,7 @@ export type ModelEl =
    * (ha a kettő ugyanaz a láb, nincs dióda), a stabilizátor `vreg` V felett adja a 3,3 V-ot a `v33` lábon.
    * `vmax`: a tápbemenet megengedett feszültsége; `igpio`: GPIO-nként ajánlott legnagyobb áram (A).
    */
-  | { el: 'mcu'; gnd: string; vsys: string; v33: string; vbus?: string; vreg?: Num; vmax?: Num; igpio?: Num }
+  | { el: 'mcu'; gnd: string; vsys: string; v33: string; vbus?: string; vreg?: Num; vmax?: Num; igpio?: Num; /** 'matrix': bármely GPIO bármely buszfunkcióra kiosztható (ESP32); a képességek ekkor az alapértelmezett lábak. */ mux?: 'fixed' | 'matrix' }
   /**
    * Digitális logika: a kimenetek logikai kifejezései a bemeneti lábnevekkel (lásd core/logic.ts).
    * A bemeneti szint a VCC–GND közti feszültség aránya szerint: ≥ vih → 1, ≤ vil → 0, köztes/lebegő → X.
@@ -202,6 +207,7 @@ export interface LocalPin {
   role: Role;
   num?: number;
   caps?: string[];
+  fn?: string;
   vmin?: number;
   vmax?: number;
 }

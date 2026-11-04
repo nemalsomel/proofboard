@@ -39,6 +39,12 @@
     <div class="rtabs ltabs" role="tablist" aria-label="Bal oldali panel">
       <button class="rtab on" role="tab" data-ltab="edit" aria-selected="true" aria-controls="lpEdit">Szerkesztés</button>
       <button class="rtab" role="tab" data-ltab="lib" aria-selected="false" aria-controls="lpLib">Alkatrészek</button>
+      <button class="side-tog" id="colL" title="Oldalsáv összecsukása ( [ )" aria-label="Bal oldalsáv összecsukása" aria-expanded="true">«</button>
+    </div>
+    <div class="rail" id="railL" role="toolbar" aria-label="Bal oldalsáv (összecsukva)">
+      <button class="rail-btn" data-expand="l" title="Kinyitás ( [ )" aria-label="Bal oldalsáv kinyitása">»</button>
+      <button class="rail-btn" data-rail-ltab="edit" title="Szerkesztés" aria-label="Szerkesztés">✎</button>
+      <button class="rail-btn" data-rail-ltab="lib" title="Alkatrészek" aria-label="Alkatrészek">▦</button>
     </div>
     <div class="rpane" id="lpEdit" data-lpane="edit" role="tabpanel">
       <section>
@@ -93,9 +99,16 @@
 
   <aside class="right">
     <div class="rtabs" role="tablist" aria-label="Jobb oldali panel">
+      <button class="side-tog" id="colR" title="Oldalsáv összecsukása ( ] )" aria-label="Jobb oldalsáv összecsukása" aria-expanded="true">»</button>
       <button class="rtab on" role="tab" data-rtab="design" aria-selected="true" aria-controls="rpDesign">Terv</button>
       <button class="rtab" role="tab" data-rtab="check" aria-selected="false" aria-controls="rpCheck">Ellenőrzés <span id="issueSum"></span></button>
       <button class="rtab" role="tab" data-rtab="sim" aria-selected="false" aria-controls="rpSim">Szimuláció</button>
+    </div>
+    <div class="rail" id="railR" role="toolbar" aria-label="Jobb oldalsáv (összecsukva)">
+      <button class="rail-btn" data-expand="r" title="Kinyitás ( ] )" aria-label="Jobb oldalsáv kinyitása">«</button>
+      <button class="rail-btn" data-rail-rtab="design" title="Terv" aria-label="Terv">☰</button>
+      <button class="rail-btn" data-rail-rtab="check" title="Ellenőrzés" aria-label="Ellenőrzés">✓<span class="badge" id="railIss"></span></button>
+      <button class="rail-btn" data-rail-rtab="sim" title="Szimuláció" aria-label="Szimuláció">▶</button>
     </div>
     <div class="rpane" id="rpDesign" data-rpane="design" role="tabpanel">
       <details class="acc" id="accLinks" open>
