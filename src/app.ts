@@ -20,6 +20,7 @@ import { evalExpr, parseExpr, pinRef, varsOf } from './core/logic';
 import { DEFS, syncDefs, penv, hasPress, isOff, isMcu } from './engine/defs';
 import { xf, xv, ixf, placedPins as gpins } from './engine/geometry';
 import { analyze as analyzeNet, layoutOf, pinLabel } from './engine/netlist';
+import { simulate as simulateOf, gpioMode as gpioModeOf, pwmCfg as pwmCfgOf, gpioLevel, BLINK_HZ, LSTATE, STSTATE } from './engine/simulate';
 import { hasCap, hasAdc, SPECIAL_CAPS, fnWant, fnCaps, mcuMux, capLabel, fnName, pinFns, fnPenalty, gpioPenalty, gpioFits, GPIO_MODES, gpioModeOk, gpioDefault } from './engine/mcu';
 
 const STORE_KEY = 'proofboard.design.v1';
@@ -105,179 +106,11 @@ function offPinAt(r,c){for(const p of D.parts){if(!isOff(p))continue;for(const q
 /* ---------- Netlista ---------- */
 function analyze(press){return analyzeNet(D,{pressed:press?p=>!!ui.pressed[p.id]:undefined,hidden:autoHidden});}
 
-/* ---------- Áramkör-szimuláció (csomóponti analízis, szakaszonként lineáris diódák) ---------- */
-function gpioMode(p,id,q,A){const m=D.gpio[p.id+'.'+id];if(!q)return m||'pullup';return m&&gpioModeOk(q,m)?m:gpioDefault(q,A);}
-const RBE=20,RCE=1; // NPN: bázis-emitter és telítési soros ellenállás (Ω)
-/* PWM: időszeletekre bontott szimuláció. Az azonos frekvenciájú, egyszerre induló PWM-kimenetek
-   kitöltéseiből szakaszok lesznek (mindegyikben fix magas/alacsony szintek); az eredmény a szakaszok
-   idővel súlyozott átlaga, a GPIO- és forrásáramoknál a csúcsérték. */
-const pwmCfg=key=>({duty:50,freq:1000,...((D.pwm||{})[key]||{})});
-/** Ennél lassabb PWM-et a szimuláció nem átlagolja, hanem valós időben villogtatja (a szem kb. 25 Hz alatt látja a villogást). */
-const BLINK_HZ=25;
-/** slow: a lassú PWM-lábak közül az éppen magas szintűek (villogtatás); elhagyva minden PWM a kitöltés szerint átlagolódik. */
-function simulate(A,slow){
-  const all=[];for(const p of D.parts)for(const q of A.byPart.get(p.id).pins)if(q.role==='gpio'&&gpioMode(p,q.id,q,A)==='pwm')all.push({key:p.id+'.'+q.id,q,...pwmCfg(p.id+'.'+q.id)});
-  const pw=slow?all.filter(x=>+x.freq>=BLINK_HZ):all,fixed=slow||new Set();
-  const cuts=[...new Set(pw.map(x=>Math.max(0,Math.min(100,+x.duty||0))))].filter(d=>d>0&&d<100).sort((a,b)=>a-b),bounds=[0,...cuts,100],runs=[];
-  const runAll=()=>{const runs=[];for(let i=0;i+1<bounds.length;i++){const lo=bounds[i],w=(bounds[i+1]-lo)/100;if(w<=0)continue;runs.push({w,o:simulate1(A,new Set([...fixed,...pw.filter(x=>x.duty>lo).map(x=>x.key)]))});}return mergeSims(runs);};
-  // órajeles logika: két beállt állapot között az órajel élén a tárolók átveszik a D értékét, utána újraszámol (kaszkád: legfeljebb 16 kör)
-  let out=runAll();for(let pass=0;pass<16&&clockStep(out);pass++)out=runAll();
-  out.pwm=new Map(all.map(x=>[x.q.net,x]));
-  stepperStep(out);
-  // szervó: a jelvezetéken érkező PWM impulzusszélessége → szög
-  for(const s of out.servos){const x=out.pwm.get(s.sigNet);s.pulse=x?x.duty/100/Math.max(1e-9,x.freq)*1000:null;
-    const ok=x&&x.freq>=40&&x.freq<=400&&s.pulse>=s.pmin-0.2&&s.pulse<=s.pmax+0.2;s.angle=ok?Math.max(0,Math.min(180,(s.pulse-s.pmin)/(s.pmax-s.pmin)*180)):null;}
-  return out;
-}
-/* Léptetőmotor: a gerjesztett tekercsek mintájából (A=1, B=2, C=4, D=8) a félléptetéses fázis; a fázis
-   változásából lép előre/hátra (±1–3 fél lépés; 4-es ugrásnál nem dönthető el az irány, nem mozdul). */
-const STEP_PHASE={1:0,3:1,2:2,6:3,4:4,12:5,8:6,9:7},STSTATE=new Map();
-function stepperStep(out){for(const s of out.steppers){const st=STSTATE.get(s.p.id)||{pos:0,phase:null};
-    const pat=[s.ua,s.ub,s.uc,s.ud].reduce((m,u,i)=>m|(u>1.5?1<<i:0),0),ph=STEP_PHASE[pat];
-    if(ui.sim&&ph!=null){if(st.phase!=null){const d=(ph-st.phase+8)%8;if(d>=1&&d<=3)st.pos+=d;else if(d>=5)st.pos-=8-d;}st.phase=ph;}
-    STSTATE.set(s.p.id,st);s.pattern=pat;s.pos=st.pos;s.coils='ABCD'.split('').filter((_,i)=>pat&1<<i).join('');
-    s.angle=st.pos*360/s.steps;s.rotorAngle=st.pos*360/(s.steps/s.rotor);}}
-/** A logikai tárolók állapota alkatrészenként (a szimulációk között megmarad; szimuláció indításakor törlődik). */
-const LSTATE=new Map();
-function clockStep(out){let changed=false;
-  for(const L of out.logics){if(!L.regs.length)continue;const st=LSTATE.get(L.p.id)||{regs:{},clk:{}},next={};
-    for(const r of L.regs){const prev=st.clk[r.name],now=r.clk;st.clk[r.name]=now;
-      const edge=r.edge==='fall'?prev===1&&now===0:prev===0&&now===1;
-      next[r.name]=r.async!=null?r.async:edge?r.d:(r.name in st.regs?st.regs[r.name]:r.val);}
-    for(const k in next)if(next[k]!==st.regs[k])changed=true;
-    st.regs=next;LSTATE.set(L.p.id,st);}
-  return changed;}
-const SIM_MAX={gpios:new Set(['I']),srcI:new Set(['I'])},ST_RANK={off:0,sat:1,act:2};
-function mergeSims(runs){
-  if(runs.length===1)return runs[0].o;
-  const o0=runs[0].o,out={...o0,netV:new Map(),floating:new Set()};
-  for(const {w,o} of runs){for(const [k,v] of o.netV)out.netV.set(k,(out.netV.get(k)||0)+w*v);for(const k of o.floating)out.floating.add(k);}
-  for(const name of ['leds','picos','gpios','bats','srcI','fets','caps','bjts','motors','servos','logics','steppers'])out[name]=o0[name].map((x,i)=>{const r={...x};
-    for(const k in x){const v=x[k],vs=runs.map(({w,o})=>[w,o[name][i][k]]);
-      if(typeof v==='number'&&vs.every(([,y])=>y===v)){r[k]=v;} // azonos érték (pl. hálózat-azonosító): pontosan marad
-      else if(typeof v==='number'){r[k]=SIM_MAX[name]&&SIM_MAX[name].has(k)?vs.reduce((m,[,y])=>Math.abs(y)>Math.abs(m)?y:m,0):vs.reduce((t,[w,y])=>t+w*(typeof y==='number'?y:0),0);}
-      else if(typeof v==='boolean')r[k]=vs.some(([,y])=>y);
-      else if(k==='st')r[k]=vs.reduce((m,[,y])=>ST_RANK[y]>ST_RANK[m]?y:m,v);}
-    return r;});
-  return out;
-}
-function simulate1(A,high){
-  const idx=new Map();const nd=net=>{if(!idx.has(net))idx.set(net,idx.size);return idx.get(net);};
-  for(const q of A.pins) if(q.net>=0) nd(q.net);
-  // vezérlőlap belső USB-csomópontja, ha a VBUS nincs kivezetve
-  for(const p of D.parts)for(const el of DEFS[p.type].def.model||[])if(el.el==='mcu'&&!el.vbus)nd('usb:'+p.id);
-  const n=idx.size;
-  const picos=[],leds=[],ress=[],bats=[],fets=[],caps=[],bjts=[],motors=[],servos=[],logics=[],steppers=[];
-  for(const p of D.parts){const bp=A.byPart.get(p.id);const m=bp.map,N=id=>idx.get(m[id].net);const model=DEFS[p.type].def.model;if(!model)continue;const E=penv(p);
-    for(const el of model){
-      if(el.el==='mcu')picos.push({p,gnd:N(el.gnd),vbus:el.vbus?N(el.vbus):idx.get('usb:'+p.id),vsys:N(el.vsys),v33:N(el.v33),vsysPin:m[el.vsys],vreg:num(el.vreg??1.8,E),vmax:el.vmax!=null?num(el.vmax,E):null,igpio:num(el.igpio??0.012,E),gp:bp.pins.filter(q=>q.role==='gpio').map(q=>({q,node:idx.get(q.net),mode:gpioMode(p,q.id,q,A)})),reg:false,d:false});
-      else if(el.el==='diode')leds.push({p,a:N(el.a),k:N(el.k),vf:num(el.vf,E),ron:Math.max(1e-3,num(el.ron??15,E)),imax:el.imax!=null?num(el.imax,E):null,light:!!el.light,on:false});
-      else if(el.el==='resistor')ress.push({p,a:N(el.a),b:N(el.b),g:1/Math.max(1e-3,num(el.ohm,E))});
-      else if(el.el==='source')bats.push({p,a:N(el.p),b:N(el.n),E:num(el.v,E),g:1/Math.max(1e-3,num(el.rint??0.1,E)),kind:el.kind||'battery'});
-      else if(el.el==='capacitor')caps.push({p,a:N(el.a),b:N(el.b),f:num(el.f,E),vmax:el.vmax!=null?num(el.vmax,E):null,polar:!!el.polar});
-      else if(el.el==='npn')bjts.push({p,c:N(el.c),b:N(el.b),e:N(el.e),beta:Math.max(1,num(el.beta,E)),vbe:num(el.vbe??0.65,E),vcesat:num(el.vcesat??0.1,E),imax:el.imax!=null?num(el.imax,E):null,be:false,st:'off',ic:0});
-      else if(el.el==='motor')motors.push({p,a:N(el.a),b:N(el.b),g:1/Math.max(1e-3,num(el.ohm,E)),vnom:Math.max(0.1,num(el.vnom,E))});
-      else if(el.el==='stepper')steppers.push({p,com:N(el.com),coils:[N(el.a),N(el.b),N(el.c),N(el.d)],g:1/Math.max(1e-3,num(el.ohm,E)),steps:Math.max(1,num(el.steps??4096,E)),rotor:Math.max(1,num(el.rotor??64,E))});
-      else if(el.el==='servo')servos.push({p,vp:N(el.vp),gnd:N(el.gnd),sigNet:m[el.sig].net,g:1/Math.max(1e-3,num(el.ohm,E)),pmin:num(el.pmin??0.5,E),pmax:num(el.pmax??2.5,E)});
-      else if(el.el==='logic'){const ps=bp.pins,ast=x=>{try{return x&&String(x).trim()?parseExpr(String(x)):null;}catch(e){return null;}};
-        const ins=new Map(),outs=[],stored=(LSTATE.get(p.id)||{regs:{}}).regs;
-        const regs=(el.regs||[]).map(r=>({name:r.name,clk:ast(r.clk),d:ast(r.d),reset:ast(r.reset),set:ast(r.set),edge:r.edge==='fall'?'fall':'rise',stored:stored[r.name]??(r.init??0),eff:'X'})).filter(r=>r.clk&&r.d);
-        const rn=new Set(regs.map(r=>r.name));
-        const addIns=a=>{if(!a)return;for(const v of varsOf(a)){if(ins.has(v)||rn.has(v))continue;const id=pinRef(v,ps);if(!id)continue;const q=m[id];
-            ins.set(v,{q,node:N(id),open:(A.netPins.get(q.net)||[]).length<=1&&(A.netSecs.get(q.net)||0)<=1});}};
-        for(const o of el.outs||[]){const a=ast(o.expr),oe=ast(o.oe);if(!a||!m[o.pin])continue;outs.push({p,pin:m[o.pin],node:N(o.pin),ast:a,oe,type:o.type==='od'?'od':'pp',st:'z'});addIns(a);addIns(oe);}
-        for(const r of regs){addIns(r.clk);addIns(r.d);addIns(r.reset);addIns(r.set);}
-        logics.push({p,vcc:N(el.vcc),gnd:N(el.gnd),ins,outs,regs,vih:num(el.vih??0.7,E),vil:num(el.vil??0.3,E),g:1/Math.max(1,num(el.rout??50,E)),imax:num(el.imax??0.025,E),vdd:0});}
-      else if(el.el==='nmos')fets.push({p,d:N(el.d),g:N(el.g),s:N(el.s),vth:num(el.vth,E),ron:Math.max(1e-3,num(el.ron,E)),imax:el.imax!=null?num(el.imax,E):null,on:false});
-    }
-  }
-  let V=new Float64Array(n),els=[];
-  for(let it=0;it<60;it++){
-    els=[];const add=(a,b,g,E,kind,ref,cp,cn)=>els.push(cp==null?{a,b,g,E,kind,ref}:{a,b,g,E,kind,ref,cp,cn});
-    for(let i=0;i<n;i++)add(i,-1,1e-9,0,'leak');
-    for(const pc of picos){
-      add(pc.gnd,-1,1e4,0,'gref',pc);
-      if(D.settings.usb)add(pc.vbus,pc.gnd,10,5,'vbus',pc);
-      if(pc.vbus!==pc.vsys)add(pc.vbus,pc.vsys,pc.d?5:1e-9,pc.d?0.3:0,'pdiode',pc);
-      if(pc.reg){add(pc.v33,pc.gnd,10,3.3,'v33',pc);
-        for(const g of pc.gp){const md=g.mode==='pwm'?(high&&high.has(pc.p.id+'.'+g.q.id)?'out_high':'out_low'):g.mode;
-          if(md==='pullup')add(g.node,pc.v33,2e-5,0,'pull',g);
-          else if(md==='pulldown')add(g.node,pc.gnd,2e-5,0,'pull',g);
-          else if(md==='out_high')add(g.node,pc.gnd,1/40,3.3,'gout',g);
-          else if(md==='out_low')add(g.node,pc.gnd,1/40,0,'gout',g);}}
-    }
-    for(const r of ress)add(r.a,r.b,r.g,0,'res',r);
-    for(const m of motors)add(m.a,m.b,m.g,0,'motor',m);
-    for(const L of logics)for(const o of L.outs){if(o.st===1)add(o.node,L.vcc,L.g,0,'lout',o);else if(o.st===0)add(o.node,L.gnd,L.g,0,'lout',o);}
-    for(const s of servos)add(s.vp,s.gnd,s.g,0,'servo',s);
-    for(const s of steppers)for(const k of s.coils)add(s.com,k,s.g,0,'coil',s);
-    for(const l of leds)add(l.a,l.k,l.on?1/l.ron:1e-9,l.on?l.vf:0,'led',l);
-    for(const b of bats)add(b.a,b.b,b.g,b.E,'bat',b);
-    for(const f of fets)add(f.d,f.s,f.on?1/f.ron:1e-9,0,'fet',f);
-    // NPN: B–E dióda; C–E lezárva, telítve (kis ellenállás + Uce,sat) vagy aktívan (áramforrás Ic = β·Ib)
-    for(const t of bjts){add(t.b,t.e,t.be?1/RBE:1e-9,t.be?t.vbe:0,'bjt_be',t);
-      if(t.st==='sat')add(t.c,t.e,1/RCE,t.vcesat,'bjt_ce',t);else if(t.st==='act')add(t.c,t.e,t.beta/RBE,t.vbe,'bjt_ce',t,t.b,t.e);} // aktív: Ic = β·(Ube−0,65)/Rbe = β·Ib
-    V=solve(n,els);
-    let ch=false;
-    for(const l of leds){const d=V[l.a]-V[l.k];if(!l.on&&d>l.vf+1e-4){l.on=true;ch=true;}else if(l.on&&d<l.vf){l.on=false;ch=true;}}
-    for(const f of fets){const on=(V[f.g]-V[f.s])>f.vth;if(on!==f.on){f.on=on;ch=true;}}
-    // logika: a bemeneti szintekből a kimenetek (push-pull: VCC/GND felé, nyitott drain: csak GND felé, X vagy OE=0: nem hajt)
-    for(const L of logics){const vdd=V[L.vcc]-V[L.gnd];L.vdd=vdd;
-      const pin=name=>{const x=L.ins.get(name);if(!x||x.open)return'X';const v=V[x.node]-V[L.gnd];return v>=L.vih*vdd?1:v<=L.vil*vdd?0:'X';};
-      // tárolók: a tárolt érték, amíg az aszinkron törlés/beállítás nem írja felül
-      const rg=new Map(L.regs.map(r=>[r.name,r])),lvS=name=>rg.has(name)?rg.get(name).stored:pin(name);
-      for(const r of L.regs){const rs=r.reset?evalExpr(r.reset,lvS):0,ss=r.set?evalExpr(r.set,lvS):0;r.async=vdd<1?null:rs===1?0:ss===1?1:null;r.eff=vdd<1?'X':r.async??r.stored;}
-      const lvl=name=>rg.has(name)?rg.get(name).eff:pin(name);L.lvl=lvl;
-      for(const o of L.outs){let st='z';if(vdd>=1){const en=o.oe?evalExpr(o.oe,lvl):1;if(en===1){const v=evalExpr(o.ast,lvl);st=v==='X'?'z':o.type==='od'?(v?'z':0):v;}}
-        if(st!==o.st){o.st=st;ch=true;}}}
-    for(const t of bjts){const vbe=V[t.b]-V[t.e],vce=V[t.c]-V[t.e];
-      if(!t.be&&vbe>t.vbe+1e-4){t.be=true;ch=true;}else if(t.be&&vbe<t.vbe){t.be=false;ch=true;}
-      const want=t.beta*(t.be?Math.max(0,(vbe-t.vbe)/RBE):0);
-      if(!t.be){if(t.st!=='off'){t.st='off';ch=true;}}
-      else if(t.st==='off'){t.st='act';ch=true;}
-      else if(t.st==='sat'){if((vce-t.vcesat)/RCE>want*1.02+1e-9){t.st='act';ch=true;}}
-      else if(vce<t.vcesat-0.01){t.st='sat';ch=true;}}
-    for(const pc of picos){if(pc.vbus===pc.vsys)pc.d=!!D.settings.usb;else{const d=V[pc.vbus]-V[pc.vsys];if(!pc.d&&d>0.3001){pc.d=true;ch=true;}else if(pc.d&&d<0.3){pc.d=false;ch=true;}}
-      const w=(V[pc.vsys]-V[pc.gnd])>pc.vreg;if(w!==pc.reg){pc.reg=w;ch=true;}}
-    if(!ch)break;
-  }
-  const vv=i=>i>=0?V[i]:0,cur=e=>e.g*(vv(e.cp??e.a)-vv(e.cn??e.b)-e.E);
-  // lebegés: forrásokból elérhető-e
-  const adj=Array.from({length:n},()=>[]),seed=new Set();
-  for(const e of els){if(e.kind==='leak'||e.g<1e-6||e.cp!=null)continue;if(e.a>=0&&e.b>=0){adj[e.a].push(e.b);adj[e.b].push(e.a);}
-    if(['gref','vbus','v33','gout','bat'].includes(e.kind)){if(e.a>=0)seed.add(e.a);if(e.b>=0)seed.add(e.b);}}
-  const reach=new Uint8Array(n),st=[...seed];st.forEach(i=>reach[i]=1);
-  while(st.length){const i=st.pop();for(const j of adj[i])if(!reach[j]){reach[j]=1;st.push(j);}}
-  const netV=new Map(),floating=new Set();
-  for(const [net,i] of idx){netV.set(net,V[i]);if(!reach[i])floating.add(net);}
-  const out={netV,floating,leds:[],picos:[],gpios:[],bats:[],srcI:[],fets:[],caps:[],bjts:[],motors:[],servos:[],logics:[],steppers:[]};
-  for(const s of steppers){const U=s.coils.map(k=>V[s.com]-V[k]);out.steppers.push({p:s.p,steps:s.steps,rotor:s.rotor,ua:U[0],ub:U[1],uc:U[2],ud:U[3],I:U.reduce((t,u)=>t+Math.max(0,u),0)*s.g});}
-  for(const L of logics){const gl=V[L.gnd],lv=x=>{if(x.open||!reach[x.node])return'X';const v=V[x.node]-gl;return v>=L.vih*L.vdd?1:v<=L.vil*L.vdd?0:'X';};
-    out.logics.push({p:L.p,vdd:L.vdd,imax:L.imax,ins:[...L.ins].map(([name,x])=>({name,lv:L.vdd>=1?lv(x):'X',open:x.open||!reach[x.node]})),
-      outs:L.outs.map(o=>{const e=els.find(x=>x.kind==='lout'&&x.ref===o);return{name:o.pin.name,st:o.st,I:e?Math.abs(cur(e)):0};}),
-      regs:L.regs.map(r=>({name:r.name,val:r.eff,clk:L.vdd>=1&&L.lvl?evalExpr(r.clk,L.lvl):'X',d:L.vdd>=1&&L.lvl?evalExpr(r.d,L.lvl):'X',async:r.async??null,edge:r.edge}))});}
-  for(const m of motors){const U=V[m.a]-V[m.b];out.motors.push({p:m.p,U,I:U*m.g,vnom:m.vnom,speed:Math.max(-1.5,Math.min(1.5,U/m.vnom))});}
-  for(const s of servos){const U=V[s.vp]-V[s.gnd];out.servos.push({p:s.p,U,I:U*s.g,sigNet:s.sigNet,pmin:s.pmin,pmax:s.pmax});}
-  // kondenzátor: feszültség és időállandó (τ = R·C, R a kapcsain látott Thevenin-ellenállás a munkapontban)
-  for(const k of caps){const U=V[k.a]-V[k.b],test=solve(n,[...els,{a:k.a,b:k.b,g:1e-9,E:-1e6}]),R=Math.abs((test[k.a]-test[k.b])-U)/1e-3;
-    out.caps.push({p:k.p,U,f:k.f,vmax:k.vmax,polar:k.polar,R,tau:R<1e8?R*k.f:null,float:!reach[k.a]||!reach[k.b]});}
-  for(const t of bjts){const be=els.find(e=>e.kind==='bjt_be'&&e.ref===t),ce=els.find(e=>e.kind==='bjt_ce'&&e.ref===t);
-    out.bjts.push({p:t.p,st:t.st,ib:be?Math.max(0,cur(be)):0,ic:ce?cur(ce):0,vbe:V[t.b]-V[t.e],vce:V[t.c]-V[t.e],beta:t.beta,imax:t.imax,floatBase:!reach[t.b]});}
-  for(const e of els){
-    if(e.kind==='led')out.leds.push({p:e.ref.p,I:Math.max(0,cur(e)),on:e.ref.on,light:e.ref.light,imax:e.ref.imax});
-    if(e.kind==='fet'){const f=e.ref;out.fets.push({p:f.p,on:f.on,vgs:V[f.g]-V[f.s],I:cur(e),imax:f.imax,floatGate:!reach[f.g]});}
-    if(e.kind==='bat')out.bats.push({p:e.ref.p,I:cur(e),kind:e.ref.kind,node:e.a});
-    if(e.kind==='vbus')out.srcI.push({kind:'vbus',pc:e.ref,I:-cur(e)});
-    if(e.kind==='v33')out.srcI.push({kind:'v33',pc:e.ref,I:-cur(e)});
-  }
-  for(const pc of picos){
-    out.picos.push({p:pc.p,powered:pc.reg,usb:D.settings.usb,feeds:pc.d,vsys:pc.vsys,vsysName:pc.vsysPin.name,Usys:V[pc.vsys]-V[pc.gnd],vreg:pc.vreg,vmax:pc.vmax,igpio:pc.igpio});
-    for(const g of pc.gp){const e=els.find(x=>x.kind==='gout'&&x.ref===g);
-      out.gpios.push({p:pc.p,q:g.q,mode:g.mode,V:V[g.node]-V[pc.gnd],I:e?-cur(e):0,float:!reach[g.node],powered:pc.reg});}
-  }
-  return out;
-}
-const logic=g=>!g.powered?'–':g.float?'?':g.mode==='adc'?'A':g.mode==='pwm'?'P':g.V>=2?'1':g.V<=0.8?'0':'?';
+/* ---------- Áramkör-szimuláció: engine/simulate.ts ---------- */
+const gpioMode=(p,id,q,A)=>gpioModeOf(D,p,id,q,A);
+const pwmCfg=key=>pwmCfgOf(D,key);
+function simulate(A,slow){return simulateOf(D,A,{running:ui.sim,slow});}
+const logic=gpioLevel;
 
 /* ---------- Ellenőrzés ---------- */
 function checkAll(){
