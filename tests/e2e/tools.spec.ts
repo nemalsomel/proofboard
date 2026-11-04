@@ -148,12 +148,30 @@ test('programszerkesztő: húzáskor nem nyílik fel a blokk beállítása, csak
   await expect(page.locator('.pg-props')).toBeVisible();
 });
 
-test('nézetmódok a fejlécben: Alkatrészoldal és Rézoldal egy csoportban, egyszerre csak az egyik', async ({ page }) => {
-  await expect(page.locator('.top #vModes')).toBeVisible();
+test('nézetmódok a vászon fölött jobbra: Alkatrészoldal és Rézoldal egy csoportban, egyszerre csak az egyik', async ({ page }) => {
+  await expect(page.locator('.vbar #vModes')).toBeVisible();
   await expect(page.locator('#vComp')).toHaveClass(/on/);
   await page.click('#vCu');
   await expect(page.locator('#vCu')).toHaveClass(/on/);
   await expect(page.locator('#vComp')).not.toHaveClass(/on/);
   const a = (await page.locator('#vComp').boundingBox())!, b = (await page.locator('#vCu').boundingBox())!;
   expect(Math.abs(a.x + a.width - b.x)).toBeLessThan(2); // összefüggő gombsor
+});
+
+test('nézetváltó 1 / 2 / 3, rövid vezeték Shift+W; tulajdonságok: fő műveletek egy rácsban', async ({ page }) => {
+  await pcb(page, `pcb.preset();`);
+  await page.locator('#cv').hover({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('2');
+  expect(await pcb(page, `return pcb.work();`)).toBe('prog');
+  await page.keyboard.press('3');
+  expect(await pcb(page, `return pcb.work();`)).toBe('split');
+  await page.keyboard.press('1');
+  expect(await pcb(page, `return pcb.work();`)).toBe('board');
+  const on0 = await page.locator('#vStub').evaluate(e => e.classList.contains('on'));
+  await page.keyboard.press('Shift+W');
+  expect(await page.locator('#vStub').evaluate(e => e.classList.contains('on'))).toBe(!on0);
+  expect(await pcb(page, `return pcb.get().wires.length;`)).toBe(0); // nem a Vezeték eszköz
+  await pcb(page, `pcb.select(['K1']);`);
+  const boxes = await Promise.all(['#pRot', '#pMir', '#pDup', '#pDel'].map(s => page.locator(s).boundingBox()));
+  expect(new Set(boxes.map(b => Math.round(b!.y))).size).toBeLessThanOrEqual(2); // legfeljebb két sorban
 });

@@ -36,23 +36,13 @@
         </div>
       </div>
     </div>
-    <span class="top-sp"></span>
-    <div class="grp vmodes desk-flex" role="group" aria-label="A panel megjelenítése" id="vModes">
-      <div class="grp seg" role="group" aria-label="Oldal">
-        <button class="btn" id="vComp" data-kbd="F" data-icon="comp" title="Alkatrészoldal (F)">Alkatrészoldal</button>
-        <button class="btn" id="vCu" data-kbd="F" data-icon="copper" title="Rézoldal, tükrözve (F)">Rézoldal</button>
-      </div>
-      <button class="btn" id="vRats" data-kbd="N" data-icon="rats" title="Kapcsolati vonalak: a kapcsolatok egyenes vonallal a két láb között (N)">Vonalak</button>
-      <button class="btn" id="vXray" data-kbd="X" data-icon="xray" title="Minden alkatrész röntgen nézetben: csak körvonal, lábak és lábnevek (X)">Röntgen</button>
-      <button class="btn" id="vStub" data-icon="stub" title="Rövid vezeték: a hosszú vezetékekből csak a két vég látszik szakadásjellel; rámutatva vagy kijelölve a teljes vonal">Rövid vezeték</button>
-      <button class="btn icon" id="vRot" data-kbd="T" data-icon="rotate" aria-label="Panel elforgatása 90°-kal" title="A panel nézetének elforgatása 90°-kal (T)"></button>
-    </div>
     <div class="grp seg desk-only" role="group" aria-label="Elrendezés" id="laySw">
       <button class="btn" data-layout="design" data-kbd="Alt+1" title="Tervezés: alkatrészek és bekötés (Alt+1)">Tervezés</button>
       <button class="btn" data-layout="prog" data-kbd="Alt+2" title="Program: a panel és a program egymás mellett (Alt+2)">Program</button>
       <button class="btn" data-layout="sim" data-kbd="Alt+3" title="Szimuláció: vezérlők és GPIO-k (Alt+3)">Szimuláció</button>
     </div>
     <button class="btn icon ghost desk-only" id="layReset" data-icon="restore" aria-label="Az elrendezés alapállapota" title="Az elrendezés visszaállítása az alapállapotára" hidden></button>
+    <span class="top-sp"></span>
     <div class="grp seg desk-only" role="group" aria-label="Panelek ki-be">
       <button class="btn icon" id="colL" data-kbd="[" data-icon="sideL" aria-label="Bal oldalsáv (Alkatrészek)" aria-pressed="true" title="Bal oldalsáv: Alkatrészek ( [ )"></button>
       <button class="btn icon" id="colB" data-kbd="P" data-icon="sideB" aria-label="Alsó panel (Problémák, Napló)" aria-pressed="false" title="Alsó panel: Problémák, Napló (P)"></button>
@@ -98,9 +88,20 @@
   <main class="stage">
     <div class="vbar" role="toolbar" aria-label="Nézetek">
       <div class="grp seg vtabs" role="group" aria-label="Nézet" id="workSw">
-        <button class="btn on" data-work="board" aria-pressed="true" title="A panel (alkatrészek, bekötés)">Panel</button>
-        <button class="btn" data-work="prog" aria-pressed="false" title="A program: blokkok, amelyek futás közben a GPIO-kat vezérlik">Program</button>
-        <button class="btn desk-only" data-work="split" aria-pressed="false" title="A panel és a program egymás mellett">Mindkettő</button>
+        <button class="btn on" data-work="board" data-kbd="1" aria-pressed="true" title="A panel: alkatrészek, bekötés (1)">Panel</button>
+        <button class="btn" data-work="prog" data-kbd="2" aria-pressed="false" title="A program: blokkok, amelyek futás közben a GPIO-kat vezérlik (2)">Program</button>
+        <button class="btn desk-only" data-work="split" data-kbd="3" aria-pressed="false" title="A panel és a program egymás mellett (3)">Mindkettő</button>
+      </div>
+      <span class="sp"></span>
+      <div class="grp vmodes" role="group" aria-label="A panel megjelenítése" id="vModes">
+        <div class="grp seg" role="group" aria-label="Oldal">
+          <button class="btn" id="vComp" data-kbd="F" data-icon="comp" title="Alkatrészoldal (F)">Alkatrészoldal</button>
+          <button class="btn" id="vCu" data-kbd="F" data-icon="copper" title="Rézoldal, tükrözve (F)">Rézoldal</button>
+        </div>
+        <button class="btn" id="vRats" data-kbd="N" data-icon="rats" title="Kapcsolati vonalak: a kapcsolatok egyenes vonallal a két láb között (N)">Vonalak</button>
+        <button class="btn" id="vXray" data-kbd="X" data-icon="xray" title="Minden alkatrész röntgen nézetben: csak körvonal, lábak és lábnevek (X)">Röntgen</button>
+        <button class="btn" id="vStub" data-kbd="⇧W" data-icon="stub" title="(Shift+W) Rövid vezeték: a hosszú vezetékekből csak a két vég látszik szakadásjellel; rámutatva vagy kijelölve a teljes vonal">Rövid vezeték</button>
+        <button class="btn icon" id="vRot" data-kbd="T" data-icon="rotate" aria-label="Panel elforgatása 90°-kal" title="A panel nézetének elforgatása 90°-kal (T)"></button>
       </div>
     </div>
     <div class="carea" id="carea">

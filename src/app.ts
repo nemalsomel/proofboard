@@ -672,6 +672,8 @@ document.addEventListener('keydown',ev=>{
   if(k==='n'){toggleRats();return;}
   if(k==='t'){rotView();return;}
   if(k==='0'){fitView();return;}
+  if(k==='w'&&ev.shiftKey){$('#vStub').click();return;}
+  if(['1','2','3'].includes(ev.key)&&!ev.shiftKey){const w=['board','prog','split'][+ev.key-1];if(w!=='split'||!MOB.matches)setWork(w);return;}
   if(k==='p'){bottomPanel();return;}
   if(ui.sim){const tool=TOOLS.find(x=>x[2].toLowerCase()===k&&SIM_TOOLS.has(x[0]));if(tool)setTool(tool[0]);return;}
   const tool=TOOLS.find(x=>x[2].toLowerCase()===k);if(tool){setTool(tool[0]);return;}
@@ -735,6 +737,8 @@ function bindParams(root,p){
       const nv=pr.series==='E12'?stepE12(base,dir):+(base+dir*(pr.step||Math.max(1e-6,Math.abs(base)*0.05))).toPrecision(4);el.value=fmtSI(nv);set(el.dataset.pk,el.value);});
   });
 }
+/** Tulajdonság-művelet gomb: ikon + név, a gyorsbillentyű súgóban és Ctrl-címkén. */
+const ACT=(id,ic,l,k,t='',cls='')=>`<button class="btn${cls}" id="${id}" data-kbd="${k}" title="${t?t+' ':''}(${k})">${icon(ic)}${l}</button>`;
 function renderLeft0(){
   $('#tools').innerHTML=TOOLS.map(([id,l,k,ic,h])=>`<button class="btn tool ${ui.tool===id&&!ui.placing?'on':''}" data-tool="${id}" title="${l} (${k}) – ${h}" aria-label="${l}" aria-keyshortcuts="${k}" ${ui.sim&&!SIM_TOOLS.has(id)?'disabled':''}><span class="ti">${icon(ic)}<kbd>${k}</kbd></span><span class="tl">${l}</span></button>`).join('');
   renderLib();
@@ -744,17 +748,19 @@ function renderLeft0(){
   const pr=$('#props');const p=selPart();
   if(p){const d=DEFS[p.type];const extra=paramUI(p);
     pr.innerHTML=`<div class="row"><label for="pLabel">Név</label><input type="text" id="pLabel" value="${esc(p.label)}"></div>
-      <div class="small muted">${d.name} · origó <span class="mono">${p.r}:${p.c}</span> · ${p.rot*90}°${p.mir?' · tükrözve':''}</div>${extra}
-      <div class="row"><button class="btn" id="pRot">↻ Forgatás <kbd>R</kbd></button><button class="btn" id="pMir">⇋ Tükrözés <kbd>M</kbd></button><button class="btn danger" id="pDel">Törlés</button></div>`;
+      <div class="small muted">${d.name} · origó <span class="mono">${p.r}:${p.c}</span> · ${p.rot*90}°${p.mir?' · tükrözve':''}</div>
+      <div class="pr-acts">${ACT('pRot','rotate','Forgatás','R')}${ACT('pMir','mirror','Tükrözés','M')}${ACT('pDup','copy','Duplikálás','D','Új példány ugyanezekkel a beállításokkal')}${ACT('pDel','trash','Törlés','Del','',' danger')}</div>
+      <label class="check small"><input type="checkbox" id="pXray" ${p.xray?'checked':''}> Röntgen (csak körvonal és lábak)</label>${extra}
+      <div class="pr-more" id="pMore"></div>`;
     const ch=(id,fn)=>{const e=$(id);if(e)e.addEventListener('change',()=>{pushUndo();fn(e.value);commit();});};
     ch('#pLabel',v=>p.label=v.trim()||p.label);
     bindParams(pr,p);
     $('#pRot').onclick=rotate;$('#pMir').onclick=mirror;$('#pDel').onclick=delSel;
-    {const row=document.createElement('div');row.className='row';row.innerHTML=`<button class="btn" id="pDup" title="Új példány ugyanezekkel a beállításokkal">⧉ Duplikálás <kbd>D</kbd></button><label class="check small"><input type="checkbox" id="pXray" ${p.xray?'checked':''}> Röntgen</label>`;pr.appendChild(row);
-      $('#pDup').onclick=()=>duplicate(p);$('#pXray').onchange=e=>{pushUndo();if(e.target.checked)p.xray=true;else delete p.xray;commit(true);};}
-    {const row=document.createElement('div');row.className='row';const own=!(p.type in PARTS);row.innerHTML=own?'<button class="btn" id="pEditDef">✎ Alkatrész szerkesztése</button>':'<button class="btn" id="pCopyDef" title="A beépített leírásból saját, szerkeszthető alkatrész">Másolat saját alkatrészként</button>';pr.appendChild(row);
+    const more=$('#pMore');
+    {$('#pDup').onclick=()=>duplicate(p);$('#pXray').onchange=e=>{pushUndo();if(e.target.checked)p.xray=true;else delete p.xray;commit(true);};}
+    {const row=more;const own=!(p.type in PARTS);row.innerHTML=own?'<button class="btn" id="pEditDef">✎ Alkatrész szerkesztése</button>':'<button class="btn" id="pCopyDef" title="A beépített leírásból saját, szerkeszthető alkatrész">Másolat saját alkatrészként</button>';pr.appendChild(row);
       if(own)$('#pEditDef').onclick=()=>openEditor(editorHost,{type:p.type});else $('#pCopyDef').onclick=()=>openEditor(editorHost,{from:PARTS[p.type]});}
-    {const row=document.createElement('div');row.className='row';row.innerHTML='<button class="btn" id="pToAuto" title="Az alkatrész kézi bekötését kapcsolatokká alakítja, így mozgatáskor követi">Bekötés automatikusra</button>';pr.appendChild(row);
+    {more.insertAdjacentHTML('beforeend','<button class="btn" id="pToAuto" title="Az alkatrész kézi bekötését kapcsolatokká alakítja, így mozgatáskor követi">Bekötés automatikusra</button>');
       $('#pToAuto').onclick=()=>{if(!manualToAuto(p.id))flashMsg('Ennek az alkatrésznek nincs kézi bekötése');};}
     if(isMcu(p)){const ts=Object.entries(DEFS).filter(([k,d])=>d.mcu&&k!==p.type);if(ts.length){const row=document.createElement('div');row.className='row';
       row.innerHTML=`<label for="pSwap">Csere</label><select id="pSwap" style="flex:1">${ts.map(([k,d])=>`<option value="${k}">${esc(d.name)}</option>`).join('')}</select><button class="btn" id="pSwapGo" title="Másik vezérlőre cseréli; a kapcsolatok megmaradnak, a GPIO-k újra kiosztódnak">Csere</button>`;pr.appendChild(row);
@@ -771,13 +777,13 @@ function renderLeft0(){
         :`<span class="help">Csatlakozó: külső alkatrész (motor, szervó, szenzor) kábele dugható bele. A lábnevek a feliratokhoz valók.</span>`;
       pr.appendChild(row);
       if(!o&&offs.length)$('#pPlugGo').onclick=()=>{const x=D.parts.find(y=>y.id===$('#pPlugTo').value);if(!x)return;pushUndo();x.plug=p.id;const sp=DEFS[p.type].def.socket;if(sp.names&&!p.props[sp.names])p.props[sp.names]=socketProps(DEFS[p.type].def,x)[sp.names];commit();};}
-    if(p.type==='button'){const row=document.createElement('div');row.className='row';row.innerHTML='<button class="btn" id="pAuto">A → GPIO, B → GND</button>';pr.appendChild(row);
+    if(p.type==='button'){more.insertAdjacentHTML('afterbegin','<button class="btn" id="pAuto" title="Kapcsolatok: az A láb szabad GPIO-ra, a B láb a földre">A → GPIO, B → GND</button>');
       $('#pAuto').onclick=()=>{const a=p.id+'.A1',b=p.id+'.B1';pushUndo();if(!D.links.some(l=>l.a===a))D.links.push({id:'l'+(D.seq++),a,b:'GPIO'});if(!D.links.some(l=>l.a===b))D.links.push({id:'l'+(D.seq++),a:b,b:'GND'});commit();};}
   } else if(isGroup()&&gSize(ui.sel)){const g=ui.sel;
     pr.innerHTML=`<div class="small"><b>${g.parts.size}</b> alkatrész, <b>${g.bridges.size}</b> kézi híd, <b>${g.wires.size}</b> vezeték kijelölve</div>
       <div class="small muted">Húzással együtt mozognak. Shift+kattintás: hozzáadás/elvétel.</div>
-      <div class="row"><button class="btn" id="gRot">↻ Forgatás <kbd>R</kbd></button><button class="btn" id="gMir">⇋ Tükrözés <kbd>M</kbd></button><button class="btn danger" id="gDel">Törlés</button></div>
-      ${g.parts.size?'<div class="row"><button class="btn" id="gAuto">Bekötés automatikusra</button><button class="btn" id="gXray">Röntgen be/ki</button></div>':''}`;
+      <div class="pr-acts">${ACT('gRot','rotate','Forgatás','R')}${ACT('gMir','mirror','Tükrözés','M')}${ACT('gDel','trash','Törlés','Del','',' danger')}</div>
+      ${g.parts.size?'<div class="pr-more"><button class="btn" id="gAuto">Bekötés automatikusra</button><button class="btn" id="gXray">Röntgen be/ki</button></div>':''}`;
     if($('#gXray'))$('#gXray').onclick=()=>{pushUndo();const ps=D.parts.filter(p=>g.parts.has(p.id));const on=!ps.every(p=>p.xray);ps.forEach(p=>{if(on)p.xray=true;else delete p.xray;});commit(true);};
     $('#gRot').onclick=rotate;$('#gMir').onclick=mirror;$('#gDel').onclick=delSel;
     if($('#gAuto'))$('#gAuto').onclick=()=>{if(!manualToAuto(new Set(g.parts)))flashMsg('A kijelölésnek nincs kézi bekötése');};

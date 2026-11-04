@@ -618,5 +618,16 @@ details.sig .row select,details.sig .row input{flex:1;min-width:0;}
   .sheet-close .ic{width:22px;height:22px}
 }
 /* keskenyebb asztali képernyőn a nézetmódok csak ikonnal (a súgó megmondja, melyik mi) */
-@media (max-width:1500px){.vmodes .btn{font-size:0;gap:0;padding:6px}.vmodes .btn .ic{width:16px;height:16px}}
+
 @media (max-width:1000px){#pwSwap,#pwUndock{display:none}}
+/* nézetsáv: balra a nézetek, jobbra a panel megjelenítése; szűk helyen a megjelenítés csak ikonnal */
+.vbar{container-type:inline-size;container-name:vbar;flex-wrap:nowrap}
+@container vbar (max-width:760px){.vmodes .btn{font-size:0;gap:0;padding:6px}.vmodes .btn .ic{width:16px;height:16px}}
+.app.keys .vbar [data-kbd]::after{top:auto;bottom:-11px;right:50%;transform:translateX(50%)}
+.vbar{overflow:visible}
+/* tulajdonságok: a fő műveletek rácsban, a többi gomb egy sorfolyamban */
+.pr-acts{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:6px}
+.pr-acts .btn{justify-content:flex-start;padding:6px 8px}
+.pr-acts .btn .ic{width:15px;height:15px}
+.pr-more{display:flex;flex-wrap:wrap;gap:6px}
+.pr-more:empty{display:none}
