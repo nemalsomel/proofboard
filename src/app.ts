@@ -17,6 +17,10 @@ import { solve } from './engine/solve';
 import { buildLayout, planCuts } from './engine/board';
 import { pinLabelPositions } from './core/labels';
 import { evalExpr, parseExpr, pinRef, varsOf } from './core/logic';
+import { DEFS, syncDefs, penv, hasPress, isOff, isMcu } from './engine/defs';
+import { xf, xv, ixf, placedPins as gpins } from './engine/geometry';
+import { analyze as analyzeNet, layoutOf, pinLabel } from './engine/netlist';
+import { hasCap, hasAdc, SPECIAL_CAPS, fnWant, fnCaps, mcuMux, capLabel, fnName, pinFns, fnPenalty, gpioPenalty, gpioFits, GPIO_MODES, gpioModeOk, gpioDefault } from './engine/mcu';
 
 const STORE_KEY = 'proofboard.design.v1';
 const $=s=>document.querySelector(s);
@@ -27,41 +31,6 @@ const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const ledLevel=I=>Math.sqrt(Math.max(0,Math.min(1,I/0.015)));
 const rgba=(hex,a)=>{const n=parseInt(hex.slice(1),16);return`rgba(${n>>16},${(n>>8)&255},${n&255},${a})`;};
 const ROLEC={out:'#e8590c',c:'#868e96',cp:'#e03131',cn:'#1f2328',col:'#5c666e',base:'#2563eb',emit:'#1f2328',vin:'#d6336c',pout:'#e8590c',chg:'#e8590c',sig:'#2563eb',adc:'#0ca678',nc:'#adb5bd',j:'#aeb5bb',s:'#1f2328',g:'#2563eb',d:'#868e96',A:'#2563eb',B:'#d97706',an:'#e03131',ka:'#1f2328',gnd:'#1f2328',p33:'#e03131',pwr:'#be4bdb',gpio:'#2563eb',misc:'#868e96',r:'#868e96',h:'#868e96',bp:'#e03131',bn:'#1f2328'};
-const DEFS=compileAll(PARTS);
-/** A saját alkatrészek fordítása a beépítettek mellé (a terv `customParts` mezőjéből). */
-function syncDefs(custom){
-  for(const k of Object.keys(DEFS))if(!(k in PARTS))delete DEFS[k];
-  for(const [k,d] of Object.entries(custom||{})){try{DEFS[k]=compilePart(k,{cat:'Saját',...d});}catch(e){console.warn('Saját alkatrész kihagyva:',k,e);}}
-}
-const penv=p=>penvD(DEFS[p.type].def,p);
-const hasPress=p=>(DEFS[p.type].def.controls||[]).some(c=>c.kind==='press');
-const hasCap=(q,c)=>!!(q&&q.caps&&q.caps.includes(c));
-/** Mikrovezérlő-lap (Pico, ESP32…): a GPIO-, GND- és tápcélok forrása. */
-const isMcu=p=>!!(p&&DEFS[p.type]&&DEFS[p.type].mcu);
-/** Az ADC-képes GPIO-n analóg forrás (adc szerepű láb) is van → alapból analóg mód. */
-const hasAdc=q=>hasCap(q,'adc')||hasCap(q,'adc2');
-/** Különleges GPIO-képességek: az útvonalkereső kerüli őket, használatuk figyelmeztetés (a lábankénti szöveg a leírás meta.pinNotes-ában). */
-const SPECIAL_CAPS=[['strap','indítási (strapping) láb: bekapcsoláskor számít a szintje, rossz szintnél a lap nem indul el vagy letöltő módba kerül. Ha lehet, válassz másik GPIO-t.'],
-  ['uart0','a soros port (USB-soros átalakító) használja: feltöltéskor és soros kiíráskor zavarhat. Ha lehet, válassz másik GPIO-t.'],
-  ['usb','a beépített USB használja. Ha lehet, válassz másik GPIO-t.'],
-  ['led','a lap beépített LED-je is ezen a lábon van.']];
-/* Buszfunkciók: a periféria lába (fn: 'spi.mosi'…) a vezérlő megfelelő képességű GPIO-jára (caps: 'spi0.mosi'…) kerüljön.
-   A periféria UART RX-e a vezérlő TX-ére megy, és fordítva. 'matrix' vezérlőn (ESP32) bármely láb kiosztható, a képesség az alapértelmezés. */
-const FN_WANT={'uart.rx':'uart.tx','uart.tx':'uart.rx'};
-const fnWant=fn=>FN_WANT[fn]||fn;
-const fnCaps=(q,fn)=>{const [bus,sig]=fnWant(fn).split('.');const re=new RegExp('^'+bus+'\\d+\\.'+sig+'$');return (q&&q.caps||[]).filter(c=>re.test(c));};
-const mcuMux=p=>((DEFS[p.type].def.model||[]).find(e=>e.el==='mcu')||{}).mux||'fixed';
-const capLabel=c=>{const m=/^(i2c|spi|uart|pwm)(\d*)\.([a-z]+)$/.exec(c);return m?`${m[1].toUpperCase()}${m[2]} ${m[3].toUpperCase()}`:c.toUpperCase();};
-const fnName=fn=>capLabel(fn);
-/** A vezérlőláb funkciói olvasható formában (busz, PWM, DAC, ADC). */
-const pinFns=q=>[...(hasCap(q,'adc')?['ADC']:hasCap(q,'adc2')?['ADC2']:[]),...(q.caps||[]).filter(c=>c.includes('.')||c==='dac').map(capLabel),...(hasCap(q,'in')?['csak bemenet']:[])];
-const fnPenalty=(fn,q)=>!fn||!q||fnCaps(q,fn).length?0:mcuMux(q.part)==='matrix'?10:16;
-const gpioPenalty=q=>q&&SPECIAL_CAPS.some(x=>hasCap(q,x[0]))?10:0;
-/** Szabad GPIO-kapcsolatra alkalmas láb: analóghoz ADC1 kell, digitálishoz nem lehet csak bemeneti. */
-const gpioFits=(q,an)=>!!q&&isMcu(q.part)&&q.role==='gpio'&&(an?hasCap(q,'adc'):!hasCap(q,'in'));
-/** A GPIO-mód a láb képességei szerint választható-e: csak bemeneti lábon nincs kimenet, felhúzás nélkülin nincs belső felhúzás. */
-function gpioModeOk(q,m){if(m==='out_high'||m==='out_low'||m==='pwm')return !hasCap(q,'in');if(m==='pullup'||m==='pulldown')return !hasCap(q,'nopull');if(m==='adc')return hasAdc(q);return m==='float';}
-function gpioDefault(q,A){const qs=A&&A.netPins.get(q.net)||[];return hasAdc(q)&&qs.some(x=>x.role==='adc')?'adc':hasCap(q,'nopull')?'float':'pullup';}
 const WCOL=[['#1c7ed6','kék'],['#e03131','piros'],['#212529','fekete'],['#f59f00','sárga'],['#2f9e44','zöld'],['#f1f3f5','fehér'],['#e8590c','narancs']];
 const TOOLS=[['select','Kijelölés','V'],['bridge','Forrasztóhíd','B'],['wire','Vezeték','W'],['link','Kapcsolat','C'],['cut','Csíkvágás','K'],['note','Jegyzet','J'],['erase','Törlés','E'],['pan','Mozgatás','H']];
 const normCutList=x=>(Array.isArray(x)?x:[]).filter(c=>Array.isArray(c)&&c.length>=2).map(c=>[Math.round(+c[0]),Math.round(+c[1]),+c[2]?1:0]).filter(c=>c.every(Number.isFinite));
@@ -116,15 +85,10 @@ function presetMacropad(){
 }
 
 /* ---------- Geometria ---------- */
-function xf(p,lr,lc){let r=lr,c=p.mir?-lc:lc;for(let k=0;k<(p.rot&3);k++){const t=r;r=c;c=-t;}return[p.r+r,p.c+c];}
-function xv(p,lr,lc){let r=lr,c=p.mir?-lc:lc;for(let k=0;k<(p.rot&3);k++){const t=r;r=c;c=-t;}return[r,c];}
-function ixf(p,R,C){let r=R-p.r,c=C-p.c;const n=(4-(p.rot&3))&3;for(let k=0;k<n;k++){const t=r;r=c;c=-t;}if(p.mir)c=-c;return[r,c];}
-function gpins(p){return DEFS[p.type].pins(p).map(pn=>{const[r,c]=xf(p,pn.lr,pn.lc);return{...pn,r,c,part:p};});}
 const inb=(r,c)=>r>=0&&c>=0&&r<D.board.rows&&c<D.board.cols;
 const secStart=r=>r-(r%D.board.sec);
 /* Panel-elrendezés (csíkdarabok a szekciók és a csíkvágások szerint), gyorsítótárazva. */
-let layK='',layV=null;
-function LAY(){const cu=[...(D.cuts||[]),...((D.auto&&D.auto.cuts)||[])],k=D.board.rows+'x'+D.board.cols+'/'+D.board.sec+'|'+cu.map(x=>x.join(',')).join(';');if(k!==layK){layK=k;layV=buildLayout(D.board,cu);}return layV;}
+const LAY=()=>layoutOf(D);
 const autoCutOn=()=>D.settings.autoCut??(D.board.sec>=D.board.rows);
 /** A lyuk csíkdarabja: [kezdő sor, záró sor]. */
 const segOf=(r,c)=>{const L=LAY(),s=L.segs[L.cell(r,c)];return s;};
@@ -139,37 +103,9 @@ function partFits(p){const g=gpins(p);
 function offPinAt(r,c){for(const p of D.parts){if(!isOff(p))continue;for(const q of gpins(p))if(q.r===r&&q.c===c)return q;}return null;}
 
 /* ---------- Netlista ---------- */
-function analyze(press){
-  const B=D.board,LY=LAY(),N=LY.N,SR=0;
-  const sid=(r,c)=>LY.cell(r,c);
-  const parts=D.parts.map(p=>[p,gpins(p)]);let off=0;for(const [,gp] of parts)for(const q of gp)if(!inb(q.r,q.c))off++;
-  const par=new Int32Array(N+off);for(let i=0;i<N+off;i++)par[i]=i;
-  const find=x=>{while(par[x]!==x){par[x]=par[par[x]];x=par[x];}return x;};
-  const uni=(a,b)=>{a=find(a);b=find(b);if(a!==b)par[Math.max(a,b)]=Math.min(a,b);};
-  const AB=D.auto.bridges.filter(b=>!autoHidden(b[4])),AW=D.auto.wires.filter(w=>!autoHidden(w.links));
-  for(const b of [...D.bridges,...AB]) if(inb(b[0],b[1])&&inb(b[2],b[3])) uni(sid(b[0],b[1]),sid(b[2],b[3]));
-  const pins=[],byPart=new Map();let k=N;
-  for(const [p,gp] of parts){
-    const m={};
-    for(const q of gp){q.on=inb(q.r,q.c);q.s=q.on?sid(q.r,q.c):k++;m[q.id]=q;pins.push(q);} // panelon kívüli láb: saját, magányos csomópont
-    byPart.set(p.id,{pins:gp,map:m,out:gp.some(q=>!q.on)});
-    for(const [a,b] of DEFS[p.type].internal(p)) uni(m[a].s,m[b].s);
-    if(press&&ui.pressed[p.id])for(const c of DEFS[p.type].def.controls||[])if(c.kind==='press')for(const [a,b] of c.closes)if(m[a]&&m[b])uni(m[a].s,m[b].s);
-  }
-  // vezetékek: lyuk–lyuk, vagy kábel egy panelon kívüli kivezetéshez
-  const offAt=new Map();for(const q of pins)if(!q.on)offAt.set(q.r+':'+q.c,q.s);
-  const node=e=>inb(e[0],e[1])?sid(e[0],e[1]):offAt.get(e[0]+':'+e[1]);
-  for(const w of [...D.wires,...AW]){const x=node(w.a),y=node(w.b);if(x!=null&&y!=null)uni(x,y);}
-  for(const q of pins) q.net=find(q.s);
-  const netPins=new Map(),netSecs=new Map();
-  for(const q of pins){if(!netPins.has(q.net))netPins.set(q.net,[]);netPins.get(q.net).push(q);}
-  for(let s=0;s<N;s++){const r=find(s);netSecs.set(r,(netSecs.get(r)||0)+1);}
-  return{SR,N,find,sid,pins,byPart,netPins,netSecs};
-}
-const pinLabel=q=>isMcu(q.part)?`${q.part.label}.${q.name}`:`${q.part.label}.${q.id}`;
+function analyze(press){return analyzeNet(D,{pressed:press?p=>!!ui.pressed[p.id]:undefined,hidden:autoHidden});}
 
 /* ---------- Áramkör-szimuláció (csomóponti analízis, szakaszonként lineáris diódák) ---------- */
-const GPIO_MODES=[['pullup','be, felhúzva'],['pulldown','be, lehúzva'],['float','be, lebegő'],['adc','analóg (ADC)'],['out_high','ki: 1'],['out_low','ki: 0'],['pwm','ki: PWM']];
 function gpioMode(p,id,q,A){const m=D.gpio[p.id+'.'+id];if(!q)return m||'pullup';return m&&gpioModeOk(q,m)?m:gpioDefault(q,A);}
 const RBE=20,RCE=1; // NPN: bázis-emitter és telítési soros ellenállás (Ω)
 /* PWM: időszeletekre bontott szimuláció. Az azonos frekvenciájú, egyszerre induló PWM-kimenetek
