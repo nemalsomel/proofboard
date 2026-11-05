@@ -11,7 +11,7 @@ import { compileAll, compilePart, penvD } from './core/compile';
 import { hasErrors, validatePartDef } from './core/validate';
 import { exportLibrary, importLibrary, typeKeyFor, matchPart } from './core/library';
 import { EXAMPLES, EX_CATS } from './ui/examples';
-import { openEditor } from './ui/editor';
+import { openEditor, restoreParked } from './ui/editor';
 import { LEDC, PARTS, PICO_NAMES, picoRole } from './parts/builtin';
 import { solve } from './engine/solve';
 import { buildLayout, planCuts } from './engine/board';
@@ -1339,9 +1339,10 @@ function partShow(on){on=!!on&&!!partClose;ui.part=on;$('#partView').hidden=!on;
   document.querySelectorAll('[data-work]').forEach(b=>{const o=!on&&b.dataset.work===ui.work;b.classList.toggle('on',o);b.setAttribute('aria-pressed',String(o));});
   if(!on){resize();draw();}}
 editorHost.view={
-  open(el,title,onClose){$('#partView').replaceChildren(el);partClose=onClose;$('#partTab').hidden=false;$('#partGo').textContent=title;partShow(true);if(MOB.matches)sheet('');log('Alkatrész-szerkesztő: '+title.replace(/^Alkatrész: /,''));},
+  open(el,title,onClose,show=true){$('#partView').replaceChildren(el);partClose=onClose;$('#partTab').hidden=false;$('#partGo').textContent=title;partShow(show);if(!show)return;if(MOB.matches)sheet('');log('Alkatrész-szerkesztő: '+title.replace(/^Alkatrész: /,''));},
   title(t){$('#partGo').textContent=t;},
   close(){$('#partView').replaceChildren();$('#partTab').hidden=true;partClose=null;partShow(false);},
+  hide(){partShow(false);toast('A nem mentett alkatrész a fülén vár: kattints rá a folytatáshoz.');},
   visible:()=>!!ui.part,
 };
 $('#partGo').onclick=()=>partShow(true);
@@ -1514,4 +1515,5 @@ function statusText(){return $('#status').textContent;}
   window.addEventListener('resize',()=>draw());
   splitDir(!!uiPref().splitV);
   applyLayout(LAY_S.cur,false);
+  restoreParked(editorHost); // a háttérben hagyott, nem mentett alkatrész füle
 })();

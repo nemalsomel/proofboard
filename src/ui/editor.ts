@@ -9,7 +9,6 @@ import { gateSvg, gatesToText, tableVars, toggleCell, truthTable, TABLE_MAX_VARS
 import { fmtSI, parseSI } from '../core/expr';
 import { BUS_FNS, hasErrors, validatePartDef, type Problem } from '../core/validate';
 import type { ModelEl, PartDef, Prim } from '../core/schema';
-import { icon } from './icons';
 
 export interface EditorHost {
   builtin: Record<string, PartDef>;
@@ -24,19 +23,35 @@ export interface EditorHost {
   roleColor(role: string): string;
   /** A szerkesztő helye (5.6): középső nézet a gazdánál, fül a nézetsávban. `onClose`: a fül × gombja. */
   view: {
-    open(el: HTMLElement, title: string, onClose: () => void): void;
+    open(el: HTMLElement, title: string, onClose: () => void, show?: boolean): void;
     title(t: string): void;
     close(): void;
+    /** Háttérbe tétel: a nézet eltűnik, a fül marad (mint a Panel gombra váltva). */
+    hide(): void;
     /** Látszik-e most (a nézetsávban másik nézetre váltva háttérben marad). */
     visible(): boolean;
   };
 }
 
 /** A nyitott szerkesztő (egyszerre egy); új megnyitáskor az előző piszkozatként bezárul. */
-let active: { close(keep?: boolean): void } | null = null;
+let active: { close(keep?: boolean, force?: boolean): void } | null = null;
 /** Nyitva van-e az Alkatrész-szerkesztő (akár háttérben). */
 export const editorOpen = (): boolean => !!active;
-export function closeEditor(): void { active?.close(); }
+export function closeEditor(): void { active?.close(true, true); }
+/** A háttérben hagyott, nem mentett szerkesztés piszkozatkulcsa: újratöltés után a fül visszajön. */
+const PARKED_KEY = 'proofboard.editor.parked';
+const parked = (): string | null => { try { return localStorage.getItem(PARKED_KEY); } catch { return null; } };
+function setParked(k: string | null): void { try { if (k) localStorage.setItem(PARKED_KEY, k); else localStorage.removeItem(PARKED_KEY); } catch { /* tárhely nélkül */ } }
+/** Induláskor: a háttérben hagyott, nem mentett szerkesztés füle visszakerül a nézetsávba (a szerkesztő háttérben nyílik). */
+export function restoreParked(host: EditorHost): void {
+  const k = parked(); if (!k || active) return;
+  if (!drafts()[k]) { setParked(null); return; }
+  let opts: { type?: string; from?: PartDef } | null = null;
+  if (k === 'new') opts = {};
+  else if (k.startsWith('type:') && host.custom()[k.slice(5)]) opts = { type: k.slice(5) };
+  else if (k.startsWith('from:')) { const d = Object.values(host.builtin).find(x => x.name === k.slice(5)); if (d) opts = { from: d }; }
+  if (opts) openEditor(host, opts, false); else setParked(null);
+}
 
 /** Saját alkatrészeknél választható lábszerepek. */
 export const ROLES: Array<[string, string]> = [
@@ -297,8 +312,8 @@ function putDraft(k: string, d: Draft | null): void {
 const SECTIONS: Array<[string, string]> = [['basic', 'Alapadatok'], ['pins', 'Lábak'], ['body', 'Test'], ['model', 'Villamos modell'], ['ctl', 'Vezérlő']];
 
 /** A szerkesztő megnyitása. `type`: meglévő saját alkatrész; `from`: kiindulási leírás (pl. beépített másolata). */
-export function openEditor(host: EditorHost, opts: { type?: string; from?: PartDef } = {}): void {
-  active?.close();
+export function openEditor(host: EditorHost, opts: { type?: string; from?: PartDef } = {}, show = true): void {
+  active?.close(true, true);
   const existing = opts.type ? host.custom()[opts.type] : undefined;
   const start = existing || opts.from;
   const draftKey = opts.type ? 'type:' + opts.type : opts.from ? 'from:' + opts.from.name : 'new';
@@ -341,7 +356,6 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         <span class="sp"></span>
         <button class="btn ghost" data-act="discard" title="A nem mentett módosítások elvetése, vissza a kiinduló állapotra" hidden>Elvetés</button>
         ${existing ? '<button class="btn ghost danger" data-act="delete" title="Az alkatrész törlése a könyvtárból">Törlés</button>' : ''}
-        <button class="btn icon ghost" data-act="close" aria-label="Bezárás" title="Bezárás (Esc); a nem mentett módosítások piszkozatként megmaradnak">${icon('close')}</button>
         <button class="btn primary" data-act="save" title="${existing ? 'Mentés a saját könyvtárba' : 'Mentés a saját könyvtárba, és a lerakás indítása a panelon'}">Mentés</button>
       </header>
       <div class="pe-body">
@@ -355,7 +369,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       </div>
     </div>`;
   const titleOf = () => 'Alkatrész: ' + ((form && tab !== 'json' ? form.name : jsonDef?.name) || (existing ? existing.name : 'új'));
-  host.view.open(back, titleOf(), () => close());
+  host.view.open(back, titleOf(), () => close(), show);
   const $ = <T extends HTMLElement = HTMLElement>(ref: string) => back.querySelector(`[data-ref="${ref}"]`) as T;
   const left = $('left'), cv = $<HTMLCanvasElement>('cv'), probsEl = $('probs');
   const prevFocus = document.activeElement as HTMLElement | null;
@@ -387,14 +401,27 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     return ps;
   };
 
-  /** Bezárás: a nem mentett állapot piszkozatként megmarad (az Esc sem dob el semmit). */
-  const close = (keep = true) => {
+  /**
+   * Bezárás (× vagy Esc): a nem mentett állapot piszkozatként megmarad. Ha van nem mentett módosítás és a szerkesztő
+   * látszik, csak háttérbe kerül – a fül marad, onnan egy kattintással visszahozható (újratöltés után is). A háttérben
+   * lévő fül × gombja, illetve `force` már bezárja (a piszkozat akkor is megmarad: az Új alkatrész folytatja).
+   */
+  const close = (keep = true, force = false) => {
     if (tab === 'json') { const ta = left.querySelector<HTMLTextAreaElement>('#pe_json'); if (ta) jsonText = ta.value; }
-    if (keep && snapshot() !== clean) putDraft(draftKey, { tab, form, jsonText: tab === 'json' ? jsonText : '' });
-    ro.disconnect(); host.view.close(); document.removeEventListener('keydown', onDocKey, true); active = null;
+    const dirty = snapshot() !== clean;
+    if (keep && dirty) putDraft(draftKey, { tab, form, jsonText: tab === 'json' ? jsonText : '' });
+    if (keep && dirty && !force && host.view.visible()) { setParked(draftKey); host.view.hide(); return; }
+    if (parked() === draftKey) setParked(null); // teljes bezárás: a fül nem jön vissza (a piszkozat igen, az Új alkatrész folytatja)
+    ro.disconnect(); host.view.close(); document.removeEventListener('keydown', onDocKey, true); window.removeEventListener('pagehide', onPageHide); active = null;
     if (prevFocus && document.contains(prevFocus)) prevFocus.focus?.();
   };
   active = { close };
+  /** Oldalelhagyáskor (újratöltés, bezárás) a nem mentett szerkesztés piszkozat lesz, és a füle legközelebb visszajön. */
+  const onPageHide = () => {
+    if (tab === 'json') { const ta = left.querySelector<HTMLTextAreaElement>('#pe_json'); if (ta) jsonText = ta.value; }
+    if (snapshot() !== clean) { putDraft(draftKey, { tab, form, jsonText: tab === 'json' ? jsonText : '' }); setParked(draftKey); }
+  };
+  window.addEventListener('pagehide', onPageHide);
   /** Esc: bezárás, ha a szerkesztő látszik, és nem egy párbeszédablakban vagy menüben vagyunk. */
   const onDocKey = (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || !host.view.visible()) return;
@@ -925,7 +952,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (act === 'stayjson') { pending = null; render(); return; }
     if (act === 'discard') {
       if (Date.now() - confirmDiscard > 3000) { confirmDiscard = Date.now(); b.textContent = 'Biztos? Kattints újra'; setTimeout(() => { b.textContent = 'Elvetés'; }, 3000); return; }
-      confirmDiscard = 0; b.textContent = 'Elvetés'; b.hidden = true; putDraft(draftKey, null); initial(); sel = -1; selModel = -1; clean = snapshot(); render(); return;
+      confirmDiscard = 0; b.textContent = 'Elvetés'; b.hidden = true; putDraft(draftKey, null); if (parked() === draftKey) setParked(null); initial(); sel = -1; selModel = -1; clean = snapshot(); render(); return;
     }
     if (act === 'gen' && form) {
       const n = Math.max(1, Math.min(40, +(left.querySelector<HTMLInputElement>('#pe_gn')!.value) || 1));

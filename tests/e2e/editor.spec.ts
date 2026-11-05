@@ -63,7 +63,10 @@ test('hibás leírás nem menthető, a hibát érthetően jelzi', async ({ page 
   await page.fill('#pe_json', '{ nem json');
   await page.click('[data-act="applyjson"]');
   await expect(probs).toContainText('Hibás JSON');
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape'); // nem mentett: háttérbe kerül, a fül marad
+  await expect(page.locator('#partView')).toBeHidden();
+  await expect(page.locator('#partTab')).toBeVisible();
+  await page.click('#partX'); // háttérből bezárva eltűnik
   await expect(page.locator('.pe')).toHaveCount(0);
 });
 
@@ -107,6 +110,8 @@ test('Esc nem dobja el a szerkesztést; az Elvetés visszaállítja a kiinduló 
   await page.fill('#pe_gnames', 'A,B,C');
   await page.click('[data-act="gen"]');
   await page.keyboard.press('Escape');
+  await expect(page.locator('#partView')).toBeHidden();
+  await page.click('#partX');
   await expect(page.locator('.pe')).toHaveCount(0);
   await page.click('#bNewPart');
   await expect(page.locator('#pe_name')).toHaveValue('Piszkozat modul');
@@ -186,9 +191,23 @@ test('5.6: a szerkesztő középső nézet, fül a nézetsávban; háttérbe teh
   // szakaszugrás
   await page.click('.pe-nav [data-jump="model"]');
   await expect(page.locator('#pe_s_model')).toBeInViewport();
+  // fejlécben nincs külön bezáró; a fül × nem mentett módosításnál csak háttérbe tesz, a fül marad
+  await expect(page.locator('.pe [data-act="close"]')).toHaveCount(0);
   await page.click('#partX');
+  await expect(page.locator('#partView')).toBeHidden();
+  await expect(page.locator('#partTab')).toBeVisible();
+  // újratöltés után is visszajön a fül (háttérben), és onnan folytatható
+  await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
+  await expect(page.locator('#partTab')).toBeVisible();
+  await expect(page.locator('#partView')).toBeHidden();
+  await page.click('#partGo');
+  await expect(page.locator('#pe_name')).toHaveValue('Szenzor');
+  await page.click('#workSw [data-work="board"]');
+  await page.click('#partX'); // háttérből: bezárja, a piszkozat megmarad
   await expect(page.locator('#partTab')).toBeHidden();
-  await expect(page.locator('.pe')).toHaveCount(0);
-  await page.click('#bNewPart'); // piszkozatként megmaradt
+  await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
+  await expect(page.locator('#partTab')).toBeHidden();
+  await page.click('[data-ltab="lib"]');
+  await page.click('#bNewPart');
   await expect(page.locator('#pe_name')).toHaveValue('Szenzor');
 });
