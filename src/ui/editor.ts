@@ -42,10 +42,16 @@ export interface EditorHost {
     /** Ez a szerkesztő látszik-e most. */
     visible(id: string): boolean;
   };
+  /** A látható szerkesztő visszavonási állapota változott (a fejléc gombjai ezt mutatják). */
+  histChanged?(): void;
 }
 
 /** A nyitott szerkesztők piszkozatkulcs szerint: több alkatrész is szerkeszthető egyszerre, mindegyik saját füllel. */
-const OPEN = new Map<string, { close(keep?: boolean, force?: boolean): void }>();
+/** A szerkesztő saját visszavonása, a gazda fejlécének gombjaihoz. */
+export interface EditorHist { canUndo: boolean; canRedo: boolean; go(redo: boolean): void }
+const OPEN = new Map<string, { close(keep?: boolean, force?: boolean): void; hist(): EditorHist | null }>();
+/** A látható (előtérben lévő) szerkesztő visszavonása; ha nincs ilyen, null: a fejléc a panelé. */
+export function editorHistory(): EditorHist | null { for (const e of OPEN.values()) { const h = e.hist(); if (h) return h; } return null; }
 /** Nyitva van-e Alkatrész-szerkesztő (akár háttérben). */
 export const editorOpen = (): boolean => OPEN.size > 0;
 export function closeEditor(): void { for (const e of [...OPEN.values()]) e.close(true, true); }
@@ -386,10 +392,8 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (!same) H.push(hSnap);
     hSnap = s; hGest = gest; hEl = typing ? ae : null; hAt = Date.now();
   }
-  function histUI(): void {
-    const u = acts.querySelector<HTMLButtonElement>('[data-act="undo"]'), r = acts.querySelector<HTMLButtonElement>('[data-act="redo"]');
-    if (u) u.disabled = !H.canUndo || tab === 'json'; if (r) r.disabled = !H.canRedo || tab === 'json';
-  }
+  /** A fejléc visszavonás-gombjai a látható szerkesztőét mutatják. */
+  function histUI(): void { host.histChanged?.(); }
   function histGo(redo: boolean): void {
     if (!form || tab === 'json') return;
     track();
@@ -424,7 +428,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   /** A fül gombjai a nézetsávban (a gazda a látható szerkesztő füléhez teszi): Elvetés, Mentés. */
   const acts = document.createElement('span');
   acts.className = 'pe-acts';
-  acts.innerHTML = `<button class="btn icon ghost" data-act="undo" aria-label="Visszavonás" title="Visszavonás (Ctrl+Z)" disabled>${icon('undo')}</button><button class="btn icon ghost" data-act="redo" aria-label="Újra" title="Újra (Ctrl+Y)" disabled>${icon('redo')}</button><button class="btn icon" data-act="discard" aria-label="Elvetés" title="Elvetés: a nem mentett módosítások eldobása, vissza a kiinduló állapotra" hidden>${icon('trash')}</button><button class="btn icon" data-act="save" aria-label="Mentés" title="${existing ? 'Mentés a saját könyvtárba (Ctrl+S)' : 'Mentés a saját könyvtárba, és a lerakás indítása a panelon (Ctrl+S)'}">${icon('disk')}</button>`;
+  acts.innerHTML = `<button class="btn icon" data-act="discard" aria-label="Elvetés" title="Elvetés: a nem mentett módosítások eldobása, vissza a kiinduló állapotra" hidden>${icon('trash')}</button><button class="btn icon" data-act="save" aria-label="Mentés" title="${existing ? 'Mentés a saját könyvtárba (Ctrl+S)' : 'Mentés a saját könyvtárba, és a lerakás indítása a panelon (Ctrl+S)'}">${icon('disk')}</button>`;
   const titleOf = () => 'Alkatrész: ' + ((form && tab !== 'json' ? form.name : jsonDef?.name) || (existing ? existing.name : 'új'));
   host.view.open(draftKey, back, titleOf(), () => close(), show, acts);
   const $ = <T extends HTMLElement = HTMLElement>(ref: string) => back.querySelector(`[data-ref="${ref}"]`) as T;
@@ -522,7 +526,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     ro.disconnect(); OPEN.delete(draftKey); host.view.close(draftKey); document.removeEventListener('keydown', onDocKey, true); document.removeEventListener('pointerdown', onGest, true); document.removeEventListener('keydown', onGest, true); window.removeEventListener('pagehide', onPageHide);
     if (prevFocus && document.contains(prevFocus)) prevFocus.focus?.();
   };
-  OPEN.set(draftKey, { close });
+  OPEN.set(draftKey, { close, hist: () => (host.view.visible(draftKey) ? { canUndo: H.canUndo && !!form && tab !== 'json', canRedo: H.canRedo && !!form && tab !== 'json', go: histGo } : null) });
   /** Oldalelhagyáskor (újratöltés, bezárás) a nem mentett szerkesztés piszkozat lesz, és a füle legközelebb visszajön. */
   const onPageHide = () => {
     if (tab === 'json') { const ta = left.querySelector<HTMLTextAreaElement>('#pe_json'); if (ta) jsonText = ta.value; }
@@ -1049,7 +1053,6 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     const act = b.dataset.act;
     if (act === 'close') return close();
     if (act === 'toform' && pending) { form = pending.form; tab = pending.to; pending = null; histReset(); render(); return; }
-    if (act === 'undo' || act === 'redo') { histGo(act === 'redo'); return; }
     if (act === 'stayjson') { pending = null; render(); return; }
     if (act === 'discard') {
       const idle = () => { b.innerHTML = icon('trash'); b.classList.remove('danger', 'confirm'); };

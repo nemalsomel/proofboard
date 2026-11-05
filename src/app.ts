@@ -16,7 +16,7 @@ import { applyRotation, fromScreen as vpFrom, toScreen as vpTo } from './ui/view
 import { EventLog } from './ui/log';
 import { favToggled, libPref, libPrefSet, libraryHtml, recentWith } from './ui/library';
 import { EXAMPLES, EX_CATS } from './ui/examples';
-import { formToDef, openEditor, restoreParked } from './ui/editor';
+import { editorHistory, formToDef, openEditor, restoreParked } from './ui/editor';
 import { LEDC, PARTS, PICO_NAMES, picoRole } from './parts/builtin';
 import { solve } from './engine/solve';
 import { buildLayout, planCuts } from './engine/board';
@@ -493,8 +493,8 @@ function groupTransform(kind){ // kind: 'rot' | 'mir'
 function rotate(){if(ui.placing){ui.ghost.rot=(ui.ghost.rot+1)&3;draw();return;}if(isGroup()&&gSize(ui.sel))groupTransform('rot');}
 function mirror(){if(ui.placing){ui.ghost.rot=(4-ui.ghost.rot)&3;ui.ghost.mir=!ui.ghost.mir;draw();return;}if(isGroup()&&gSize(ui.sel))groupTransform('mir');}
 function delSel(){if(!ui.sel)return;pushUndo();if(ui.sel.kind==='group'){const g=ui.sel;removeParts(g.parts);D.bridges=D.bridges.filter((b,i)=>!g.bridges.has(i));D.wires=D.wires.filter((w,i)=>!g.wires.has(i));}else if(ui.sel.kind==='wire')D.wires.splice(ui.sel.i,1);else if(ui.sel.kind==='bridge')D.bridges.splice(ui.sel.i,1);else if(ui.sel.kind==='note')D.notes=D.notes.filter(n=>n.id!==ui.sel.id);ui.sel=null;commit();}
-function undo(){const s=HIST.undo(snap());if(s==null)return;restoreSnap(s);ui.sel=null;commit();}
-function redo(){const s=HIST.redo(snap());if(s==null)return;restoreSnap(s);ui.sel=null;commit();}
+function undo(){const E=editorHistory();if(E){E.go(false);return;}const s=HIST.undo(snap());if(s==null)return;restoreSnap(s);ui.sel=null;commit();}
+function redo(){const E=editorHistory();if(E){E.go(true);return;}const s=HIST.redo(snap());if(s==null)return;restoreSnap(s);ui.sel=null;commit();}
 function setTool(t){ui.tool=t;ui.wireStart=null;ui.linkStart=null;if(t!=='place')ui.placing=null;renderLeft();draw();}
 function setView(v){ui.view=v;$('#vComp').classList.toggle('on',v==='comp');$('#vCu').classList.toggle('on',v==='cu');draw();}
 function zoom(dz){zoomTo(ui.zoom+dz);}
@@ -1085,7 +1085,9 @@ window.addEventListener('resize',()=>PW.place());
   ts.addEventListener('mouseleave',()=>ts.classList.remove('peek'));
   ts.addEventListener('click',e=>{if(e.target.closest('[data-tool]'))ts.classList.remove('peek');});}
 /* Visszavonás / újra: csak akkor aktív, ha van mit */
-function undoUI(){const u=$('#bUndo'),r=$('#bRedo');if(u)u.disabled=!HIST.canUndo;if(r)r.disabled=!HIST.canRedo;}
+/** A fejléc visszavonása: ha egy alkatrész-szerkesztő látszik, az övé (a panelé addig érintetlen), egyébként a panelé. */
+function undoUI(){const u=$('#bUndo'),r=$('#bRedo'),E=editorHistory(),cu=E?E.canUndo:HIST.canUndo,cr=E?E.canRedo:HIST.canRedo;
+  if(u){u.disabled=!cu;u.title=E?'Visszavonás az alkatrész-szerkesztőben (Ctrl+Z)':'Visszavonás (Ctrl+Z)';}if(r){r.disabled=!cr;r.title=E?'Újra az alkatrész-szerkesztőben (Ctrl+Y)':'Újra (Ctrl+Y)';}}
 /* A kurzor mutatja, mit csinál a kattintás: az eszköz ikonja a célkereszt mellett */
 const CURSORS={};
 function toolCursor(){if(ui.sim||ui.placing||ui.tool==='select')return'';if(ui.tool==='pan')return'grab';const t=TOOLS.find(x=>x[0]===ui.tool);if(!t)return'';
@@ -1280,7 +1282,8 @@ const editorHost={
   /** Törléskor vele törlődő példányok száma (könyvtári alkatrésznél 0: a lerakottak a terv leírásával maradnak). */
   usage:t=>t in LIB?0:D.parts.filter(p=>p.type===t).length,
   place(t){if(!DEFS[t])return;ui.placing=t;ui.ghost={rot:0,mir:false};ui.sel=null;ui.wireStart=null;renderLeft();draw();flashMsg('Kattints a panelra a lerakáshoz');},
-  roleColor:r=>ROLEC[r]||'#868e96'
+  roleColor:r=>ROLEC[r]||'#868e96',
+  histChanged:()=>undoUI()
 };
 /* 5.6: az Alkatrész-szerkesztő középső nézet; fül a nézetsávban (Alkatrész: Név ×), a Panel / Program gombjai háttérbe teszik. */
 const PT=new Map();let partCur=null; // nyitott szerkesztők: azonosító → {el, title, onClose}; partCur: a látható
@@ -1295,7 +1298,7 @@ function partTabs(){const c=$('#partTabs');c.hidden=!PT.size;
   // a látható szerkesztő saját gombjai (Elvetés, Mentés) a fülén, a bezárás előtt
   if(ui.part&&partCur!=null){const t=PT.get(partCur),g=[...c.querySelectorAll('[data-pt]')].find(e=>e.dataset.pt===partCur);if(t&&t.acts&&g)g.insertBefore(t.acts,g.querySelector('.px'));}ptWrap();}
 /** A látható szerkesztő váltása (null: egyik sem, a Panel / Program látszik). Csak a látható van a DOM-ban. */
-function partShow(id){const on=id!=null&&PT.has(id);if(on)partCur=id;ui.part=on;const v=$('#partView');v.hidden=!on;
+function partShow(id){queueMicrotask(undoUI);const on=id!=null&&PT.has(id);if(on)partCur=id;ui.part=on;const v=$('#partView');v.hidden=!on;
   if(on){const el=PT.get(id).el;if(v.firstChild!==el)v.replaceChildren(el);}else v.replaceChildren();
   $('.app').classList.toggle('work-part',on);
   // Panel a szerkesztő mellett: a vászon bal fele látszik és használható (a beállítás megmarad)

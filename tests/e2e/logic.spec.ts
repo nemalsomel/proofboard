@@ -187,14 +187,16 @@ test('Logika fül: tároló a diagramon, élek húzással, kimenet a tárolóra;
   expect(j.model[0].outs).toEqual([{ pin: '5', expr: 'MEM' }]);
 });
 
-test('Alkatrész-szerkesztő: saját visszavonás (gomb és Ctrl+Z, teljes képernyős diagramon is), a panel előzményeit nem érinti', async ({ page }) => {
+test('Alkatrész-szerkesztő: a fejléc visszavonása az övé, amíg látszik (Ctrl+Z, teljes képernyős diagramon is); a panelé érintetlen', async ({ page }) => {
   await page.click('[data-ltab="lib"]');
   await page.click('#bNewPart');
+  const undo = page.locator('#bUndo'), redo = page.locator('#bRedo');
+  await expect(undo).toBeDisabled(); // üres panel, friss szerkesztő
   await page.fill('#pe_name', 'Visszavonás próba');
   await page.fill('#pe_gnames', 'GND,VCC,A,B,Y');
   await page.click('[data-act="gen"]');
-  const undo = page.locator('[data-act="undo"]'), redo = page.locator('[data-act="redo"]');
   await expect(undo).toBeEnabled();
+  await expect(undo).toHaveAttribute('title', /alkatrész-szerkesztő/);
   await page.click('.pe [data-tab="func"]');
   await page.click('.cg [data-cg="add"]');
   await page.click('.cg [data-add="out"]');
@@ -205,19 +207,36 @@ test('Alkatrész-szerkesztő: saját visszavonás (gomb és Ctrl+Z, teljes képe
   await expect(page.locator('.cg [data-k="out"]')).toHaveCount(1);
   await redo.click();
   await expect(page.locator('.cg [data-k="gate"]')).toHaveCount(1);
-  // teljes képernyőn, billentyűvel; a panel visszavonása közben nem fut
-  const boardUndo = await page.evaluate(() => (document.querySelector('#bUndo') as HTMLButtonElement | null)?.disabled);
+  // él húzása is egy lépés
+  await page.click('.cg [data-cg="add"]');
+  await page.click('.cg [data-add="g:not"]');
+  await page.click('.cg [data-cg="fit"]');
+  const nid = (await page.locator('.cg [data-k="gate"]', { hasText: 'NEM' }).getAttribute('data-cnode'))!;
+  const inA = (await page.locator('.cg [data-k="in"]', { hasText: 'Láb: A' }).getAttribute('data-cnode'))!;
+  const a = (await page.locator(`[data-cout="${inA}"]`).boundingBox())!, b = (await page.locator(`[data-cport="${nid}.i0"]`).boundingBox())!;
+  const edges = () => page.locator('.cg path[data-edge]').count();
+  const e0 = await edges();
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await page.mouse.down();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 }); await page.mouse.up();
+  await expect.poll(edges).toBeGreaterThan(e0);
+  await undo.click();
+  await expect.poll(edges).toBe(e0);
+  await expect(page.locator('.cg [data-k="gate"]', { hasText: 'NEM' })).toHaveCount(1); // csak az él tűnt el
+  // teljes képernyőn, billentyűvel
   await page.click('.cg [data-cg="full"]');
   await page.locator('.cg .pg-canvas').click({ position: { x: 5, y: 5 } });
-  await page.keyboard.press('Control+z');
-  await expect(page.locator('.cg [data-k="gate"]')).toHaveCount(0);
+  await page.keyboard.press('Control+z'); // a NEM kapu lerakása vissza
+  await expect(page.locator('.cg [data-k="gate"]', { hasText: 'NEM' })).toHaveCount(0);
   await page.keyboard.press('Control+y');
-  await expect(page.locator('.cg [data-k="gate"]')).toHaveCount(1);
-  expect(await page.evaluate(() => (document.querySelector('#bUndo') as HTMLButtonElement | null)?.disabled)).toBe(boardUndo);
+  await expect(page.locator('.cg [data-k="gate"]', { hasText: 'NEM' })).toHaveCount(1);
   await page.keyboard.press('Escape');
-  // a lábak visszavonása: a generált lábsor eltűnik
-  await page.click('.pe [data-tab="pins"]');
-  for (let i = 0; i < 10 && await undo.isEnabled(); i++) await undo.click();
+  // a panelra váltva a fejléc újra a panelé (üres panel: nincs mit visszavonni)
+  await page.click('[data-work="board"]');
+  await expect(undo).toBeDisabled();
+  await expect(undo).toHaveAttribute('title', 'Visszavonás (Ctrl+Z)');
+  await page.locator('#partTabs [data-pt] .pgo').first().click();
+  await expect(undo).toBeEnabled();
+  for (let i = 0; i < 12 && await undo.isEnabled(); i++) await undo.click();
   await expect(undo).toBeDisabled();
   await expect(page.locator('.pe [data-pin="0"]').first()).toHaveCount(0);
 });
