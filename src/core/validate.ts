@@ -112,7 +112,7 @@ export function validatePartDef(def: unknown): Problem[] {
     if (!isObj(el) || !(el.el in MODEL_PINS)) { err(at + '.el', `Ismeretlen modell-elem: ${isObj(el) ? String(el.el) : '?'}`); return; }
     const e = el as Record<string, unknown>;
     for (const k of MODEL_PINS[el.el]) {
-      if (typeof e[k] !== 'string') err(`${at}.${k}`, `Hiányzik a(z) ${k} láb.`);
+      if (typeof e[k] !== 'string' || !e[k]) err(`${at}.${k}`, `Hiányzik a(z) ${k} kivezetés lába.`);
       else if (!ids.has(e[k] as string)) err(`${at}.${k}`, `Nincs ilyen láb: ${e[k]}`);
     }
     if (el.el === 'mcu' && e.vbus != null && (typeof e.vbus !== 'string' || !ids.has(e.vbus))) err(`${at}.vbus`, `Nincs ilyen láb: ${String(e.vbus)}`);
@@ -157,7 +157,7 @@ export function validatePartDef(def: unknown): Problem[] {
         seen.add(pid);
         if (pid === e.vcc || pid === e.gnd) err(oa, `${pn}: a táp- vagy GND-láb nem lehet kimenet.`);
         for (const [k, label] of [['expr', 'kifejezés'], ['oe', 'engedélyezés']] as const) {
-          if (o[k] == null || (k === 'oe' && String(o[k]).trim() === '')) { if (k === 'expr') err(oa, `${pn}: hiányzik a kifejezés.`); continue; }
+          if (o[k] == null || String(o[k]).trim() === '') { if (k === 'expr') err(oa, `${pn}: hiányzik a kifejezés.`); continue; }
           try {
             const ast = parseExpr(String(o[k]));
             for (const v of varsOf(ast)) if (!known(v)) err(oa, `${pn} ${label}: nincs ilyen (vagy nem egyértelmű) láb vagy tároló: ${v}`);

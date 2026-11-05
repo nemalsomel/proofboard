@@ -299,7 +299,9 @@ const formOf = (def: PartDef): Form | null => {
 };
 
 /* Piszkozatok: a bezárt (nem mentett) szerkesztés állapota alkatrészenként; az Elvetés törli. */
-type Tab = 'form' | 'logic' | 'json';
+type Tab = 'pins' | 'func' | 'json';
+/** Régi piszkozatok fülnevei (Űrlap → Lábak, Logika → Működés). */
+const tabOf = (t: unknown): Tab => (t === 'json' ? 'json' : t === 'logic' || t === 'func' ? 'func' : 'pins');
 interface Draft { tab: Tab; form: Form | null; jsonText: string }
 const DRAFT_KEY = 'proofboard.editor.drafts';
 function drafts(): Record<string, Draft> { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}') || {}; } catch { return {}; } }
@@ -308,8 +310,8 @@ function putDraft(k: string, d: Draft | null): void {
   try { localStorage.setItem(DRAFT_KEY, JSON.stringify(all)); } catch { /* tárhely nélkül csak a munkamenetben */ }
 }
 
-/** Az Űrlap szakaszai (ugrás a fejléc alatti sávból). */
-const SECTIONS: Array<[string, string]> = [['basic', 'Alapadatok'], ['pins', 'Lábak'], ['body', 'Test'], ['model', 'Villamos modell'], ['ctl', 'Vezérlő']];
+/** A Működés fül szakaszai (ugrás a fül tetején lévő sávból). */
+const SECTIONS: Array<[string, string]> = [['model', 'Villamos modell'], ['logic', 'Logika'], ['ctl', 'Vezérlő']];
 
 /** A szerkesztő megnyitása. `type`: meglévő saját alkatrész; `from`: kiindulási leírás (pl. beépített másolata). */
 export function openEditor(host: EditorHost, opts: { type?: string; from?: PartDef } = {}, show = true): void {
@@ -317,15 +319,15 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   const existing = opts.type ? host.custom()[opts.type] : undefined;
   const start = existing || opts.from;
   const draftKey = opts.type ? 'type:' + opts.type : opts.from ? 'from:' + opts.from.name : 'new';
-  let form: Form | null = null, jsonDef: PartDef | null = null, tab: Tab = 'form';
+  let form: Form | null = null, jsonDef: PartDef | null = null, tab: Tab = 'pins';
   /** Kiinduló állapot: űrlap, ha a leírás veszteség nélkül megjeleníthető rajta, különben JSON. */
   const initial = (): void => {
     jsonDef = null; jsonText = ''; jsonErr = ''; pending = null;
-    if (!start) { form = newForm(); tab = 'form'; return; }
+    if (!start) { form = newForm(); tab = 'pins'; return; }
     const d: PartDef = JSON.parse(JSON.stringify(start));
     if (opts.from && !existing) { d.name = d.name + ' (másolat)'; delete d.meta; }
     const m = formOf(d), conv = m ? { form: m, lost: [] } : defToForm(d);
-    if (conv.form && !conv.lost.length) { form = conv.form; if (opts.from && !existing) form.name = d.name; tab = 'form'; }
+    if (conv.form && !conv.lost.length) { form = conv.form; if (opts.from && !existing) form.name = d.name; tab = 'pins'; }
     else { form = null; jsonDef = d; tab = 'json'; }
   };
   /** A lábtáblázat minden oszloppal (különben a kijelölt láb további adatai a sora alatt). */
@@ -342,7 +344,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   initial();
   const dr = drafts()[draftKey];
   const restored = !!dr;
-  if (dr) { tab = dr.tab; form = dr.form; jsonText = dr.jsonText || ''; if (tab === 'json') { try { jsonDef = JSON.parse(jsonText); } catch (e) { jsonErr = 'Hibás JSON: ' + (e instanceof Error ? e.message : String(e)); } } }
+  if (dr) { tab = tabOf(dr.tab); form = dr.form; jsonText = dr.jsonText || ''; if (tab === 'json') { try { jsonDef = JSON.parse(jsonText); } catch (e) { jsonErr = 'Hibás JSON: ' + (e instanceof Error ? e.message : String(e)); } } }
   const snapshot = () => JSON.stringify({ tab, form, jsonText: tab === 'json' ? jsonText : '' });
   let clean = restored ? '' : snapshot();
 
@@ -351,7 +353,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   back.innerHTML = `
     <div class="pe" role="region" aria-label="Alkatrész-szerkesztő">
       <header class="pe-head">
-        <div class="grp seg pe-tabs" role="tablist" aria-label="Szerkesztési mód"><button class="btn" data-tab="form" role="tab">Űrlap</button><button class="btn" data-tab="logic" role="tab" title="Digitális logika: kifejezés, igazságtábla, kapuk">Logika</button><button class="btn" data-tab="json" role="tab" title="A leírás teljes JSON-formája">JSON</button></div>
+        <div class="grp seg pe-tabs" role="tablist" aria-label="Szerkesztési mód"><button class="btn" data-tab="pins" role="tab" title="Lábak: hely, név, szerep, csoport, funkció">Lábak</button><button class="btn" data-tab="func" role="tab" title="Működés: villamos modell, digitális logika, vezérlő a szimulációban">Működés</button><button class="btn" data-tab="json" role="tab" title="A leírás teljes JSON-formája">JSON</button></div>
         <span class="muted small pe-sub" data-ref="sub"></span>
         <span class="sp"></span>
         <button class="btn ghost" data-act="discard" title="A nem mentett módosítások elvetése, vissza a kiinduló állapotra" hidden>Elvetés</button>
@@ -359,13 +361,13 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         <button class="btn primary" data-act="save" title="${existing ? 'Mentés a saját könyvtárba' : 'Mentés a saját könyvtárba, és a lerakás indítása a panelon'}">Mentés</button>
       </header>
       <div class="pe-body">
-        <div class="pe-left" data-ref="left"></div>
-        <div class="pe-right" data-ref="right">
+        <div class="pe-right pe-vis" data-ref="right">
           <canvas class="pe-cv" data-ref="cv" aria-label="Előnézet"></canvas>
           <p class="help" data-ref="cvhelp">Kattints egy üres lyukra: új láb oda. Kattints egy lábra: kijelölés a táblázatban.</p>
-          <p class="h" style="margin:12px 0 6px">Problémák</p>
-          <ul class="issues" data-ref="probs"></ul>
+          <section class="pe-probs" aria-label="Az alkatrész problémái"><p class="h">Az alkatrész problémái</p><ul class="issues" data-ref="probs"></ul></section>
+          <div data-ref="basic"></div>
         </div>
+        <div class="pe-left pe-par" data-ref="left"></div>
       </div>
     </div>`;
   const titleOf = () => 'Alkatrész: ' + ((form && tab !== 'json' ? form.name : jsonDef?.name) || (existing ? existing.name : 'új'));
@@ -378,7 +380,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   /** Váltás a fülek között: az aktuális állapot átkerül a másik nézetbe. */
   function switchTab(t: Tab): void {
     if (t === tab && !pending) return;
-    if (tab !== 'json' && t !== 'json') { tab = t; pending = null; render(); return; } // Űrlap ↔ Logika: ugyanaz az adat
+    if (tab !== 'json' && t !== 'json') { tab = t; pending = null; render(); left.scrollTop = 0; return; } // Lábak ↔ Működés: ugyanaz az adat
     if (t === 'json') {
       if (form) { const d = formToDef(form); delete d.meta; jsonDef = d; jsonText = JSON.stringify(d, null, 2); jsonErr = ''; lastGen = { form: JSON.parse(JSON.stringify(form)), graphics: d.graphics, bounds: d.bounds }; }
       tab = 'json'; pending = null; render(); return;
@@ -400,6 +402,40 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (form && tab !== 'json' && !form.pins.length) return [{ level: 'error', path: 'pins', msg: 'Adj hozzá lábakat: kattints az előnézetre, vagy használd a lábsor-generátort.' }];
     return ps;
   };
+
+  /** Hol van a hiba az űrlapon: rövid hely („Lábak › VCC”), a fül és az ugrás célja. */
+  function whereOf(p: Problem): { at: string; tab?: Tab; sel?: string; msg: string } {
+    const f = form, msg = p.msg;
+    if (!f || tab === 'json') return { at: '', msg };
+    const m = /^(\w+)(?:\[(\d+)\])?(?:\.(\w+))?(?:\[(\d+)\])?/.exec(p.path) || [];
+    const [, key, i0, sub, j0] = m, i = i0 == null ? -1 : +i0, j = j0 == null ? -1 : +j0;
+    if (key === 'name' || key === 'prefix' || key === 'cat') return { at: 'Alapadatok', sel: `#pe_${key}`, msg };
+    if (key === 'pins' || key === 'groups') {
+      const q = i >= 0 && key === 'pins' ? f.pins[i] : null;
+      return { at: q ? `Lábak › ${q.name || q.id}` : 'Lábak', tab: 'pins', sel: q ? `[data-pin="${i}"][data-k="${sub === 'id' ? 'id' : sub === 'lr' ? 'lr' : 'name'}"]` : '#pe_gnames', msg };
+    }
+    if (key === 'model' && i >= 0 && i < f.model.length) {
+      const el = f.model[i], ui = MODEL_UI[el.el], pj = ui.pins.findIndex(([k]) => k === sub);
+      const what = `Működés › ${i + 1}. elem (${ui.label})`;
+      if (pj >= 0) return { at: what, tab: 'func', sel: `[data-model="${i}"][data-k="pin${pj}"]`, msg: /^(Hiányzik|Nincs ilyen láb: ?$)/.test(msg) ? `${ui.pins[pj][1]}: válassz lábat.` : `${ui.pins[pj][1]}: ${msg}` };
+      return { at: what, tab: 'func', sel: `[data-model="${i}"][data-k="el"]`, msg };
+    }
+    if (key === 'model') {
+      const o = sub === 'outs' && j >= 0 ? f.logic?.outs[j] : null;
+      return { at: o ? `Működés › Logika › ${j + 1}. kimenet` : 'Működés › Logika', tab: 'func', sel: o ? `#pe_lx_${j}` : '#pe_s_logic', msg };
+    }
+    if (key === 'controls') return { at: 'Működés › Vezérlő', tab: 'func', sel: '#pe_s_ctl', msg };
+    if (key === 'graphics' || key === 'bounds') return { at: 'Megjelenés', sel: '#pe_s_look', msg };
+    return { at: '', msg };
+  }
+  /** Ugrás a hibás mezőhöz: fülváltás, görgetés, fókusz. */
+  function goTo(w: { tab?: Tab; sel?: string }): void {
+    if (w.tab && w.tab !== tab) switchTab(w.tab);
+    const el = w.sel ? back.querySelector<HTMLElement>(w.sel) || (w.sel.startsWith('#pe_lx_') ? back.querySelector<HTMLElement>('#pe_s_logic') : null) : null;
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) el.focus({ preventScroll: true });
+  }
 
   /**
    * Bezárás (× vagy Esc): a nem mentett állapot piszkozatként megmarad. Ha van nem mentett módosítás és a szerkesztő
@@ -455,14 +491,15 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       b.classList.toggle('on', b.dataset.tab === tab);
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
     });
-    left.innerHTML = tab === 'form' && form ? formHtml(form) : tab === 'logic' && form ? logicHtml(form) : jsonHtml();
+    left.innerHTML = tab === 'pins' && form ? pinsHtml(form) : tab === 'func' && form ? funcHtml(form) : jsonHtml();
+    $('basic').innerHTML = form && tab !== 'json' ? basicHtml(form) : '<p class="help pe-sec">JSON-nézetben az alapadatok és a megjelenés a leírásban szerkeszthetők.</p>';
     refresh(); navSync();
   }
   function refresh(): void {
     drawPreview();
     const ps = problems(), err = hasErrors(ps);
     probsEl.innerHTML = ps.length
-      ? ps.map(p => `<li class="${p.level === 'error' ? 'c-err' : 'c-warn'}"><span class="dot"></span><span style="color:var(--fg)">${esc(p.msg)}</span></li>`).join('')
+      ? ps.map((p, k) => { const w = whereOf(p); return `<li class="${p.level === 'error' ? 'c-err' : 'c-warn'}" data-prob="${k}" tabindex="0" title="${w.sel ? 'Kattints: ugrás a mezőhöz' : ''}"><span class="dot"></span><span class="pe-pmsg">${w.at ? `<b class="pe-where">${esc(w.at)}</b>` : ''}${esc(w.msg)}</span></li>`; }).join('')
       : '<li class="c-ok" style="cursor:default"><span class="dot"></span><span style="color:var(--fg)">A leírás rendben, menthető.</span></li>';
     back.querySelectorAll<HTMLButtonElement>('[data-act="save"]').forEach(b => { b.disabled = err; });
     const dirty = snapshot() !== clean, dis = back.querySelector<HTMLButtonElement>('[data-act="discard"]')!;
@@ -489,19 +526,38 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
               <label class="small">${p.role === 'gpio' ? 'Képességek' : 'Funkció'} ${fn}</label>
               ${p.role === 'vin' ? `<label class="small">Táp (V) ${vlt}</label>` : ''}</div></td></tr>`;
   }
-  function formHtml(f: Form): string {
-    const nextR = f.pins.length ? Math.max(...f.pins.map(p => p.lr)) + 2 : 0, nextC = f.pins.length ? Math.min(...f.pins.map(p => p.lc)) : 0;
-    const volt = f.pins.some(p => p.role === 'vin');
+  /** Bal oldal, az előnézet alatt: alapadatok és megjelenés. */
+  function basicHtml(f: Form): string {
     return `
-      <nav class="pe-nav" aria-label="Szakaszok">${SECTIONS.map(([k, l]) => `<button class="btn ghost" data-jump="${k}">${l}</button>`).join('')}</nav>
       <section class="pe-sec" id="pe_s_basic">
         <p class="h">Alapadatok</p>
         <div class="pe-grid">
           <label for="pe_name">Név</label><input type="text" id="pe_name" data-f="name" value="${esc(f.name)}">
           <label for="pe_prefix">Előtag</label><input type="text" id="pe_prefix" data-f="prefix" value="${esc(f.prefix)}" style="width:90px" title="A példányok neve: előtag + sorszám, pl. U1, LCD1">
           <label for="pe_cat">Kategória</label><input type="text" id="pe_cat" data-f="cat" value="${esc(f.cat)}">
+          <label></label><label class="check small" title="A panel mellé kerül; a lábaihoz kábel (vezeték) köt be"><input type="checkbox" data-f="off" ${f.off ? 'checked' : ''}> Külső alkatrész (kábellel bekötve)</label>
         </div>
       </section>
+      <section class="pe-sec" id="pe_s_look">
+        <p class="h">Megjelenés</p>
+        <div class="pe-grid">
+          <label>Szín</label><div class="swatches">${FILLS.map(c => `<button class="sw ${c === f.fill ? 'on' : ''}" data-fill="${c}" style="background:${c}" aria-label="${c}" title="${c}"></button>`).join('')}</div>
+          <label for="pe_pad">Margó</label><input type="number" id="pe_pad" data-f="pad" value="${f.pad}" step="0.1" min="0.3" max="3" style="width:72px">
+          <label>Kiterjesztés</label><div class="pe-ext">
+            ${(['t', 'b', 'l', 'r'] as const).map(k => `<label class="small">${{ t: 'fent', b: 'lent', l: 'balra', r: 'jobbra' }[k]}<input type="number" id="pe_ext_${k}" data-ext="${k}" value="${f.ext[k]}" min="0" max="40" step="0.5" style="width:58px"></label>`).join('')}
+            <span class="help" style="flex:1 1 100%;margin:0">A test mérete a lábakon túl, lyukban (pl. egy kijelzőpanel nagyobb a lábsoránál).</span></div>
+          <label for="pe_btext">Felirat a testen</label><input type="text" id="pe_btext" data-f="bodyText" value="${esc(f.bodyText)}" placeholder="pl. TP4056">
+          <label for="pe_names">Lábnevek</label><select id="pe_names" data-f="names">${opt('below', 'a lábak alatt', f.names)}${opt('above', 'a lábak felett', f.names)}${opt('in', 'befelé (a test közepe felé)', f.names)}${opt('out', 'kifelé (a test szélén túl)', f.names)}${opt('none', 'nincsenek', f.names)}</select>
+          <label></label><label class="check small"><input type="checkbox" data-f="showLabel" ${f.showLabel ? 'checked' : ''}> Példánynév kiírása (pl. U1)</label>
+        </div>
+      </section>
+`;
+  }
+  /** Lábak fül: lábsor-generátor és lábtáblázat. */
+  function pinsHtml(f: Form): string {
+    const nextR = f.pins.length ? Math.max(...f.pins.map(p => p.lr)) + 2 : 0, nextC = f.pins.length ? Math.min(...f.pins.map(p => p.lc)) : 0;
+    const volt = f.pins.some(p => p.role === 'vin');
+    return `
       <section class="pe-sec" id="pe_s_pins">
         <p class="h">Lábak <span class="muted">(${f.pins.length})</span></p>
         <div class="pe-gen">
@@ -534,23 +590,15 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         </table></div>
         ${f.pins.length ? '<p class="help">Az első láb lesz a lerakási pont (0:0); mentéskor a többi ehhez igazodik.</p>' : ''}
       </section>
-      <section class="pe-sec" id="pe_s_body">
-        <p class="h">Test</p>
-        <div class="pe-grid">
-          <label>Szín</label><div class="swatches">${FILLS.map(c => `<button class="sw ${c === f.fill ? 'on' : ''}" data-fill="${c}" style="background:${c}" aria-label="${c}" title="${c}"></button>`).join('')}</div>
-          <label for="pe_pad">Margó</label><input type="number" id="pe_pad" data-f="pad" value="${f.pad}" step="0.1" min="0.3" max="3" style="width:72px">
-          <label>Kiterjesztés</label><div class="pe-ext">
-            ${(['t', 'b', 'l', 'r'] as const).map(k => `<label class="small">${{ t: 'fent', b: 'lent', l: 'balra', r: 'jobbra' }[k]}<input type="number" id="pe_ext_${k}" data-ext="${k}" value="${f.ext[k]}" min="0" max="40" step="0.5" style="width:58px"></label>`).join('')}
-            <span class="help" style="flex:1 1 100%;margin:0">A test mérete a lábakon túl, lyukban (pl. egy kijelzőpanel nagyobb a lábsoránál).</span></div>
-          <label for="pe_btext">Felirat a testen</label><input type="text" id="pe_btext" data-f="bodyText" value="${esc(f.bodyText)}" placeholder="pl. TP4056">
-          <label for="pe_names">Lábnevek</label><select id="pe_names" data-f="names">${opt('below', 'a lábak alatt', f.names)}${opt('above', 'a lábak felett', f.names)}${opt('in', 'befelé (a test közepe felé)', f.names)}${opt('out', 'kifelé (a test szélén túl)', f.names)}${opt('none', 'nincsenek', f.names)}</select>
-          <label></label><label class="check small"><input type="checkbox" data-f="showLabel" ${f.showLabel ? 'checked' : ''}> Példánynév kiírása (pl. U1)</label>
-          <label></label><label class="check small" title="A panel mellé kerül; a lábaihoz kábel (vezeték) köt be"><input type="checkbox" data-f="off" ${f.off ? 'checked' : ''}> Külső alkatrész (kábellel bekötve)</label>
-        </div>
-      </section>
+`;
+  }
+  /** Működés fül: villamos modell, logika, vezérlő – az alkatrész belső viselkedése. */
+  function funcHtml(f: Form): string {
+    return `
+      <nav class="pe-nav" aria-label="Szakaszok">${SECTIONS.map(([k, l]) => `<button class="btn ghost" data-jump="${k}">${l}</button>`).join('')}</nav>
       <section class="pe-sec" id="pe_s_model">
         <p class="h">Villamos modell</p>
-        <p class="help">Mi történik az alkatrészen belül a szimulációban. Üresen az alkatrész csak lábakat ad (pl. egy csatlakozó vagy kijelző bemenetei).</p>
+        <p class="help">Analóg elemek az alkatrészen belül (ellenállás, dióda, tranzisztor…), a szimuláció ezekkel számol. Üresen az alkatrész csak lábakat ad (pl. egy csatlakozó vagy kijelző bemenetei).</p>
         ${f.model.map((m, i) => `<div class="pe-model">
           <select data-model="${i}" data-k="el" aria-label="elem típusa">${(Object.keys(MODEL_UI) as ModelKind[]).map(k => opt(k, MODEL_UI[k].label, m.el)).join('')}</select>
           ${MODEL_UI[m.el].pins.map(([, l], j) => `<label class="small">${esc(l)}</label><select data-model="${i}" data-k="pin${j}" aria-label="${esc(l)}">${pinOpts(f, m.pins[j] || '')}</select>`).join('')}
@@ -559,8 +607,10 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
           <button class="btn" data-act="delmodel" data-i="${i}" aria-label="Elem törlése">×</button></div>`).join('')}
         <button class="btn" data-act="addmodel" ${f.pins.length < 2 ? 'disabled' : ''}>+ Elem</button>
       </section>
+      <div id="pe_s_logic" class="pe-sec"><p class="h">Logika</p>${logicHtml(f)}</div>
       <section class="pe-sec" id="pe_s_ctl">
         <p class="h">Vezérlő a szimulációban</p>
+        <p class="help">Amit szimuláció közben kézzel működtetsz, pl. egy nyomógomb.</p>
         <label class="check small"><input type="checkbox" data-press="on" ${f.press ? 'checked' : ''}> Nyomógombként működik: lenyomva összeköti</label>
         ${f.press ? `<div class="row" style="display:flex;gap:6px;align-items:center;margin-top:6px"><select data-press="0" aria-label="első láb">${pinOpts(f, f.press[0])}</select><span>↔</span><select data-press="1" aria-label="második láb">${pinOpts(f, f.press[1])}</select></div>` : ''}
       </section>`;
@@ -622,7 +672,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     return `<div class="lg-leaf"><select data-lo="${i}" data-gp="${path}" data-gk="leaf" aria-label="bemenet">${names.map(v => opt(v, v, cur)).join('')}${opt('0', '0 (mindig 0)', cur)}${opt('1', '1 (mindig 1)', cur)}<option value="__gate">⊕ helyette kapu…</option></select>${path !== '' ? `<button class="btn" data-act="lgrm" data-i="${i}" data-gp="${path}" title="Bemenet törlése" aria-label="Bemenet törlése">×</button>` : ''}</div>`;
   }
   function logicHtml(f: Form): string {
-    if (!f.pins.length) return '<section class="pe-sec"><p class="help">Előbb adj lábakat az alkatrészhez az Űrlap fülön.</p></section>';
+    if (!f.pins.length) return '<p class="help">Előbb adj lábakat az alkatrészhez a Lábak fülön.</p>';
     const L = f.logic;
     const intro = `<p class="help">Digitális viselkedés: minden kimenethez egy logikai kifejezés tartozik a bemeneti lábak nevével. A szimuláció a bemenetek feszültségéből (a táp 70 %-a felett 1, 30 %-a alatt 0) kiszámolja a kimeneteket, és a táp felé vagy a föld felé hajtja őket. Három, egymásba váltható nézet: <b>Kifejezés</b>, <b>Igazságtábla</b>, <b>Kapuk</b>.</p>`;
     if (!L || !L.outs.length) return `<section class="pe-sec">${intro}<button class="btn on" data-act="lgstart">+ Logika hozzáadása</button></section>`;
@@ -703,7 +753,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   }
   /** A Logika fül eseményei; true, ha kezelte. */
   function logicEvent(kind: 'input' | 'change' | 'click', t: HTMLElement & { value?: string; checked?: boolean }): boolean {
-    if (!form || tab !== 'logic') return false;
+    if (!form || tab !== 'func') return false;
     const f = form, act = t.dataset.act;
     if (kind === 'click') {
       if (act === 'lgstart') { ensureLogic(f); addOut(f); render(); return true; }
@@ -772,7 +822,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     const ctx = cv.getContext('2d');
     if (!ctx) return;
     const narrow = back.clientWidth > 0 && back.clientWidth <= 820; // keskenyen az előnézet fent, a képernyő kb. harmada
-    const W = cv.clientWidth || 400, room = narrow ? back.clientHeight * 0.36 : ($('right').clientHeight || 600) - 150;
+    const W = cv.clientWidth || 400, room = narrow ? back.clientHeight * 0.36 : Math.min(460, (back.clientHeight || 700) * 0.5);
     const H = Math.round(Math.max(narrow ? 180 : 220, Math.min(W * 0.75, room)));
     const dpr = window.devicePixelRatio || 1;
     cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + 'px';
@@ -804,7 +854,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         ctx.fillStyle = lightText(fill) ? '#f1f3f5' : '#1d231f'; ctx.font = `600 ${Math.max(9, S * 0.5)}px ui-monospace,monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(body.text, X((B.c0 + B.c1) / 2), Y(tr)); }
     }
     // lábak (a kijelölt modellelem kivezetései lilával, sorszámmal: 1. vég, 2. vég…)
-    const modelPins = form && tab === 'form' && selModel >= 0 && form.model[selModel] ? form.model[selModel].pins : form && tab === 'logic' ? logicPins(form, selOut) : [];
+    const modelPins = form && tab === 'func' && selModel >= 0 && form.model[selModel] ? form.model[selModel].pins : form && tab === 'func' ? logicPins(form, selOut) : [];
     ctx.font = `600 ${Math.max(8, S * 0.36)}px ui-monospace,monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const nm = form && tab !== 'json' ? form.names : 'below';
     const Bc = pts.length ? bodyRect(form && tab !== 'json' ? form : { pad: 0.6, ext: { t: 0, b: 0, l: 0, r: 0 }, bodyText: '' }, pts) : { r0: 0, r1: 0, c0: 0, c1: 0 };
@@ -823,7 +873,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       if (L) { ctx.textAlign = L.align; const tx = X(L.c), ty = Y(L.r); ctx.strokeText(p.name || p.id, tx, ty); ctx.fillText(p.name || p.id, tx, ty); ctx.textAlign = 'center'; }
     });
     if (pts.length) { ctx.strokeStyle = '#a8571f'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5; ctx.strokeRect(X(pts[0].lc) - S * 0.45, Y(pts[0].lr) - S * 0.45, S * 0.9, S * 0.9); ctx.setLineDash([]); }
-    $('cvhelp').textContent = tab === 'logic' && form ? 'A kijelölt kimenet lába (1) és a kifejezésében szereplő bemenetek (2, 3…) lilával kiemelve.' : tab === 'form' && form
+    $('cvhelp').textContent = tab === 'func' && form ? 'A kijelölt elem vagy kimenet lábai kiemelve. Kattints egy lábra: a Lábak fülön kijelöli.' : tab === 'pins' && form
       ? 'Kattints egy üres lyukra: új láb oda. Kattints egy lábra: kijelölés a táblázatban. A szaggatott keret a lerakási pont.'
       : 'JSON-nézetben az előnézet csak a lábakat mutatja (alapértékekkel).';
   }
@@ -847,7 +897,8 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   }
 
   cv.addEventListener('click', e => {
-    if (!form || tab !== 'form') return;
+    if (!form || tab === 'json') return;
+    if (tab !== 'pins') tab = 'pins';
     const m = (cv as any)._map; if (!m) return;
     const rc = cv.getBoundingClientRect();
     const c = Math.round((e.clientX - rc.left - m.ox) / m.S - 0.5) + m.c0, r = Math.round((e.clientY - rc.top - m.oy) / m.S - 0.5) + m.r0;
@@ -866,7 +917,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       refresh(); return;
     }
     if (logicEvent('input', t)) return;
-    if (!form || tab !== 'form') return;
+    if (!form || tab === 'json') return;
     if (t.dataset.f) {
       const k = t.dataset.f as keyof Form;
       if (k === 'pad') form.pad = Math.max(0.3, Math.min(3, +t.value || 0.6));
@@ -898,7 +949,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       jsonDef = d; jsonText = ''; jsonErr = ''; tab = 'json'; pending = null; render(); return;
     }
     if (logicEvent('change', t)) return;
-    if (!form || tab !== 'form') return;
+    if (!form || tab === 'json') return;
     if (t.dataset.pin != null && t.dataset.k === 'name' && form.logic && nameBefore != null) {
       // lábátnevezés: a logikai kifejezésekben is
       const nw = t.value.trim(), old = nameBefore; nameBefore = nw;
@@ -926,12 +977,12 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   back.addEventListener('focusin', e => {
     const t = e.target as HTMLElement;
     if (t.dataset.pin != null && t.dataset.k === 'name' && form) nameBefore = form.pins[+t.dataset.pin]?.name ?? null;
-    if (t.dataset.lo != null && tab === 'logic' && +t.dataset.lo !== selOut) { selOut = +t.dataset.lo; left.querySelectorAll('.lg-out').forEach(el => el.classList.toggle('on', (el as HTMLElement).dataset.lo === String(selOut))); drawPreview(); }
+    if (t.dataset.lo != null && tab === 'func' && +t.dataset.lo !== selOut) { selOut = +t.dataset.lo; left.querySelectorAll('.lg-out').forEach(el => el.classList.toggle('on', (el as HTMLElement).dataset.lo === String(selOut))); drawPreview(); }
     const mi = t.dataset.model != null ? +t.dataset.model : -1;
     if (mi !== selModel) { selModel = mi; drawPreview(); }
     if (t.dataset.pin != null && +t.dataset.pin !== sel) {
       sel = +t.dataset.pin;
-      if (!wide && tab === 'form' && form) { // a részletsor a kijelölt láb alá kerül (a fókuszban lévő mező marad)
+      if (!wide && tab === 'pins' && form) { // a részletsor a kijelölt láb alá kerül (a fókuszban lévő mező marad)
         left.querySelector('.pe-det')?.remove();
         left.querySelector(`tr[data-row="${sel}"]`)?.insertAdjacentHTML('afterend', detHtml(form.pins[sel], sel));
       }
@@ -939,6 +990,11 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       drawPreview();
     }
   });
+  probsEl.addEventListener('click', e => {
+    const li = (e.target as HTMLElement).closest<HTMLElement>('[data-prob]'); if (!li) return;
+    const p = problems()[+li.dataset.prob!]; if (p) goTo(whereOf(p));
+  });
+  probsEl.addEventListener('keydown', e => { if (e.key === 'Enter') (e.target as HTMLElement).click(); });
   back.addEventListener('click', e => {
     const b = (e.target as HTMLElement).closest('button');
     if (!b) return;
@@ -992,5 +1048,5 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   });
 
   render();
-  (left.querySelector('#pe_name') as HTMLInputElement | null)?.focus();
+  (back.querySelector('#pe_name') as HTMLInputElement | null)?.focus();
 }

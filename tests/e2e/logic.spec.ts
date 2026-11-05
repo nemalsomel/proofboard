@@ -60,7 +60,7 @@ test('Logika fül: kifejezés → igazságtábla → kapuk, kétirányú; a JSON
   await page.fill('#pe_name', 'Saját kapu');
   await page.fill('#pe_gnames', 'GND,VCC,A,B,Y');
   await page.click('[data-act="gen"]');
-  await page.click('.pe [data-tab="logic"]');
+  await page.click('.pe [data-tab="func"]');
   await page.click('[data-act="lgstart"]');
   await expect(page.locator('#pe_lvcc')).toHaveValue('2');
   await expect(page.locator('#pe_lgnd')).toHaveValue('1');
@@ -88,13 +88,13 @@ test('Logika fül: kifejezés → igazságtábla → kapuk, kétirányú; a JSON
   const j = JSON.parse(await page.locator('#pe_json').inputValue());
   expect(j.model).toEqual([{ el: 'logic', vcc: '2', gnd: '1', outs: [{ pin: '5', expr: '!(A | B)' }] }]);
   // vissza: a logika megmarad
-  await page.click('.pe [data-tab="logic"]');
+  await page.click('.pe [data-tab="func"]');
   await expect(page.locator('#pe_lx_0')).toHaveValue('!(A | B)');
-  // átnevezés az Űrlapon: a kifejezés követi
-  await page.click('.pe [data-tab="form"]');
+  // átnevezés a Lábak fülön: a kifejezés követi
+  await page.click('.pe [data-tab="pins"]');
   await page.fill('.pe-pins input[data-pin="2"][data-k="name"]', 'IN1');
   await page.locator('.pe-pins input[data-pin="2"][data-k="name"]').blur();
-  await page.click('.pe [data-tab="logic"]');
+  await page.click('.pe [data-tab="func"]');
   await expect(page.locator('#pe_lx_0')).toHaveValue('!(IN1 | B)');
   await page.click('[data-act="save"]');
   expect(await pcb(page, `return Object.values(pcb.customParts())[0].model[0].outs[0].expr;`)).toBe('!(IN1 | B)');
@@ -139,7 +139,7 @@ test('Logika fül: tároló hozzáadása, kimenet a tárolóra, átnevezés köv
   await page.fill('#pe_name', 'Saját D tároló');
   await page.fill('#pe_gnames', 'GND,VCC,D,CLK,Q');
   await page.click('[data-act="gen"]');
-  await page.click('.pe [data-tab="logic"]');
+  await page.click('.pe [data-tab="func"]');
   await page.click('[data-act="lgstart"]');
   await page.fill('#pe_lx_0', 'F1');
   await expect(page.locator('[data-lmsg="0"]')).toContainText('Nincs ilyen');

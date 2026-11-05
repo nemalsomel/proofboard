@@ -139,10 +139,11 @@ test('Űrlap ↔ JSON: a beállítások mindkét irányban átkerülnek; amit az
   j.name = 'JSON-ból'; j.pins[2].role = 'adc'; j.pins.push({ id: '4', name: 'EN', lr: 0, lc: 3, role: 'sig' });
   j.model = [{ el: 'resistor', a: '1', b: '2', ohm: 4700 }];
   await page.fill('#pe_json', JSON.stringify(j, null, 2));
-  await page.click('.pe [data-tab="form"]');
+  await page.click('.pe [data-tab="pins"]');
   await expect(page.locator('#pe_name')).toHaveValue('JSON-ból');
   await expect(page.locator('.pe-pins tbody tr')).toHaveCount(4);
   await expect(page.locator('.pe-pins select[data-k="role"]').nth(2)).toHaveValue('adc');
+  await page.click('.pe [data-tab="func"]'); // a villamos modell a Működés fülön
   await expect(page.locator('[data-model="0"][data-k="val0"]')).toHaveValue('4.7k');
   await expect(page.locator('[data-model="0"][data-k="pin0"] option:checked')).toHaveText('VCC (azon. 1)');
   // haladó elem: paraméter → figyelmeztetés, maradhat JSON-ban
@@ -150,11 +151,11 @@ test('Űrlap ↔ JSON: a beállítások mindkét irányban átkerülnek; amit az
   const k = JSON.parse(await page.locator('#pe_json').inputValue());
   k.params = [{ key: 'x', label: 'X', type: 'number', default: 1 }];
   await page.fill('#pe_json', JSON.stringify(k));
-  await page.click('.pe [data-tab="form"]');
+  await page.click('.pe [data-tab="pins"]');
   await expect(page.locator('.pe-warn')).toContainText('paraméterek');
   await page.click('[data-act="stayjson"]');
   await expect(page.locator('.pe [data-tab="json"]')).toHaveClass(/on/);
-  await page.click('.pe [data-tab="form"]');
+  await page.click('.pe [data-tab="pins"]');
   await page.click('[data-act="toform"]');
   await expect(page.locator('#pe_name')).toHaveValue('JSON-ból');
 });
@@ -188,9 +189,11 @@ test('5.6: a szerkesztő középső nézet, fül a nézetsávban; háttérbe teh
   await page.check('#pe_wide');
   await expect(page.locator('.pe-pins th', { hasText: 'Táp' })).toHaveCount(1); // minden oszlop: a Táp csak, ha van tápbemenet
   await expect(page.locator('.pe-det')).toHaveCount(0);
-  // szakaszugrás
-  await page.click('.pe-nav [data-jump="model"]');
-  await expect(page.locator('#pe_s_model')).toBeInViewport();
+  // Működés fül: szakaszugrás (Villamos modell, Logika, Vezérlő)
+  await page.click('.pe [data-tab="func"]');
+  await page.click('.pe-nav [data-jump="ctl"]');
+  await expect(page.locator('#pe_s_ctl')).toBeInViewport();
+  await page.click('.pe [data-tab="pins"]');
   // fejlécben nincs külön bezáró; a fül × nem mentett módosításnál csak háttérbe tesz, a fül marad
   await expect(page.locator('.pe [data-act="close"]')).toHaveCount(0);
   await page.click('#partX');
@@ -210,4 +213,27 @@ test('5.6: a szerkesztő középső nézet, fül a nézetsávban; háttérbe teh
   await page.click('[data-ltab="lib"]');
   await page.click('#bNewPart');
   await expect(page.locator('#pe_name')).toHaveValue('Szenzor');
+});
+
+test('5.6b: balra az előnézet és az alapadatok, jobbra Lábak | Működés | JSON; a probléma megmondja, hol van, és odaugrik', async ({ page }) => {
+  await page.click('#bNewPart');
+  const vis = (await page.locator('.pe-vis').boundingBox())!, par = (await page.locator('.pe-par').boundingBox())!;
+  expect(vis.x).toBeLessThan(par.x); // a vizuális rész balra
+  await expect(page.locator('.pe-vis #pe_name')).toBeVisible(); // alapadatok az előnézet alatt
+  await expect(page.locator('.pe-vis #pe_s_look')).toBeVisible(); // megjelenés is
+  await expect(page.locator('.pe [data-tab]')).toHaveText(['Lábak', 'Működés', 'JSON']);
+  await page.fill('#pe_gnames', 'A,B,Y');
+  await page.click('[data-act="gen"]');
+  // Működés: egy ellenállás láb nélkül → „Működés › 1. elem (Ellenállás)”, kattintásra a lábválasztóra ugrik
+  await page.click('.pe [data-tab="func"]');
+  await page.click('[data-act="addmodel"]');
+  await page.selectOption('[data-model="0"][data-k="pin1"]', '');
+  const prob = page.locator('.pe-probs li', { hasText: '1. elem (Ellenállás)' });
+  await expect(prob).toContainText('2. vég: válassz lábat.');
+  await page.click('.pe [data-tab="pins"]');
+  await prob.click();
+  await expect(page.locator('.pe [data-tab="func"]')).toHaveClass(/on/);
+  await expect(page.locator('[data-model="0"][data-k="pin1"]')).toBeFocused();
+  // a nyomógomb (Vezérlő) is a Működés fülön
+  await expect(page.locator('#pe_s_ctl [data-press="on"]')).toBeVisible();
 });
