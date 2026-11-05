@@ -1,4 +1,5 @@
-import { LogicError, parseExpr, pinRef, varsOf } from './logic';
+import { logicMsg, parseExpr, pinRef, varsOf } from './logic';
+import { fmt, type Tr } from '../i18n/i18n';
 import { compilePart, penvD } from './compile';
 import { num } from './expr';
 import type { ModelEl, PartDef, PartInstance } from './schema';
@@ -8,6 +9,8 @@ export interface Problem {
   /** Hol a hiba, pl. "pins[3].lr" vagy "model[0].k". */
   path: string;
   msg: string;
+  /** A magyar üzenet, ha a `msg` más nyelvű (a szerkesztő ebből ismeri fel a hiba fajtáját). */
+  hu?: string;
 }
 
 const SHAPES = new Set(['rect', 'circle', 'poly', 'line', 'text', 'axial', 'radial', 'link', 'dial']);
@@ -39,27 +42,28 @@ const isObj = (x: unknown): x is Record<string, any> => !!x && typeof x === 'obj
  * Alkatrész-leírás ellenőrzése. A hibás (error) leírás nem kerülhet a könyvtárba;
  * a figyelmeztetés (warn) csak jelzés.
  */
-export function validatePartDef(def: unknown): Problem[] {
+/** A leírás hibái és figyelmeztetései; `tr`: az üzenetek fordítója (alapból magyar). */
+export function validatePartDef(def: unknown, tr: Tr = fmt): Problem[] {
   const out: Problem[] = [];
   const err = (path: string, msg: string) => out.push({ level: 'error', path, msg });
   const warn = (path: string, msg: string) => out.push({ level: 'warn', path, msg });
-  if (!isObj(def)) { err('', 'A leírás nem objektum.'); return out; }
+  if (!isObj(def)) { err('', tr('A leírás nem objektum.')); return out; }
   const d = def as PartDef;
-  if (typeof d.name !== 'string' || !d.name.trim()) err('name', 'Hiányzik a név.');
-  if (typeof d.prefix !== 'string' || !/^[A-Za-z][A-Za-z0-9]{0,5}$/.test(d.prefix)) err('prefix', 'Az előtag 1–6 karakter, betűvel kezdődik (pl. U, MOD, J).');
-  if (typeof d.fp !== 'string') warn('fp', 'Hiányzik a lábkép rövid leírása.');
-  if (!Array.isArray(d.pins) || !d.pins.length) { err('pins', 'Legalább egy láb kell.'); return out; }
+  if (typeof d.name !== 'string' || !d.name.trim()) err('name', tr('Hiányzik a név.'));
+  if (typeof d.prefix !== 'string' || !/^[A-Za-z][A-Za-z0-9]{0,5}$/.test(d.prefix)) err('prefix', tr('Az előtag 1–6 karakter, betűvel kezdődik (pl. U, MOD, J).'));
+  if (typeof d.fp !== 'string') warn('fp', tr('Hiányzik a lábkép rövid leírása.'));
+  if (!Array.isArray(d.pins) || !d.pins.length) { err('pins', tr('Legalább egy láb kell.')); return out; }
 
   // paraméterek
   const keys = new Set<string>();
   (d.params || []).forEach((pr, i) => {
     const at = `params[${i}]`;
-    if (!isObj(pr) || typeof pr.key !== 'string' || !/^[A-Za-z_]\w*$/.test(pr.key)) { err(at + '.key', 'Érvénytelen paraméterkulcs.'); return; }
-    if (keys.has(pr.key)) err(at + '.key', `Kétszer szerepel: ${pr.key}`);
+    if (!isObj(pr) || typeof pr.key !== 'string' || !/^[A-Za-z_]\w*$/.test(pr.key)) { err(at + '.key', tr('Érvénytelen paraméterkulcs.')); return; }
+    if (keys.has(pr.key)) err(at + '.key', tr('Kétszer szerepel: {a}', { a: pr.key }));
     keys.add(pr.key);
-    if (!PARAM_TYPES.has(pr.type)) err(at + '.type', `Ismeretlen paramétertípus: ${String(pr.type)}`);
-    if ((pr.type === 'select' || pr.type === 'color') && (!Array.isArray(pr.options) || !pr.options.length)) err(at + '.options', 'A választható típushoz opciók kellenek.');
-    if (pr.default === undefined) err(at + '.default', 'Hiányzik az alapérték.');
+    if (!PARAM_TYPES.has(pr.type)) err(at + '.type', tr('Ismeretlen paramétertípus: {a}', { a: String(pr.type) }));
+    if ((pr.type === 'select' || pr.type === 'color') && (!Array.isArray(pr.options) || !pr.options.length)) err(at + '.options', tr('A választható típushoz opciók kellenek.'));
+    if (pr.default === undefined) err(at + '.default', tr('Hiányzik az alapérték.'));
   });
 
   // lábak kiértékelése alapértékekkel
@@ -70,37 +74,37 @@ export function validatePartDef(def: unknown): Problem[] {
     pins = c.pins(inst);
     c.bounds(inst);
   } catch (e) {
-    err('pins', 'A lábak nem értékelhetők ki: ' + (e instanceof Error ? e.message : String(e)));
+    err('pins', tr('A lábak nem értékelhetők ki: ') + (e instanceof Error ? e.message : String(e)));
     return out;
   }
   d.pins.forEach((sp, i) => {
-    if (!isObj(sp) || typeof sp.id !== 'string' || !sp.id.trim()) err(`pins[${i}].id`, 'Hiányzik a láb azonosítója.');
+    if (!isObj(sp) || typeof sp.id !== 'string' || !sp.id.trim()) err(`pins[${i}].id`, tr('Hiányzik a láb azonosítója.'));
   });
-  if (!pins.length) err('pins', 'A lábak listája alapértékekkel üres.');
+  if (!pins.length) err('pins', tr('A lábak listája alapértékekkel üres.'));
   const ids = new Set<string>(), pos = new Map<string, string>();
   pins.forEach((q, i) => {
-    if (!isFinite(q.lr) || !isFinite(q.lc)) err(`pins[${i}]`, `${q.id}: a helye nem szám.`);
-    if (Math.round(q.lr) !== q.lr || Math.round(q.lc) !== q.lc) err(`pins[${i}]`, `${q.id}: a láb csak egész lyukpozíción lehet.`);
-    if (ids.has(q.id)) err(`pins[${i}].id`, `Kétszer szerepel a láb: ${q.id}`);
+    if (!isFinite(q.lr) || !isFinite(q.lc)) err(`pins[${i}]`, tr('{a}: a helye nem szám.', { a: q.id }));
+    if (Math.round(q.lr) !== q.lr || Math.round(q.lc) !== q.lc) err(`pins[${i}]`, tr('{a}: a láb csak egész lyukpozíción lehet.', { a: q.id }));
+    if (ids.has(q.id)) err(`pins[${i}].id`, tr('Kétszer szerepel a láb: {a}', { a: q.id }));
     ids.add(q.id);
     const k = q.lr + ':' + q.lc;
-    if (pos.has(k)) err(`pins[${i}]`, `${q.id} és ${pos.get(k)} ugyanabban a lyukban (${k}).`);
+    if (pos.has(k)) err(`pins[${i}]`, tr('{a} és {b} ugyanabban a lyukban ({c}).', { a: q.id, b: pos.get(k) ?? '', c: k }));
     pos.set(k, q.id);
-    for (const f of ['vmin', 'vmax'] as const) if (q[f] != null && !isFinite(q[f]!)) err(`pins[${i}].${f}`, `${q.id}: ${f} nem szám.`);
-    if (q.vmin != null && q.vmax != null && q.vmin >= q.vmax) err(`pins[${i}]`, `${q.id}: a minimális feszültség nem lehet nagyobb a maximálisnál.`);
-    if (q.fn != null && !BUS_FNS.includes(q.fn)) warn(`pins[${i}].fn`, `${q.id}: ismeretlen buszfunkció: ${q.fn} (lehet: ${BUS_FNS.join(', ')})`);
-    if ((q.vmin != null || q.vmax != null) && q.role !== 'vin') warn(`pins[${i}]`, `${q.id}: feszültségtartomány csak tápbemenetnél (vin) számít.`);
+    for (const f of ['vmin', 'vmax'] as const) if (q[f] != null && !isFinite(q[f]!)) err(`pins[${i}].${f}`, tr('{a}: {b} nem szám.', { a: q.id, b: f }));
+    if (q.vmin != null && q.vmax != null && q.vmin >= q.vmax) err(`pins[${i}]`, tr('{a}: a minimális feszültség nem lehet nagyobb a maximálisnál.', { a: q.id }));
+    if (q.fn != null && !BUS_FNS.includes(q.fn)) warn(`pins[${i}].fn`, tr('{a}: ismeretlen buszfunkció: {b} (lehet: {c})', { a: q.id, b: q.fn, c: BUS_FNS.join(', ') }));
+    if ((q.vmin != null || q.vmax != null) && q.role !== 'vin') warn(`pins[${i}]`, tr('{a}: feszültségtartomány csak tápbemenetnél (vin) számít.', { a: q.id }));
   });
   if (pins.some(q => q.role === 'vin') && !pins.some(q => q.role === 'gnd'))
-    warn('pins', 'Van tápbemenet, de nincs GND-láb: a tápfeszültség a panel földjéhez képest számít.');
+    warn('pins', tr('Van tápbemenet, de nincs GND-láb: a tápfeszültség a panel földjéhez képest számít.'));
 
   // csoportok
   const inGroup = new Map<string, number>();
   (d.groups || []).forEach((g, i) => {
-    if (!Array.isArray(g) || g.length < 2) { err(`groups[${i}]`, 'Egy csoportban legalább két láb kell.'); return; }
+    if (!Array.isArray(g) || g.length < 2) { err(`groups[${i}]`, tr('Egy csoportban legalább két láb kell.')); return; }
     for (const id of g) {
-      if (!ids.has(id)) err(`groups[${i}]`, `Nincs ilyen láb: ${id}`);
-      if (inGroup.has(id)) warn(`groups[${i}]`, `${id} több csoportban is szerepel.`);
+      if (!ids.has(id)) err(`groups[${i}]`, tr('Nincs ilyen láb: {a}', { a: id }));
+      if (inGroup.has(id)) warn(`groups[${i}]`, tr('{a} több csoportban is szerepel.', { a: id }));
       inGroup.set(id, i);
     }
   });
@@ -112,16 +116,16 @@ export function validatePartDef(def: unknown): Problem[] {
     if (!isObj(el) || !(el.el in MODEL_PINS)) { err(at + '.el', `Ismeretlen modell-elem: ${isObj(el) ? String(el.el) : '?'}`); return; }
     const e = el as Record<string, unknown>;
     for (const k of MODEL_PINS[el.el]) {
-      if (typeof e[k] !== 'string' || !e[k]) err(`${at}.${k}`, `Hiányzik a(z) ${k} kivezetés lába.`);
-      else if (!ids.has(e[k] as string)) err(`${at}.${k}`, `Nincs ilyen láb: ${e[k]}`);
+      if (typeof e[k] !== 'string' || !e[k]) err(`${at}.${k}`, tr('Hiányzik a(z) {a} kivezetés lába.', { a: k }));
+      else if (!ids.has(e[k] as string)) err(`${at}.${k}`, tr('Nincs ilyen láb: {a}', { a: e[k] }));
     }
-    if (el.el === 'mcu' && e.vbus != null && (typeof e.vbus !== 'string' || !ids.has(e.vbus))) err(`${at}.vbus`, `Nincs ilyen láb: ${String(e.vbus)}`);
+    if (el.el === 'mcu' && e.vbus != null && (typeof e.vbus !== 'string' || !ids.has(e.vbus))) err(`${at}.vbus`, tr('Nincs ilyen láb: {a}', { a: String(e.vbus) }));
     const used = MODEL_PINS[el.el].map(k => e[k]).filter(x => typeof x === 'string' && x); // a hiányzó lábat fent már jelezte
-    if (new Set(used).size !== used.length) err(at, 'Egy elem két kivezetése nem lehet ugyanaz a láb.');
+    if (new Set(used).size !== used.length) err(at, tr('Egy elem két kivezetése nem lehet ugyanaz a láb.'));
     for (const k of MODEL_NUMS[el.el]) {
       if (e[k] == null) continue;
-      try { const v = num(e[k], env); if (!isFinite(v)) throw new Error('nem szám'); }
-      catch { err(`${at}.${k}`, `${k}: nem értelmezhető érték.`); }
+      try { const v = num(e[k], env); if (!isFinite(v)) throw new Error(tr('nem szám')); }
+      catch { err(`${at}.${k}`, tr('{a}: nem értelmezhető érték.', { a: k })); }
     }
     if (el.el === 'logic') {
       const outs = Array.isArray(e.outs) ? (e.outs as Array<Record<string, unknown>>) : [];
@@ -129,41 +133,41 @@ export function validatePartDef(def: unknown): Problem[] {
       const regNames = new Set<string>();
       regs.forEach((r, j) => {
         const ra = `${at}.regs[${j}]`, nm = String(r.name ?? '');
-        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(nm)) err(ra, `Tároló neve: betűvel kezdődő azonosító kell (most: „${nm}”).`);
-        else if (regNames.has(nm)) err(ra, `Kétszer szerepel a tároló: ${nm}`);
-        else if (pins.some(q => q.name === nm)) err(ra, `${nm}: a tároló neve nem lehet egy láb neve.`);
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(nm)) err(ra, tr('Tároló neve: betűvel kezdődő azonosító kell (most: „{a}”).', { a: nm }));
+        else if (regNames.has(nm)) err(ra, tr('Kétszer szerepel a tároló: {a}', { a: nm }));
+        else if (pins.some(q => q.name === nm)) err(ra, tr('{a}: a tároló neve nem lehet egy láb neve.', { a: nm }));
         regNames.add(nm);
       });
       const known = (v: string) => regNames.has(v) || !!pinRef(v, pins);
       const chk = (src: unknown, where: string, req: boolean) => {
-        if (src == null || String(src).trim() === '') { if (req) err(where.split('|')[0], `${where.split('|')[1]}: hiányzik.`); return; }
-        try { for (const v of varsOf(parseExpr(String(src)))) if (!known(v)) err(where.split('|')[0], `${where.split('|')[1]}: nincs ilyen láb vagy tároló: ${v}`); }
-        catch (x) { err(where.split('|')[0], `${where.split('|')[1]}: ${x instanceof LogicError ? x.message : String(x)}`); }
+        if (src == null || String(src).trim() === '') { if (req) err(where.split('|')[0], tr('{a}: hiányzik.', { a: where.split('|')[1] })); return; }
+        try { for (const v of varsOf(parseExpr(String(src)))) if (!known(v)) err(where.split('|')[0], tr('{a}: nincs ilyen láb vagy tároló: {b}', { a: where.split('|')[1], b: v })); }
+        catch (x) { err(where.split('|')[0], `${where.split('|')[1]}: ${logicMsg(x, tr)}`); }
       };
       regs.forEach((r, j) => {
         const ra = `${at}.regs[${j}]`, nm = String(r.name ?? '?');
-        chk(r.clk, `${ra}|${nm} órajele`, true); chk(r.d, `${ra}|${nm} következő értéke (D)`, true);
-        chk(r.reset, `${ra}|${nm} törlése`, false); chk(r.set, `${ra}|${nm} beállítása`, false);
-        if (r.edge != null && r.edge !== 'rise' && r.edge !== 'fall') err(ra, `${nm}: az él rise vagy fall lehet.`);
+        chk(r.clk, tr('{a}|{b} órajele', { a: ra, b: nm }), true); chk(r.d, tr('{a}|{b} következő értéke (D)', { a: ra, b: nm }), true);
+        chk(r.reset, tr('{a}|{b} törlése', { a: ra, b: nm }), false); chk(r.set, tr('{a}|{b} beállítása', { a: ra, b: nm }), false);
+        if (r.edge != null && r.edge !== 'rise' && r.edge !== 'fall') err(ra, tr('{a}: az él rise vagy fall lehet.', { a: nm }));
       });
-      if (!outs.length) err(`${at}.outs`, 'A logikához legalább egy kimenet kell.');
+      if (!outs.length) err(`${at}.outs`, tr('A logikához legalább egy kimenet kell.'));
       const seen = new Set<string>();
       outs.forEach((o, j) => {
         const oa = `${at}.outs[${j}]`;
         const pid = String(o.pin ?? '');
-        if (!ids.has(pid)) { err(oa, `Nincs ilyen kimeneti láb: ${pid || '–'}`); return; }
+        if (!ids.has(pid)) { err(oa, tr('Nincs ilyen kimeneti láb: {a}', { a: pid || '–' })); return; }
         const pn = pins.find(q => q.id === pid)!.name;
-        if (seen.has(pid)) err(oa, `${pn}: két kifejezés hajtja ugyanazt a kimenetet.`);
+        if (seen.has(pid)) err(oa, tr('{a}: két kifejezés hajtja ugyanazt a kimenetet.', { a: pn }));
         seen.add(pid);
-        if (pid === e.vcc || pid === e.gnd) err(oa, `${pn}: a táp- vagy GND-láb nem lehet kimenet.`);
-        for (const [k, label] of [['expr', 'kifejezés'], ['oe', 'engedélyezés']] as const) {
-          if (o[k] == null || String(o[k]).trim() === '') { if (k === 'expr') err(oa, `${pn}: hiányzik a kifejezés.`); continue; }
+        if (pid === e.vcc || pid === e.gnd) err(oa, tr('{a}: a táp- vagy GND-láb nem lehet kimenet.', { a: pn }));
+        for (const [k, label] of [['expr', tr('kifejezés')], ['oe', tr('engedélyezés')]] as const) {
+          if (o[k] == null || String(o[k]).trim() === '') { if (k === 'expr') err(oa, tr('{a}: hiányzik a kifejezés.', { a: pn })); continue; }
           try {
             const ast = parseExpr(String(o[k]));
-            for (const v of varsOf(ast)) if (!known(v)) err(oa, `${pn} ${label}: nincs ilyen (vagy nem egyértelmű) láb vagy tároló: ${v}`);
-          } catch (x) { err(oa, `${pn} ${label}: ${x instanceof LogicError ? x.message : String(x)}`); }
+            for (const v of varsOf(ast)) if (!known(v)) err(oa, tr('{a} {b}: nincs ilyen (vagy nem egyértelmű) láb vagy tároló: {c}', { a: pn, b: label, c: v }));
+          } catch (x) { err(oa, `${pn} ${label}: ${logicMsg(x, tr)}`); }
         }
-        if (o.type != null && o.type !== 'pp' && o.type !== 'od') err(oa, `${pn}: a kimenet típusa pp vagy od lehet.`);
+        if (o.type != null && o.type !== 'pp' && o.type !== 'od') err(oa, tr('{a}: a kimenet típusa pp vagy od lehet.', { a: pn }));
       });
     }
   });
@@ -171,12 +175,12 @@ export function validatePartDef(def: unknown): Problem[] {
   // csatlakozó: a lábszám- és lábnév-paraméter létezzen
   if (d.socket != null) {
     const pk = (k: unknown, t: string[]) => (d.params || []).find(x => x.key === k && t.includes(x.type));
-    if (!isObj(d.socket)) err('socket', 'A csatlakozó leírása objektum.');
+    if (!isObj(d.socket)) err('socket', tr('A csatlakozó leírása objektum.'));
     else {
-      if (d.socket.count != null && !pk(d.socket.count, ['int'])) err('socket.count', 'A csatlakozó lábszámához egész (int) paraméter kell.');
-      if (d.socket.names != null && !pk(d.socket.names, ['names'])) err('socket.names', 'A csatlakozó lábneveihez names típusú paraméter kell.');
-      if (d.socket.pins != null && (!Array.isArray(d.socket.pins) || !d.socket.pins.length)) err('socket.pins', 'A csatlakozó lábainak listája nem lehet üres.');
-      else for (const id of d.socket.pins || []) if (!ids.has(id)) err('socket.pins', `A csatlakozóban nincs ilyen láb: ${id}`);
+      if (d.socket.count != null && !pk(d.socket.count, ['int'])) err('socket.count', tr('A csatlakozó lábszámához egész (int) paraméter kell.'));
+      if (d.socket.names != null && !pk(d.socket.names, ['names'])) err('socket.names', tr('A csatlakozó lábneveihez names típusú paraméter kell.'));
+      if (d.socket.pins != null && (!Array.isArray(d.socket.pins) || !d.socket.pins.length)) err('socket.pins', tr('A csatlakozó lábainak listája nem lehet üres.'));
+      else for (const id of d.socket.pins || []) if (!ids.has(id)) err('socket.pins', tr('A csatlakozóban nincs ilyen láb: {a}', { a: id }));
     }
   }
 
@@ -184,20 +188,20 @@ export function validatePartDef(def: unknown): Problem[] {
   (d.controls || []).forEach((c, i) => {
     if (isObj(c) && c.kind === 'slider') {
       const pr = (d.params || []).find(x => x.key === c.key);
-      if (!pr) err(`controls[${i}]`, `A csúszkához nincs ilyen paraméter: ${String(c.key)}`);
+      if (!pr) err(`controls[${i}]`, tr('A csúszkához nincs ilyen paraméter: {a}', { a: String(c.key) }));
       else if (!['number', 'int', 'value'].includes(pr.type) || pr.min == null || pr.max == null)
-        err(`controls[${i}]`, `A csúszka paramétere (${pr.key}) szám legyen, min és max értékkel.`);
+        err(`controls[${i}]`, tr('A csúszka paramétere ({a}) szám legyen, min és max értékkel.', { a: pr.key }));
       return;
     }
-    if (!isObj(c) || c.kind !== 'press') { err(`controls[${i}]`, 'Ismeretlen vezérlő.'); return; }
-    if (!Array.isArray(c.closes) || !c.closes.length) err(`controls[${i}]`, 'Meg kell adni, mely lábak záródnak össze.');
-    (c.closes || []).forEach(pair => { for (const id of pair) if (!ids.has(id)) err(`controls[${i}]`, `Nincs ilyen láb: ${id}`); });
+    if (!isObj(c) || c.kind !== 'press') { err(`controls[${i}]`, tr('Ismeretlen vezérlő.')); return; }
+    if (!Array.isArray(c.closes) || !c.closes.length) err(`controls[${i}]`, tr('Meg kell adni, mely lábak záródnak össze.'));
+    (c.closes || []).forEach(pair => { for (const id of pair) if (!ids.has(id)) err(`controls[${i}]`, tr('Nincs ilyen láb: {a}', { a: id })); });
   });
 
   // grafika
   (d.graphics || []).forEach((g, i) => { if (!isObj(g) || !SHAPES.has(g.shape)) err(`graphics[${i}].shape`, `Ismeretlen rajzelem: ${isObj(g) ? String(g.shape) : '?'}`); });
-  if (d.mount != null && d.mount !== 'board' && d.mount !== 'off') err('mount', `Ismeretlen szerelés: ${String(d.mount)} (board vagy off).`);
-  if (!(d.graphics || []).some(g => (g.layer || 'body') === 'body')) warn('graphics', 'Nincs test (body réteg): az alkatrész csak lábakként látszik.');
+  if (d.mount != null && d.mount !== 'board' && d.mount !== 'off') err('mount', tr('Ismeretlen szerelés: {a} (board vagy off).', { a: String(d.mount) }));
+  if (!(d.graphics || []).some(g => (g.layer || 'body') === 'body')) warn('graphics', tr('Nincs test (body réteg): az alkatrész csak lábakként látszik.'));
 
   return out;
 }

@@ -126,7 +126,7 @@ export function linkTargets(D: Design, A: Netlist, exceptPart?: string, tr: Tr =
         if (q.role === 'gnd') continue; // a föld az Általános csoportban
         if (q.role === 'gpio') { const u = usedGpio.get(ref); o.push({ value: ref, label: u ? tr('{x} (foglalt: {y})', { x: q.name, y: u }) : q.name, group: `${p.label}: GPIO` }); }
         else o.push({ value: ref, label: q.name, group: tr('{x}: táp', { x: p.label }) });
-      } else o.push({ value: ref, label: `${groupLabel(q)}${ROLE_HU[q.role] ? ` · ${tr(ROLE_HU[q.role])}` : ''}`, group: `${p.label} (${DEFS[p.type].def.name})` });
+      } else o.push({ value: ref, label: `${groupLabel(q)}${ROLE_HU[q.role] ? ` · ${tr(ROLE_HU[q.role])}` : ''}`, group: `${p.label} (${tr(DEFS[p.type].def.name)})` });
     }
   }
   return o;

@@ -123,7 +123,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
   function renderNodes() {
     const live = host.live(), on = !!live && live.running;
     nodesEl.innerHTML = prog.nodes.map(n => {
-      const d = NODE_DEFS[n.type], err = live && live.errors[n.id], s = sel && sel.kind === 'node' && sel.id === n.id;
+      const d = NODE_DEFS[n.type], err = live && live.errors[n.id] ? t(live.errors[n.id]) : '', s = sel && sel.kind === 'node' && sel.id === n.id;
       const R = rows(d), sm = summary(n);
       const ports = Array.from({ length: R }, (_, i) => {
         const pi = d.ins[i], po = d.outs[i];
@@ -143,7 +143,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     const n = sel && sel.kind === 'node' ? node(sel.id) : null;
     $<HTMLButtonElement>('[data-pg="del"]').disabled = !sel;
     if (!n) { props.hidden = true; props.innerHTML = ''; return; }
-    const d = NODE_DEFS[n.type], live = host.live(), err = live && live.errors[n.id];
+    const d = NODE_DEFS[n.type], live = host.live(), err = live && live.errors[n.id] ? t(live.errors[n.id]) : '';
     const groups = new Map<string, PinChoice[]>();
     for (const p of pinCache) { if (!groups.has(p.part)) groups.set(p.part, []); groups.get(p.part)!.push(p); }
     props.hidden = false;
@@ -174,7 +174,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     set('.pg-canvas', null, { 'aria-label': t('Programvászon') });
     $<HTMLElement>('.pg-empty').innerHTML = t('Még nincs program. A {x} menüből rakj le egy bemenetet (pl. gomb) és egy kimenetet (pl. LED), majd húzz élt a kimeneti pontjától a bemeneti pontig.', { x: `<b>${t('+ Blokk')}</b>` });
   }
-  function render() { relabel(); applyView(); renderNodes(); renderEdges(); renderProps(); renderRun(); }
+  function render() { relabel(); if (menu.hidden) renderMenu(); applyView(); renderNodes(); renderEdges(); renderProps(); renderRun(); }
   function renderRun() { const b = $<HTMLButtonElement>('[data-pg="run"]'), on = host.running(); b.textContent = on ? '■ ' + t('Leállítás') : '▶ ' + t('Futtatás'); b.classList.toggle('on', on); }
 
   function addNode(type: string) {

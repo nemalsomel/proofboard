@@ -37,3 +37,26 @@ describe('ellenőrzés', () => {
     expect(run(D, true).some(m => /^warn: LED1: \d+ mA, előtét-ellenállás kell$/.test(m) || /^warn: GP15: .* mA, sok/.test(m))).toBe(true);
   });
 });
+
+describe('üzenetek más nyelven', () => {
+  it('a fordító paraméterként: angol üzenet ugyanazokkal az értékekkel, alapból magyar', async () => {
+    const { t } = await import('../../src/i18n/i18n');
+    const en = (s: string, p?: Readonly<Record<string, string | number>>) => t(s, p, 'en');
+    const D = design({ parts: [part('p1', 'res', 'R1', 5, 5, { dr: 0, dc: 4 }), part('p2', 'res', 'R2', 5, 9, { dr: 0, dc: 4 })] });
+    const A = analyze(D);
+    const msgs = checkAll(D, { A0: A, AS: A, SIM: null, linkState: linkStates(D, A), tr: en }).map(i => i.msg);
+    expect(msgs).toContain('Collision in hole 5:9: R1.2, R2.1');
+    expect(run(D)).toContain('err: Ütközés a 5:9 lyukban: R1.2, R2.1');
+  });
+  it('leírás-ellenőrzés és kifejezés-hiba angolul', async () => {
+    const { t } = await import('../../src/i18n/i18n');
+    const { validatePartDef } = await import('../../src/core/validate');
+    const { logicMsg, parseExpr } = await import('../../src/core/logic');
+    const en = (s: string, p?: Readonly<Record<string, string | number>>) => t(s, p, 'en');
+    expect(validatePartDef({ name: '', prefix: 'U', fp: 'x', pins: [{ id: '1', lr: 0, lc: 0 }] }, en).map(p => p.msg)).toContain('The name is missing.');
+    expect(validatePartDef({ name: '', prefix: 'U', fp: 'x', pins: [{ id: '1', lr: 0, lc: 0 }] }).map(p => p.msg)).toContain('Hiányzik a név.');
+    let err: unknown; try { parseExpr('A & )'); } catch (x) { err = x; }
+    expect(logicMsg(err)).toBe('Itt nem állhat: „)”');
+    expect(logicMsg(err, en)).toBe('Not allowed here: “)”');
+  });
+});

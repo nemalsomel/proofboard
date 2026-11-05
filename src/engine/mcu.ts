@@ -15,10 +15,10 @@ export const hasAdc = (q: CapPin): boolean => hasCap(q, 'adc') || hasCap(q, 'adc
 
 /** Különleges GPIO-képességek: az útvonalkereső kerüli őket, használatuk figyelmeztetés (a lábankénti szöveg a leírás meta.pinNotes-ában). */
 export const SPECIAL_CAPS: ReadonlyArray<readonly [string, string]> = [
-  ['strap', 'indítási (strapping) láb: bekapcsoláskor számít a szintje, rossz szintnél a lap nem indul el vagy letöltő módba kerül. Ha lehet, válassz másik GPIO-t.'],
-  ['uart0', 'a soros port (USB-soros átalakító) használja: feltöltéskor és soros kiíráskor zavarhat. Ha lehet, válassz másik GPIO-t.'],
-  ['usb', 'a beépített USB használja. Ha lehet, válassz másik GPIO-t.'],
-  ['led', 'a lap beépített LED-je is ezen a lábon van.'],
+  ['strap', N_('indítási (strapping) láb: bekapcsoláskor számít a szintje, rossz szintnél a lap nem indul el vagy letöltő módba kerül. Ha lehet, válassz másik GPIO-t.')],
+  ['uart0', N_('a soros port (USB-soros átalakító) használja: feltöltéskor és soros kiíráskor zavarhat. Ha lehet, válassz másik GPIO-t.')],
+  ['usb', N_('a beépített USB használja. Ha lehet, válassz másik GPIO-t.')],
+  ['led', N_('a lap beépített LED-je is ezen a lábon van.')],
 ];
 
 /*

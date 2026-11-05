@@ -4,20 +4,21 @@
  * leírásba (`model` → `logic` elem) belőle kifejezések kerülnek (`graphToLogic`), régi vagy JSON-ból jött
  * leírásból pedig a kifejezésekből épül fel (`logicToGraph`). DOM-mentes, unit tesztelt.
  */
+import { N_, fmt, type Tr } from '../i18n/i18n';
 import { LogicError, parseExpr, printExpr, pinRef, toGates, varsOf, type Expr, type GateKind, type GateNode } from './logic';
 
 /** Villamos elemek (a leírás `model` elemei): kivezetéseik és értékeik [kulcs, felirat, egység, alapérték]. */
 export type ElKind = 'resistor' | 'diode' | 'source' | 'nmos' | 'capacitor' | 'npn' | 'motor' | 'mcu';
 export const EL_KINDS: Record<ElKind, { label: string; pins: Array<[string, string]>; vals: Array<[string, string, string, number]> }> = {
-  resistor: { label: 'Ellenállás', pins: [['a', '1. vég'], ['b', '2. vég']], vals: [['ohm', 'Érték', 'Ω', 1000]] },
-  diode: { label: 'Dióda', pins: [['a', 'anód'], ['k', 'katód']], vals: [['vf', 'Nyitófesz.', 'V', 0.7]] },
-  source: { label: 'Feszültségforrás', pins: [['p', '+'], ['n', '−']], vals: [['v', 'Feszültség', 'V', 3.3]] },
-  nmos: { label: 'N-MOSFET', pins: [['d', 'drain'], ['g', 'gate'], ['s', 'source']], vals: [['vth', 'Küszöb', 'V', 2], ['ron', 'Nyitott ell.', 'Ω', 1]] },
-  capacitor: { label: 'Kondenzátor', pins: [['a', '1. vég (+)'], ['b', '2. vég']], vals: [['f', 'Kapacitás', 'F', 100e-9], ['vmax', 'Névleges fesz.', 'V', 16]] },
-  motor: { label: 'DC motor', pins: [['a', '+'], ['b', '−']], vals: [['ohm', 'Üzemi ell.', 'Ω', 20], ['vnom', 'Névleges fesz.', 'V', 3]] },
-  npn: { label: 'NPN tranzisztor', pins: [['c', 'kollektor'], ['b', 'bázis'], ['e', 'emitter']], vals: [['beta', 'Erősítés (β)', '', 200]] },
-  mcu: { label: 'Vezérlőlap (MCU)', pins: [['gnd', 'GND'], ['vsys', 'táp be'], ['v33', '3,3 V'], ['vbus', 'USB 5V (ha van)']],
-    vals: [['vreg', 'Stab. min.', 'V', 3.5], ['vmax', 'Táp max.', 'V', 5.5], ['igpio', 'GPIO max.', 'A', 0.012]] },
+  resistor: { label: N_('Ellenállás'), pins: [['a', N_('1. vég')], ['b', N_('2. vég')]], vals: [['ohm', N_('Érték'), 'Ω', 1000]] },
+  diode: { label: N_('Dióda'), pins: [['a', N_('anód')], ['k', N_('katód')]], vals: [['vf', N_('Nyitófesz.'), 'V', 0.7]] },
+  source: { label: N_('Feszültségforrás'), pins: [['p', '+'], ['n', '−']], vals: [['v', N_('Feszültség'), 'V', 3.3]] },
+  nmos: { label: N_('N-MOSFET'), pins: [['d', N_('drain')], ['g', N_('gate')], ['s', N_('source')]], vals: [['vth', N_('Küszöb'), 'V', 2], ['ron', N_('Nyitott ell.'), 'Ω', 1]] },
+  capacitor: { label: N_('Kondenzátor'), pins: [['a', N_('1. vég (+)')], ['b', N_('2. vég')]], vals: [['f', N_('Kapacitás'), 'F', 100e-9], ['vmax', N_('Névleges fesz.'), 'V', 16]] },
+  motor: { label: N_('DC motor'), pins: [['a', '+'], ['b', '−']], vals: [['ohm', N_('Üzemi ell.'), 'Ω', 20], ['vnom', N_('Névleges fesz.'), 'V', 3]] },
+  npn: { label: N_('NPN tranzisztor'), pins: [['c', N_('kollektor')], ['b', N_('bázis')], ['e', N_('emitter')]], vals: [['beta', N_('Erősítés (β)'), '', 200]] },
+  mcu: { label: N_('Vezérlőlap (MCU)'), pins: [['gnd', N_('GND')], ['vsys', N_('táp be')], ['v33', N_('3,3 V')], ['vbus', N_('USB 5V (ha van)')]],
+    vals: [['vreg', N_('Stab. min.'), 'V', 3.5], ['vmax', N_('Táp max.'), 'V', 5.5], ['igpio', N_('GPIO max.'), 'A', 0.012]] },
 };
 /** A nem kötelező kivezetések. */
 const EL_OPT = new Set(['mcu.vbus']);
@@ -39,7 +40,7 @@ export interface CGraph { nodes: CNode[]; edges: CEdge[] }
 export interface CPort { id: string; label: string; opt?: boolean }
 export interface PinLite { id: string; name: string; role?: string }
 
-export const GATE_SHORT: Record<GateKind, string> = { and: 'ÉS', nand: 'NEM-ÉS', or: 'VAGY', nor: 'NEM-VAGY', xor: 'KIZÁRÓ VAGY', xnor: 'XNOR', not: 'NEM', buf: 'ERŐSÍTŐ' };
+export const GATE_SHORT: Record<GateKind, string> = { and: N_('ÉS'), nand: N_('NEM-ÉS'), or: N_('VAGY'), nor: N_('NEM-VAGY'), xor: N_('KIZÁRÓ VAGY'), xnor: 'XNOR', not: N_('NEM'), buf: N_('ERŐSÍTŐ') };
 const ONE_IN = (g: GateKind) => g === 'not' || g === 'buf';
 
 /** A csomópont bemenetei (a kimenete mindig egy, kivéve a kimenet csomópontot, amelynek nincs). */
@@ -50,10 +51,10 @@ export function portsOf(n: CNode): { ins: CPort[]; out: boolean } {
       const c = ONE_IN(n.g || 'and') ? 1 : Math.max(2, n.n || 2);
       return { ins: Array.from({ length: c }, (_, i) => ({ id: 'i' + i, label: c === 1 ? 'be' : String(i + 1) })), out: true };
     }
-    case 'reg': return { ins: [{ id: 'd', label: 'D' }, { id: 'clk', label: 'órajel' }, { id: 'r', label: 'törlés', opt: true }, { id: 's', label: 'beállítás', opt: true }], out: true };
-    case 'out': return { ins: [{ id: 'v', label: 'érték' }, { id: 'oe', label: 'engedélyezés', opt: true }], out: false };
+    case 'reg': return { ins: [{ id: 'd', label: 'D' }, { id: 'clk', label: N_('órajel') }, { id: 'r', label: N_('törlés'), opt: true }, { id: 's', label: N_('beállítás'), opt: true }], out: true };
+    case 'out': return { ins: [{ id: 'v', label: N_('érték') }, { id: 'oe', label: N_('engedélyezés'), opt: true }], out: false };
     case 'el': { const k = n.el || 'resistor'; return { ins: EL_KINDS[k].pins.map(([id, label]) => ({ id, label, ...(EL_OPT.has(k + '.' + id) ? { opt: true } : {}) })), out: false }; }
-    case 'press': return { ins: [{ id: 'a', label: '1. láb' }, { id: 'b', label: '2. láb' }], out: false };
+    case 'press': return { ins: [{ id: 'a', label: N_('1. láb') }, { id: 'b', label: N_('2. láb') }], out: false };
   }
 }
 
@@ -61,11 +62,11 @@ export const emptyGraph = (): CGraph => ({ nodes: [], edges: [] });
 export function nextNodeId(g: CGraph, pre = 'n'): string { let i = 1; while (g.nodes.some(n => n.id === pre + i)) i++; return pre + i; }
 
 /** Villamos elem és nyomógomb kivezetése csak lábhoz köthető; a logikai bemenetekre láb, állandó, kapu vagy tároló. */
-export function canConnect(g: CGraph, from: string, to: string): string | null {
+export function canConnect(g: CGraph, from: string, to: string, tr: Tr = fmt): string | null {
   const a = g.nodes.find(n => n.id === from), b = g.nodes.find(n => n.id === to);
-  if (!a || !b || a === b) return 'Ezt nem lehet összekötni.';
-  if (!portsOf(a).out) return 'Ennek az elemnek nincs kimenete.';
-  if ((b.k === 'el' || b.k === 'press') && a.k !== 'in') return 'Villamos elem és nyomógomb kivezetése csak lábhoz köthető.';
+  if (!a || !b || a === b) return tr('Ezt nem lehet összekötni.');
+  if (!portsOf(a).out) return tr('Ennek az elemnek nincs kimenete.');
+  if ((b.k === 'el' || b.k === 'press') && a.k !== 'in') return tr('Villamos elem és nyomógomb kivezetése csak lábhoz köthető.');
   return null;
 }
 /** Él hozzáadása: egy bemenetre egy él (a régi lecserélődik). */
@@ -97,16 +98,16 @@ export function pinToken(pins: readonly PinLite[], id: string, regNames: Readonl
 }
 
 /** A diagram rövid megnevezése (hibaüzenetekhez, a fejlécben). */
-export function nodeTitle(n: CNode, pins: readonly PinLite[]): string {
+export function nodeTitle(n: CNode, pins: readonly PinLite[], tr: Tr = fmt): string {
   const pn = (id?: string) => { const p = pins.find(x => x.id === id); return p ? p.name || p.id : '–'; };
   switch (n.k) {
-    case 'in': return `Bemenet ${pn(n.pin)}`;
-    case 'const': return `Állandó ${n.v ?? 0}`;
-    case 'gate': return GATE_SHORT[n.g || 'and'];
-    case 'reg': return `Tároló ${n.name || ''}`.trim();
-    case 'out': return `Kimenet ${pn(n.pin)}`;
-    case 'el': return EL_KINDS[n.el || 'resistor'].label;
-    case 'press': return 'Nyomógomb';
+    case 'in': return tr('Bemenet {x}', { x: pn(n.pin) });
+    case 'const': return tr('Állandó {x}', { x: n.v ?? 0 });
+    case 'gate': return tr(GATE_SHORT[n.g || 'and']);
+    case 'reg': return tr('Tároló {x}', { x: n.name || '' }).trim();
+    case 'out': return tr('Kimenet {x}', { x: pn(n.pin) });
+    case 'el': return tr(EL_KINDS[n.el || 'resistor'].label);
+    case 'press': return tr('Nyomógomb');
   }
 }
 
@@ -115,7 +116,7 @@ export function nodeTitle(n: CNode, pins: readonly PinLite[]): string {
  * ilyenkor 0 kerül, a mentést a hiba akadályozza meg. A kimenet és a tároló hiányzó bemenete üres kifejezés
  * (azt a leírás ellenőrzése jelzi).
  */
-export function graphToLogic(g: CGraph, pins: readonly PinLite[]): { outs: LogicOut[]; regs: LogicReg[]; problems: GraphProblem[] } {
+export function graphToLogic(g: CGraph, pins: readonly PinLite[], tr: Tr = fmt): { outs: LogicOut[]; regs: LogicReg[]; problems: GraphProblem[] } {
   const problems: GraphProblem[] = [];
   const byId = new Map(g.nodes.map(n => [n.id, n]));
   const regNames = new Set(g.nodes.filter(n => n.k === 'reg' && n.name).map(n => n.name!));
@@ -125,18 +126,18 @@ export function graphToLogic(g: CGraph, pins: readonly PinLite[]): { outs: Logic
     const n = byId.get(id);
     if (!n) return { t: 'const', v: 0 };
     if (n.k === 'in') {
-      if (!n.pin || !pins.some(p => p.id === n.pin)) { problems.push({ node: id, msg: 'Bemenet: nincs láb kiválasztva.' }); return { t: 'const', v: 0 }; }
+      if (!n.pin || !pins.some(p => p.id === n.pin)) { problems.push({ node: id, msg: tr('Bemenet: nincs láb kiválasztva.') }); return { t: 'const', v: 0 }; }
       return { t: 'var', name: pinToken(pins, n.pin, regNames) };
     }
     if (n.k === 'const') return { t: 'const', v: n.v === 1 ? 1 : 0 };
     if (n.k === 'reg') return { t: 'var', name: n.name || '_' };
     if (n.k !== 'gate') return { t: 'const', v: 0 };
     if (memo.has(id)) return memo.get(id)!;
-    if (busy.has(id)) { problems.push({ node: id, msg: 'Kapukból álló kör: a jel önmagába fut vissza (tárolóval szakítható meg).' }); return { t: 'const', v: 0 }; }
+    if (busy.has(id)) { problems.push({ node: id, msg: tr('Kapukból álló kör: a jel önmagába fut vissza (tárolóval szakítható meg).') }); return { t: 'const', v: 0 }; }
     busy.add(id);
     const ins = portsOf(n).ins.map((p, i) => {
       const s = src(id, p.id);
-      if (!s) { problems.push({ node: id, msg: `${GATE_SHORT[n.g || 'and']} kapu: a(z) ${i + 1}. bemenete nincs bekötve.` }); return { t: 'const', v: 0 } as Expr; }
+      if (!s) { problems.push({ node: id, msg: tr('{g} kapu: a(z) {i}. bemenete nincs bekötve.', { g: tr(GATE_SHORT[n.g || 'and']), i: i + 1 }) }); return { t: 'const', v: 0 } as Expr; }
       return exprOf(s);
     });
     busy.delete(id);
@@ -239,13 +240,13 @@ export function dropUnused(g: CGraph): CGraph {
  * kapui a cél elé kerülnek; a lábak bemeneti csomópontjai és a tárolók újrahasznosulnak. Hibás kifejezésnél vagy
  * ismeretlen névnél LogicError.
  */
-export function setPortExpr(g: CGraph, to: string, port: string, src: string, pins: readonly PinLite[]): CGraph {
+export function setPortExpr(g: CGraph, to: string, port: string, src: string, pins: readonly PinLite[], tr: Tr = fmt): CGraph {
   const regs = new Map(g.nodes.filter(n => n.k === 'reg' && n.name).map(n => [n.name!, n]));
   let tree: GateNode | null = null;
   if (src.trim()) {
     const e = parseExpr(src);
     const bad = varsOf(e).filter(v => !regs.has(v) && !pinRef(v, pins));
-    if (bad.length) throw new LogicError(`Nincs ilyen (vagy nem egyértelmű) láb vagy tároló: ${bad.join(', ')}`, 0);
+    if (bad.length) throw new LogicError(tr('Nincs ilyen (vagy nem egyértelmű) láb vagy tároló: {x}', { x: bad.join(', ') }), 0);
     tree = toGates(e);
   }
   let out: CGraph = dropUnused({ nodes: g.nodes.map(n => ({ ...n })), edges: g.edges.filter(e => !(e.to === to && e.port === port)) });
@@ -276,7 +277,7 @@ export function setPortExpr(g: CGraph, to: string, port: string, src: string, pi
 export interface ElRow { el: ElKind; pins: string[]; vals: string[]; mux?: 'fixed' | 'matrix' }
 
 /** A diagram villamos elemei (sorrendben) és a nyomógomb: a kivezetésekhez kötött lábak. A félig bekötött nyomógomb hiba. */
-export function graphToModel(g: CGraph): { model: ElRow[]; press: [string, string] | null; problems: GraphProblem[] } {
+export function graphToModel(g: CGraph, tr: Tr = fmt): { model: ElRow[]; press: [string, string] | null; problems: GraphProblem[] } {
   const pinAt = (id: string, port: string) => { const e = g.edges.find(x => x.to === id && x.port === port), n = e && g.nodes.find(m => m.id === e.from); return n && n.k === 'in' ? n.pin || '' : ''; };
   const model: ElRow[] = [], problems: GraphProblem[] = [];
   let press: [string, string] | null = null;
@@ -287,7 +288,7 @@ export function graphToModel(g: CGraph): { model: ElRow[]; press: [string, strin
     }
     if (n.k === 'press' && !press) {
       const a = pinAt(n.id, 'a'), b = pinAt(n.id, 'b');
-      if (a && b) press = [a, b]; else problems.push({ node: n.id, msg: 'Nyomógomb: mindkét lábát egy-egy lábhoz kell kötni.' });
+      if (a && b) press = [a, b]; else problems.push({ node: n.id, msg: tr('Nyomógomb: mindkét lábát egy-egy lábhoz kell kötni.') });
     }
   }
   return { model, press, problems };

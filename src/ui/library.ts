@@ -40,7 +40,7 @@ export function libraryHtml(I: LibInput): string {
     const d = I.defs[t], own = !I.builtin.has(t), projOnly = own && !I.library.has(t), f = fav.has(t);
     return `<div class="libitem" role="group">`
       + `<button class="btn libfav ${f ? 'on' : ''}" data-fav="${t}" title="${f ? tr('Kedvenc (kattintásra kiveszi)') : tr('Kedvencekhez')}" aria-label="${esc(tr('{x} kedvenc', { x: d.name }))}" aria-pressed="${f}">${f ? '★' : '☆'}</button>`
-      + `<button class="btn ${I.placing === t ? 'on' : ''}" data-lib="${t}" ${dis}>${esc(d.name)}<span>${esc(d.fp)}</span></button>`
+      + `<button class="btn ${I.placing === t ? 'on' : ''}" data-lib="${t}" ${dis}>${esc(tr(d.name))}<span>${esc(tr(d.fp))}</span></button>`
       + (projOnly ? `<button class="btn" data-tolib="${t}" title="${tr('Hozzáadás a saját könyvtárhoz (más tervekben is elérhető lesz)')}" aria-label="${esc(tr('{x} a könyvtárba', { x: d.name }))}" ${dis}>＋</button>` : '')
       + (own ? `<button class="btn" data-adv data-edit="${t}" title="${tr('Szerkesztés')}" aria-label="${esc(tr('{x} szerkesztése', { x: d.name }))}" ${dis}>✎</button>` : '') + `</div>`;
   };

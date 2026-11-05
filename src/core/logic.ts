@@ -12,6 +12,7 @@
  * és igazságtábla; a táblából minimalizált diszjunktív normálforma (Quine–McCluskey) készül.
  * Az értékelés háromértékű: 0, 1 és 'X' (ismeretlen, pl. lebegő bemenet).
  */
+import { N_, fmt, type Tr } from '../i18n/i18n';
 
 export type Level = 0 | 1 | 'X';
 export type Expr =
@@ -21,8 +22,15 @@ export type Expr =
   | { t: 'and' | 'or' | 'xor'; args: Expr[] };
 
 export class LogicError extends Error {
-  constructor(msg: string, public pos: number) { super(msg); }
+  /** `key`/`params`: a magyar forrásszöveg és paraméterei (fordításhoz, lásd `logicMsg`). */
+  constructor(msg: string, public pos: number, public key?: string, public params?: Record<string, string>) { super(msg); }
 }
+/** Hibaüzenet tetszőleges nyelven: a LogicError kulcsából, egyébként az üzenet maga. */
+export function logicMsg(x: unknown, tr: Tr = fmt): string {
+  if (x instanceof LogicError) return x.key ? tr(x.key, x.params) : x.message;
+  return x instanceof Error ? x.message : String(x);
+}
+const lerr = (key: string, pos: number, params?: Record<string, string>) => new LogicError(fmt(key, params), pos, key, params);
 
 type Tok = { k: 'id' | 'op' | '(' | ')' | 'end'; v: string; pos: number; end: number };
 const WORD_OPS: Record<string, string> = { AND: '&', OR: '|', XOR: '^', NOT: '!' };
@@ -71,19 +79,19 @@ export function parseExpr(src: string): Expr {
     const t = take();
     if (t.k === '(') {
       const e = or();
-      if (peek().k !== ')') throw new LogicError('Hiányzik a záró zárójel', peek().pos);
+      if (peek().k !== ')') throw lerr(N_('Hiányzik a záró zárójel'), peek().pos);
       take(); return e;
     }
     if (t.k === 'id') {
       if (t.v === '0' || t.v === '1') return { t: 'const', v: +t.v as 0 | 1 };
       return { t: 'var', name: t.v };
     }
-    if (t.k === 'end') throw new LogicError('Hiányzó tag a kifejezés végén', t.pos);
-    throw new LogicError(`Itt nem állhat: „${t.v}”`, t.pos);
+    if (t.k === 'end') throw lerr(N_('Hiányzó tag a kifejezés végén'), t.pos);
+    throw lerr(N_('Itt nem állhat: „{x}”'), t.pos, { x: t.v });
   };
-  if (ts.length === 1) throw new LogicError('Üres kifejezés', 0);
+  if (ts.length === 1) throw lerr(N_('Üres kifejezés'), 0);
   const e = or();
-  if (peek().k !== 'end') throw new LogicError(`Fölösleges rész: „${src.slice(peek().pos)}”`, peek().pos);
+  if (peek().k !== 'end') throw lerr(N_('Fölösleges rész: „{x}”'), peek().pos, { x: src.slice(peek().pos) });
   return e;
 }
 

@@ -7,6 +7,7 @@
 import { EL_KINDS, GATE_SHORT, canConnect, connect, nextNodeId, nodeTitle, portsOf, pruneEdges, removeNode, type CGraph, type CKind, type CNode, type ElKind, type PinLite } from '../core/circuit';
 import type { GateKind } from '../core/logic';
 import { icon } from './icons';
+import { N_, t } from '../i18n/i18n';
 import { setFull } from './fullscreen';
 import { fmtSI } from '../core/expr';
 
@@ -32,7 +33,7 @@ export interface CircEditor { el: HTMLElement; refresh(): void; select(id: strin
 const HEAD = 26, ROW = 22;
 const WID: Record<CKind, number> = { in: 128, const: 104, gate: 128, reg: 150, out: 150, el: 160, press: 140 };
 const COLOR: Record<CKind, string> = { in: '#1c7ed6', const: '#868e96', gate: '#7048e8', reg: '#2f9e44', out: '#e8590c', el: '#a8571f', press: '#c2255c' };
-const KIND_HU: Record<CKind, string> = { in: 'Láb', const: 'Állandó', gate: 'Kapu', reg: 'Tároló', out: 'Kimenet', el: 'Villamos elem', press: 'Nyomógomb' };
+const KIND_HU: Record<CKind, string> = { in: N_('Láb'), const: N_('Állandó'), gate: N_('Kapu'), reg: N_('Tároló'), out: N_('Kimenet'), el: N_('Villamos elem'), press: N_('Nyomógomb') };
 const GATES: GateKind[] = ['and', 'or', 'xor', 'not', 'nand', 'nor', 'xnor', 'buf'];
 const fmtNum = (v: number) => fmtSI(v);
 const esc = (s: unknown) => String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]!));
@@ -77,12 +78,12 @@ export function mountCircEditor(host: CircHost): CircEditor {
   const applyView = () => { layer.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.z})`; };
 
   function renderMenu() {
-    const item = (k: string, l: string, t: string) => `<button class="pg-mitem" data-add="${k}" title="${esc(t)}">${esc(l)}</button>`;
-    menu.innerHTML = `<div class="pg-mcat" style="--c:${COLOR.in}">Lábak</div>${item('in', 'Láb', 'Az alkatrész egy lába: logikai bemenet, és ide kötnek a villamos elemek is')}${item('out', 'Kimenet (láb)', 'Logikai kimenet: az ide kötött jel hajtja a lábat')}`
-      + `<div class="pg-mcat" style="--c:${COLOR.gate}">Kapuk</div>${GATES.map(x => item('g:' + x, GATE_SHORT[x], GATE_SHORT[x] + ' kapu')).join('')}`
-      + `<div class="pg-mcat" style="--c:${COLOR.reg}">Egyéb</div>${item('reg', 'Tároló', 'Az órajel élén felveszi a D értékét, egyébként megtartja')}${item('c:0', 'Állandó 0', 'Mindig 0')}${item('c:1', 'Állandó 1', 'Mindig 1')}`
-      + `<div class="pg-mcat" style="--c:${COLOR.el}">Villamos elemek</div>${(Object.keys(EL_KINDS) as ElKind[]).map(k => item('el:' + k, EL_KINDS[k].label, 'Kivezetései lábakhoz köthetők')).join('')}`
-      + `<div class="pg-mcat" style="--c:${COLOR.press}">Vezérlő</div>${item('press', 'Nyomógomb', 'Szimulációban lenyomva a két lábát összeköti')}`;
+    const item = (k: string, l: string, h: string) => `<button class="pg-mitem" data-add="${k}" title="${esc(t(h))}">${esc(t(l))}</button>`;
+    menu.innerHTML = `<div class="pg-mcat" style="--c:${COLOR.in}">${t('Lábak')}</div>${item('in', N_('Láb'), N_('Az alkatrész egy lába: logikai bemenet, és ide kötnek a villamos elemek is'))}${item('out', N_('Kimenet (láb)'), N_('Logikai kimenet: az ide kötött jel hajtja a lábat'))}`
+      + `<div class="pg-mcat" style="--c:${COLOR.gate}">${t('Kapuk')}</div>${GATES.map(x => `<button class="pg-mitem" data-add="g:${x}" title="${esc(t('{x} kapu', { x: t(GATE_SHORT[x]) }))}">${esc(t(GATE_SHORT[x]))}</button>`).join('')}`
+      + `<div class="pg-mcat" style="--c:${COLOR.reg}">${t('Egyéb')}</div>${item('reg', N_('Tároló'), N_('Az órajel élén felveszi a D értékét, egyébként megtartja'))}${item('c:0', N_('Állandó 0'), N_('Mindig 0'))}${item('c:1', N_('Állandó 1'), N_('Mindig 1'))}`
+      + `<div class="pg-mcat" style="--c:${COLOR.el}">${t('Villamos elemek')}</div>${(Object.keys(EL_KINDS) as ElKind[]).map(k => item('el:' + k, EL_KINDS[k].label, N_('Kivezetései lábakhoz köthetők'))).join('')}`
+      + `<div class="pg-mcat" style="--c:${COLOR.press}">${t('Vezérlő')}</div>${item('press', N_('Nyomógomb'), N_('Szimulációban lenyomva a két lábát összeköti'))}`;
   }
 
   function renderEdges() {
@@ -102,8 +103,8 @@ export function mountCircEditor(host: CircHost): CircEditor {
   }
 
   function sumOf(n: CNode): string {
-    if (n.k === 'in' || n.k === 'out') return n.pin ? '' : 'nincs láb kiválasztva';
-    if (n.k === 'reg') return n.edge === 'fall' ? 'lefutó él ↓' : 'felfutó él ↑';
+    if (n.k === 'in' || n.k === 'out') return n.pin ? '' : t('nincs láb kiválasztva');
+    if (n.k === 'reg') return n.edge === 'fall' ? t('lefutó él') + ' ↓' : t('felfutó él') + ' ↑';
     if (n.k === 'el') { const K = EL_KINDS[n.el || 'resistor']; return K.vals.map(([, , u], i) => (n.vals?.[i] ? n.vals[i] + (u ? ' ' + u : '') : '')).filter(Boolean).join(' · '); }
     return '';
   }
@@ -112,11 +113,11 @@ export function mountCircEditor(host: CircHost): CircEditor {
       const P = portsOf(n), err = probs.get(n.id), s = sel && sel.kind === 'node' && sel.id === n.id, R = rows(n);
       const ports = Array.from({ length: R }, (_, i) => {
         const pi = P.ins[i], wired = pi && g.edges.some(e => e.to === n.id && e.port === pi.id);
-        const left = pi ? `<span class="pg-port in${pending ? ' can' : ''}${pi.opt && !wired ? ' opt' : ''}" data-cport="${n.id}.${pi.id}" title="${esc(pi.label)}${pi.opt ? ' (nem kötelező)' : ''}"></span><span class="pg-pl">${esc(pi.label)}</span>` : '<span></span><span></span>';
-        const right = P.out && i === 0 ? `<span class="pg-pr">${n.k === 'reg' ? 'Q' : ''}</span><span class="pg-port out${pending === n.id ? ' pend' : ''}" data-cout="${n.id}" title="kimenet"></span>` : '<span></span><span></span>';
+        const left = pi ? `<span class="pg-port in${pending ? ' can' : ''}${pi.opt && !wired ? ' opt' : ''}" data-cport="${n.id}.${pi.id}" title="${esc(t(pi.label))}${pi.opt ? ' (' + t('nem kötelező') + ')' : ''}"></span><span class="pg-pl">${esc(t(pi.label))}</span>` : '<span></span><span></span>';
+        const right = P.out && i === 0 ? `<span class="pg-pr">${n.k === 'reg' ? 'Q' : ''}</span><span class="pg-port out${pending === n.id ? ' pend' : ''}" data-cout="${n.id}" title="${t('kimenet')}"></span>` : '<span></span><span></span>';
         return `<div class="pg-row">${left}${right}</div>`;
       }).join('');
-      const title = n.k === 'in' || n.k === 'out' ? `${n.k === 'in' ? 'Láb' : 'Ki'}: ${pinName(n.pin) || '–'}` : n.k === 'reg' ? `Tároló ${n.name || ''}` : nodeTitle(n, pins);
+      const title = n.k === 'in' || n.k === 'out' ? `${n.k === 'in' ? t('Láb') : t('Ki')}: ${pinName(n.pin) || '–'}` : n.k === 'reg' ? `${t('Tároló')} ${n.name || ''}` : nodeTitle(n, pins, t);
       const sm = sumOf(n);
       return `<div class="pg-node cg-${n.k}${s ? ' sel' : ''}${err ? ' err' : ''}" data-cnode="${n.id}" data-k="${n.k}" style="left:${n.x}px;top:${n.y}px;width:${WID[n.k]}px;--c:${COLOR[n.k]}">
         <div class="pg-head">${icon('grip', 'pg-grip')}<span>${esc(title)}</span></div>${ports}
@@ -126,44 +127,57 @@ export function mountCircEditor(host: CircHost): CircEditor {
   }
 
   const opt = (v: string, l: string, cur: string) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
-  const pinSel = (cur: string) => `<select id="cg_pin" data-cp="pin"><option value="">– válassz lábat –</option>${pins.map(p => opt(p.id, `${p.name || p.id}${p.name && p.name !== p.id ? ` (azon. ${p.id})` : ''}`, cur || '')).join('')}</select>`;
+  const pinSel = (cur: string) => `<select id="cg_pin" data-cp="pin"><option value="">– ${t('válassz lábat')} –</option>${pins.map(p => opt(p.id, `${p.name || p.id}${p.name && p.name !== p.id ? ` (${t('azon.')} ${p.id})` : ''}`, cur || '')).join('')}</select>`;
   function renderProps() {
     const n = sel && sel.kind === 'node' ? node(sel.id) : null;
     $<HTMLButtonElement>('[data-cg="del"]').disabled = !sel;
     if (!n) { props.hidden = true; props.innerHTML = ''; return; }
     const err = probs.get(n.id);
     let body = '';
-    if (n.k === 'in') body = `<label class="small" for="cg_pin">Láb</label>${pinSel(n.pin || '')}`;
-    else if (n.k === 'const') body = `<label class="small" for="cg_v">Érték</label><select id="cg_v" data-cp="v">${opt('0', '0', String(n.v ?? 0))}${opt('1', '1', String(n.v ?? 0))}</select>`;
+    if (n.k === 'in') body = `<label class="small" for="cg_pin">${t('Láb')}</label>${pinSel(n.pin || '')}`;
+    else if (n.k === 'const') body = `<label class="small" for="cg_v">${t('Érték')}</label><select id="cg_v" data-cp="v">${opt('0', '0', String(n.v ?? 0))}${opt('1', '1', String(n.v ?? 0))}</select>`;
     else if (n.k === 'gate') {
       const many = !(n.g === 'not' || n.g === 'buf');
-      body = `<label class="small" for="cg_g">Kapu</label><select id="cg_g" data-cp="g">${GATES.map(x => opt(x, GATE_SHORT[x], n.g || 'and')).join('')}</select>`
-        + (many ? `<label class="small" for="cg_n">Bemenetek száma</label><input type="number" id="cg_n" data-cp="n" min="2" max="8" value="${Math.max(2, n.n || 2)}">` : '');
-    } else if (n.k === 'reg') body = `<label class="small" for="cg_name">Név</label><input type="text" id="cg_name" data-cp="name" value="${esc(n.name || '')}" spellcheck="false" title="Erre a névre a kifejezések is hivatkozhatnak">
-        <label class="small" for="cg_edge">Órajel</label><select id="cg_edge" data-cp="edge">${opt('rise', 'felfutó él ↑', n.edge || 'rise')}${opt('fall', 'lefutó él ↓', n.edge || 'rise')}</select>
-        <p class="help">A <b>törlés</b> (0-ra) és a <b>beállítás</b> (1-re) bemenet nem kötelező; 1 szintnél azonnal hat.</p>`;
+      body = `<label class="small" for="cg_g">${t('Kapu')}</label><select id="cg_g" data-cp="g">${GATES.map(x => opt(x, t(GATE_SHORT[x]), n.g || 'and')).join('')}</select>`
+        + (many ? `<label class="small" for="cg_n">${t('Bemenetek száma')}</label><input type="number" id="cg_n" data-cp="n" min="2" max="8" value="${Math.max(2, n.n || 2)}">` : '');
+    } else if (n.k === 'reg') body = `<label class="small" for="cg_name">${t('Név')}</label><input type="text" id="cg_name" data-cp="name" value="${esc(n.name || '')}" spellcheck="false" title="${t('Erre a névre a kifejezések is hivatkozhatnak')}">
+        <label class="small" for="cg_edge">${t('Órajel')}</label><select id="cg_edge" data-cp="edge">${opt('rise', t('felfutó él') + ' ↑', n.edge || 'rise')}${opt('fall', t('lefutó él') + ' ↓', n.edge || 'rise')}</select>
+        <p class="help">${t('A {r} (0-ra) és a {s} (1-re) bemenet nem kötelező; 1 szintnél azonnal hat.', { r: `<b>${t('törlés')}</b>`, s: `<b>${t('beállítás')}</b>` })}</p>`;
     else if (n.k === 'el') {
       const K = EL_KINDS[n.el || 'resistor'];
-      body = `<label class="small" for="cg_el">Elem</label><select id="cg_el" data-cp="el">${(Object.keys(EL_KINDS) as ElKind[]).map(k => opt(k, EL_KINDS[k].label, n.el || 'resistor')).join('')}</select>`
-        + K.vals.map(([, l, u], i) => `<label class="small" for="cg_val${i}">${esc(l)}</label><div class="row"><input type="text" id="cg_val${i}" data-cv="${i}" value="${esc(n.vals?.[i] ?? '')}" style="width:96px"><span class="small muted">${esc(u)}</span></div>`).join('')
-        + (n.el === 'mcu' ? `<span></span><label class="check small" title="ESP32-szerű lap: a buszfunkció bármely GPIO-ra kiosztható; a képességek ekkor az alapértelmezett lábak"><input type="checkbox" id="cg_mux" data-cp="mux" ${n.mux ? 'checked' : ''}> szabadon kiosztható buszok</label>` : '')
-        + `<p class="help">A kivezetéseit egy-egy <b>Láb</b> elemhez kösd (a láb kimeneti pontjától húzva).</p>`;
-    } else if (n.k === 'press') body = `<p class="help">Szimuláció közben a gombot lenyomva a két lábát összeköti. Mindkét kivezetését egy-egy <b>Láb</b> elemhez kösd.</p>`;
+      body = `<label class="small" for="cg_el">${t('Elem')}</label><select id="cg_el" data-cp="el">${(Object.keys(EL_KINDS) as ElKind[]).map(k => opt(k, t(EL_KINDS[k].label), n.el || 'resistor')).join('')}</select>`
+        + K.vals.map(([, l, u], i) => `<label class="small" for="cg_val${i}">${esc(t(l))}</label><div class="row"><input type="text" id="cg_val${i}" data-cv="${i}" value="${esc(n.vals?.[i] ?? '')}" style="width:96px"><span class="small muted">${esc(u)}</span></div>`).join('')
+        + (n.el === 'mcu' ? `<span></span><label class="check small" title="${t('ESP32-szerű lap: a buszfunkció bármely GPIO-ra kiosztható; a képességek ekkor az alapértelmezett lábak')}"><input type="checkbox" id="cg_mux" data-cp="mux" ${n.mux ? 'checked' : ''}> ${t('szabadon kiosztható buszok')}</label>` : '')
+        + `<p class="help">${t('A kivezetéseit egy-egy {x} elemhez kösd (a láb kimeneti pontjától húzva).', { x: `<b>${t('Láb')}</b>` })}</p>`;
+    } else if (n.k === 'press') body = `<p class="help">${t('Szimuláció közben a gombot lenyomva a két lábát összeköti. Mindkét kivezetését egy-egy {x} elemhez kösd.', { x: `<b>${t('Láb')}</b>` })}</p>`;
     else {
       const ex = host.exprOf(n.id) || { v: '', oe: '' };
       const msg = (w: string) => (exprErr && exprErr.id === n.id && exprErr.which === w ? `<p class="pg-err" data-cgmsg="${w}">${esc(exprErr.msg)}</p>` : '');
-      body = `<label class="small" for="cg_pin">Láb</label>${pinSel(n.pin || '')}
-        <label class="small" for="cg_od">Típus</label><select id="cg_od" data-cp="od" title="Push-pull: 1-nél a táp felé, 0-nál a föld felé hajt. Nyitott drain: csak a föld felé (felhúzó ellenállás kell).">${opt('pp', 'push-pull', n.od ? 'od' : 'pp')}${opt('od', 'nyitott drain', n.od ? 'od' : 'pp')}</select>
-        <label class="small" for="cg_expr">Érték kifejezéssel</label><input type="text" id="cg_expr" data-cx="v" value="${esc(ex.v)}" placeholder="pl. !(A & B)" spellcheck="false" title="Jelek: ! NEM, & ÉS, | VAGY, ^ KIZÁRÓ VAGY, zárójel, 0/1. Enterre a diagram ebből újraépül.">${msg('v')}
-        <label class="small" for="cg_oe">Engedélyezés</label><input type="text" id="cg_oe" data-cx="oe" value="${esc(ex.oe)}" placeholder="üres = mindig hajt; pl. !OE" spellcheck="false">${msg('oe')}
-        <p class="help">A kifejezést átírva (Enter) a kimenet előtti kapuk ebből újraépülnek.</p>`;
+      body = `<label class="small" for="cg_pin">${t('Láb')}</label>${pinSel(n.pin || '')}
+        <label class="small" for="cg_od">${t('Típus')}</label><select id="cg_od" data-cp="od" title="${t('Push-pull: 1-nél a táp felé, 0-nál a föld felé hajt. Nyitott drain: csak a föld felé (felhúzó ellenállás kell).')}">${opt('pp', 'push-pull', n.od ? 'od' : 'pp')}${opt('od', t('nyitott drain'), n.od ? 'od' : 'pp')}</select>
+        <label class="small" for="cg_expr">${t('Érték kifejezéssel')}</label><input type="text" id="cg_expr" data-cx="v" value="${esc(ex.v)}" placeholder="${t('pl. !(A & B)')}" spellcheck="false" title="${t('Jelek: ! NEM, & ÉS, | VAGY, ^ KIZÁRÓ VAGY, zárójel, 0/1. Enterre a diagram ebből újraépül.')}">${msg('v')}
+        <label class="small" for="cg_oe">${t('Engedélyezés')}</label><input type="text" id="cg_oe" data-cx="oe" value="${esc(ex.oe)}" placeholder="${t('üres = mindig hajt; pl. !OE')}" spellcheck="false">${msg('oe')}
+        <p class="help">${t('A kifejezést átírva (Enter) a kimenet előtti kapuk ebből újraépülnek.')}</p>`;
     }
     props.hidden = false;
-    props.innerHTML = `<p class="h" style="margin:0 0 4px;color:${COLOR[n.k]}">${esc(KIND_HU[n.k])}</p>${body}
+    props.innerHTML = `<p class="h" style="margin:0 0 4px;color:${COLOR[n.k]}">${esc(t(KIND_HU[n.k]))}</p>${body}
       ${err ? `<p class="pg-err" style="margin-top:6px">${esc(err)}</p>` : ''}
-      <div class="row" style="margin-top:8px"><button class="btn danger" data-cg="del">Elem törlése</button></div>`;
+      <div class="row" style="margin-top:8px"><button class="btn danger" data-cg="del">${t('Elem törlése')}</button></div>`;
   }
-  function render() { applyView(); renderNodes(); renderEdges(); renderProps(); }
+  /** A sáv feliratai (nyelvváltáskor is: a sablon csak egyszer épül). */
+  function relabel() {
+    const set = (sel: string, text: string | null, attrs: Record<string, string> = {}) => { const e = root.querySelector<HTMLElement>(sel); if (!e) return; if (text !== null) e.textContent = text; for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); };
+    set('.pg-bar', null, { 'aria-label': t('Belső kapcsolás') });
+    set('[data-cg="add"]', t('+ Elem'));
+    set('.pg-bar [data-cg="del"]', t('Törlés'), { title: t('A kijelölt elem vagy él törlése (Delete)') });
+    set('[data-cg="zout"]', null, { 'aria-label': t('Kicsinyítés') }); set('[data-cg="zin"]', null, { 'aria-label': t('Nagyítás') });
+    set('[data-cg="fit"]', null, { 'aria-label': t('Az egész kapcsolás látszódjon'), title: t('Az egész kapcsolás látszódjon') });
+    const on = root.classList.contains('pg-full');
+    set('[data-cg="full"]', null, { title: on ? t('Vissza (Esc)') : t('Teljes képernyő (Esc: vissza)'), 'aria-label': on ? t('Kilépés a teljes képernyőből') : t('Teljes képernyő') });
+    set('.pg-canvas', null, { 'aria-label': t('Belső kapcsolás vászna') });
+    $<HTMLElement>('.pg-empty').innerHTML = t('Üres. A {x} menüből rakj le bemenetet, kaput és kimenetet, majd húzz élt a kimeneti pontjától a bemeneti pontig.', { x: `<b>${t('+ Elem')}</b>` });
+  }
+  function render() { relabel(); if (menu.hidden) renderMenu(); applyView(); renderNodes(); renderEdges(); renderProps(); }
 
   function addNode(what: string) {
     const r = canvas.getBoundingClientRect(), [wx, wy] = r.width ? toWorld(r.left + r.width / 2 - 70 * view.z, r.top + r.height / 3) : [40, 40];
@@ -189,7 +203,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
   }
   /** Él, ha szabályos; különben rövid üzenet a sávban. */
   function tryConnect(from: string, to: string, port: string) {
-    const why = canConnect(g, from, to);
+    const why = canConnect(g, from, to, t);
     if (why) { hint(why); return; }
     g = connect(g, from, to, port); save();
   }
@@ -206,7 +220,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
     setFull(root, on, () => host.reattach?.());
     const b = root.querySelector('[data-cg="full"]') as HTMLElement;
     b.innerHTML = icon(on ? 'fullExit' : 'full'); b.setAttribute('aria-pressed', String(on));
-    b.title = on ? 'Vissza (Esc)' : 'Teljes képernyő (Esc: vissza)'; b.setAttribute('aria-label', on ? 'Kilépés a teljes képernyőből' : 'Teljes képernyő');
+    b.title = on ? t('Vissza (Esc)') : t('Teljes képernyő (Esc: vissza)'); b.setAttribute('aria-label', on ? t('Kilépés a teljes képernyőből') : t('Teljes képernyő'));
     requestAnimationFrame(() => fit());
   }
   function fit() {

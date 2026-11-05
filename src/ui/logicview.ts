@@ -2,6 +2,7 @@
  * A Logika fül nézetei: kapurajz (SVG) és igazságtábla-adatok. Tiszta függvények, DOM nélkül
  * (HTML/SVG szöveget adnak vissza), így unit tesztelhetők.
  */
+import { t } from '../i18n/i18n';
 import { fromGates, minimize, parseExpr, printExpr, truthRow, varsOf, type Expr, type GateKind, type GateNode, type Level } from '../core/logic';
 
 const escX = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -84,7 +85,7 @@ export function truthTable(outs: readonly TableOut[], vars: readonly string[]): 
   const parsed = outs.map(o => {
     let e: Expr | null = null, oe: Expr | null = null;
     try { e = o.expr.trim() ? parseExpr(o.expr) : null; } catch (x) { errors.push(`${o.name}: ${(x as Error).message}`); }
-    try { oe = o.oe.trim() ? parseExpr(o.oe) : null; } catch (x) { errors.push(`${o.name} engedélyezés: ${(x as Error).message}`); }
+    try { oe = o.oe.trim() ? parseExpr(o.oe) : null; } catch (x) { errors.push(`${o.name} ${t('engedélyezés')}: ${(x as Error).message}`); }
     return { e, oe };
   });
   if (vars.length > TABLE_MAX_VARS) return { vars: [...vars], cells: [], errors, tooMany: true };

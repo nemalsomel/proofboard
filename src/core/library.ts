@@ -1,3 +1,4 @@
+import { N_ } from '../i18n/i18n';
 import { hasErrors, validatePartDef, type Problem } from './validate';
 import type { PartDef } from './schema';
 
@@ -35,7 +36,7 @@ export function importLibrary(data: unknown, taken: (k: string) => boolean): Imp
   const res: ImportResult = { parts: {}, renamed: {}, rejected: [] };
   const obj = data as Partial<LibraryFile> | null;
   if (!obj || typeof obj !== 'object' || obj.format !== LIBRARY_FORMAT || !obj.parts || typeof obj.parts !== 'object') {
-    throw new Error('Ez nem Proofboard alkatrészkönyvtár (hiányzik a "format": "proofboard-parts").');
+    throw new Error(N_('Ez nem Proofboard alkatrészkönyvtár (hiányzik a "format": "proofboard-parts").'));
   }
   for (const [key, def] of Object.entries(obj.parts)) {
     const problems = validatePartDef(def);

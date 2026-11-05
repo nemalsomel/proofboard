@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { EN } from '../../src/i18n/en';
+import { exampleStrings, partStrings } from '../../src/i18n/partStrings';
+import { EXAMPLES } from '../../src/ui/examples';
+import { PARTS } from '../../src/parts/builtin';
 import { detectLang, getLang, onLang, setLang, t } from '../../src/i18n/i18n';
 
 const files = (d: string): string[] => readdirSync(d).flatMap(f => { const p = join(d, f); return statSync(p).isDirectory() ? files(p) : p.endsWith('.ts') ? [p] : []; });
@@ -36,5 +39,11 @@ describe('fordítás', () => {
     const miss = [...keys].filter(k => !(k in EN));
     expect(miss).toEqual([]);
     for (const [k, v0] of Object.entries(EN)) for (const v of v0.split('||')) expect([...v.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort(), k).toEqual([...k.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort());
+  });
+  it('a beépített alkatrészek felületi szövegei (név, lábkép, kategória, paraméterek, súgó, lábmegjegyzés) mind lefordítva', () => {
+    expect(partStrings(PARTS).filter(k => !(k in EN))).toEqual([]);
+  });
+  it('a példák szövegei (cím, leírás, mit tanulsz, jegyzetek) mind lefordítva', () => {
+    expect(exampleStrings(EXAMPLES).filter(k => !(k in EN))).toEqual([]);
   });
 });

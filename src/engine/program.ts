@@ -249,7 +249,7 @@ export function evalProgram(D: Design, A: Netlist, prog: Program, rt: ProgRuntim
   const nodeBy = new Map(prog.nodes.map(n => [n.id, n]));
   const resolve = (ref: unknown, nid: string): string | null => {
     const g = gpioOf(D, A, ref);
-    if (!g) out.errors.set(nid, typeof ref === 'string' && ref ? 'A láb nincs GPIO-ra kötve' : 'Nincs kiválasztva láb');
+    if (!g) out.errors.set(nid, typeof ref === 'string' && ref ? N_('A láb nincs GPIO-ra kötve') : N_('Nincs kiválasztva láb'));
     return g;
   };
   const inputsOf = (n: PNode) => {
@@ -270,7 +270,7 @@ export function evalProgram(D: Design, A: Netlist, prog: Program, rt: ProgRuntim
     if (!g) continue;
     const key = resolve(g.ref, n.id);
     if (!key) continue;
-    if (out.gpio[key] && out.gpio[key] !== g.mode) out.errors.set(n.id, 'Ezt a GPIO-t egy másik blokk is használja');
+    if (out.gpio[key] && out.gpio[key] !== g.mode) out.errors.set(n.id, N_('Ezt a GPIO-t egy másik blokk is használja'));
     out.gpio[key] = g.mode;
     if (g.pwm) out.pwm[key] = g.pwm;
   }

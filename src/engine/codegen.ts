@@ -5,6 +5,7 @@
  * A lapfüggő részleteket (Arduino-lap, PlatformIO-platform, PWM-frekvencia, ADC) a vezérlőlap leírása adja
  * (`meta.target`), a csomópont-sablonok itt vannak, nyelvenként.
  */
+import { fmt, type Tr } from '../i18n/i18n';
 import { DEFS, isMcu } from './defs';
 import { findPin } from './links';
 import type { Netlist } from './netlist';
@@ -46,13 +47,13 @@ function pinInfo(D: Design, A: Netlist, n: PNode): { gpio: number; name: string;
 }
 
 /** Kódgenerálás a megadott nyelven. */
-export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLang): CodeOut {
+export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLang, tr: Tr = fmt): CodeOut {
   const py = lang === 'micropython', warnings: string[] = [];
   const mcu = D.parts.find(p => isMcu(p)) || null;
   const target = mcu ? ((DEFS[mcu.type].def.meta || {}) as { target?: McuTarget }).target || null : null;
   const board = mcu ? DEFS[mcu.type].def.name : null;
-  if (!mcu) warnings.push('Nincs vezérlőlap a tervben; a lábszámok nem ismertek.');
-  else if (!target && !py) warnings.push(`${board}: nincs Arduino-célkörnyezet a leírásában; az általános Arduino-függvényekkel készült.`);
+  if (!mcu) warnings.push(tr('Nincs vezérlőlap a tervben; a lábszámok nem ismertek.'));
+  else if (!target && !py) warnings.push(tr('{a}: nincs Arduino-célkörnyezet a leírásában; az általános Arduino-függvényekkel készült.', { a: board ?? '' }));
 
   // sorrend: mint a kiértékelésben (topologikus, a kör maradéka a végén)
   const deps = new Map(prog.nodes.map(n => [n.id, new Set(prog.edges.filter(e => e.to.startsWith(n.id + '.')).map(e => e.from.slice(0, e.from.lastIndexOf('.'))))]));
@@ -87,7 +88,7 @@ export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLan
     if (d.params.some(x => x.type === 'pin')) {
       pin = pinInfo(D, A, n);
       if (!pin) { warnings.push(`${d.label} (${n.id}): ${p.pin ? 'a láb nincs GPIO-ra kötve' : 'nincs kiválasztva láb'}; kimaradt.`); continue; }
-      if (used.has(pin.gpio) && used.get(pin.gpio) !== n.id) warnings.push(`${pin.name}: több blokk is használja (${used.get(pin.gpio)}, ${n.id}).`);
+      if (used.has(pin.gpio) && used.get(pin.gpio) !== n.id) warnings.push(tr('{a}: több blokk is használja ({b}, {c}).', { a: pin.name, b: used.get(pin.gpio) ?? '', c: n.id }));
       used.set(pin.gpio, n.id);
     }
     const c = (s: string) => (py ? `# ${s}` : `// ${s}`);
@@ -100,8 +101,8 @@ export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLan
         break;
       }
       case 'adc':
-        if (py) S.push(`${id}_adc = ADC(Pin(${pin!.gpio}))  ${c(`${pin!.ref} → ${pin!.name}`)}`, ...(target && target.mpyAtten ? [`${id}_adc.atten(ADC.ATTN_11DB)  ${c('0–3,3 V-os tartomány')}`] : []));
-        else S.push(c(`analóg bemenet: ${pin!.ref} → ${pin!.name}`));
+        if (py) S.push(`${id}_adc = ADC(Pin(${pin!.gpio}))  ${c(`${pin!.ref} → ${pin!.name}`)}`, ...(target && target.mpyAtten ? [`${id}_adc.atten(ADC.ATTN_11DB)  ${c(tr('0–3,3 V-os tartomány'))}`] : []));
+        else S.push(c(tr('analóg bemenet: {a} → {b}', { a: pin!.ref, b: pin!.name })));
         L.push(py ? `${out('v')} = ${id}_adc.read_u16() / 65535` : `${out('v')} = analogRead(${pin!.gpio}) / 4095.0f;`);
         break;
       case 'const': L.push(py ? `${out('v')} = ${lit(num(p.value, 1))}` : `${out('v')} = ${lit(num(p.value, 1))};`); break;
@@ -119,8 +120,8 @@ export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLan
       }
       case 'toggle':
         V.push(py ? `${id}_elozo = False` : `bool ${id}_elozo = false;`);
-        L.push(...(py ? [`_be = ${inp(n, 'a', 'bool')}`, `if _be and not ${id}_elozo:  ${c('felfutó él')}`, `    ${out('v')} = not ${out('v')}`, `${id}_elozo = _be`]
-          : [`{ bool be = ${inp(n, 'a', 'bool')};`, `  if (be && !${id}_elozo) ${out('v')} = !${out('v')};  ${c('felfutó él')}`, `  ${id}_elozo = be; }`]));
+        L.push(...(py ? [`_be = ${inp(n, 'a', 'bool')}`, `if _be and not ${id}_elozo:  ${c(tr('felfutó él'))}`, `    ${out('v')} = not ${out('v')}`, `${id}_elozo = _be`]
+          : [`{ bool be = ${inp(n, 'a', 'bool')};`, `  if (be && !${id}_elozo) ${out('v')} = !${out('v')};  ${c(tr('felfutó él'))}`, `  ${id}_elozo = be; }`]));
         break;
       case 'counter': {
         const m = Math.max(1, Math.round(num(p.max, 4)));
@@ -136,31 +137,31 @@ export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLan
         const be = inp(n, 'a', 'bool');
         if (mode === 'off') {
           V.push(py ? `${id}_mikor = -${ms}` : `long ${id}_mikor = -${ms};`);
-          L.push(...(py ? [`_be = ${be}`, `if _be:`, `    ${id}_mikor = t`, `${out('v')} = _be or t - ${id}_mikor < ${ms}  ${c('utánfutás')}`]
-            : [`{ bool be = ${be};`, `  if (be) ${id}_mikor = (long)t;`, `  ${out('v')} = be || (long)t - ${id}_mikor < ${ms}; }  ${c('utánfutás')}`]));
+          L.push(...(py ? [`_be = ${be}`, `if _be:`, `    ${id}_mikor = t`, `${out('v')} = _be or t - ${id}_mikor < ${ms}  ${c(tr('utánfutás'))}`]
+            : [`{ bool be = ${be};`, `  if (be) ${id}_mikor = (long)t;`, `  ${out('v')} = be || (long)t - ${id}_mikor < ${ms}; }  ${c(tr('utánfutás'))}`]));
         } else if (mode === 'pulse') {
           V.push(py ? `${id}_mikor = -${ms}` : `long ${id}_mikor = -${ms};`, py ? `${id}_elozo = False` : `bool ${id}_elozo = false;`);
-          L.push(...(py ? [`_be = ${be}`, `if _be and not ${id}_elozo and t - ${id}_mikor >= ${ms}:  ${c('felfutó él: impulzus')}`, `    ${id}_mikor = t`, `${id}_elozo = _be`, `${out('v')} = t - ${id}_mikor < ${ms}`]
-            : [`{ bool be = ${be};`, `  if (be && !${id}_elozo && (long)t - ${id}_mikor >= ${ms}) ${id}_mikor = (long)t;  ${c('felfutó él: impulzus')}`, `  ${id}_elozo = be;`, `  ${out('v')} = (long)t - ${id}_mikor < ${ms}; }`]));
+          L.push(...(py ? [`_be = ${be}`, `if _be and not ${id}_elozo and t - ${id}_mikor >= ${ms}:  ${c(tr('felfutó él: impulzus'))}`, `    ${id}_mikor = t`, `${id}_elozo = _be`, `${out('v')} = t - ${id}_mikor < ${ms}`]
+            : [`{ bool be = ${be};`, `  if (be && !${id}_elozo && (long)t - ${id}_mikor >= ${ms}) ${id}_mikor = (long)t;  ${c(tr('felfutó él: impulzus'))}`, `  ${id}_elozo = be;`, `  ${out('v')} = (long)t - ${id}_mikor < ${ms}; }`]));
         } else {
           V.push(py ? `${id}_utolso = None` : `int ${id}_utolso = -1;`, py ? `${id}_mikor = 0` : `unsigned long ${id}_mikor = 0;`);
           const on = mode === 'on';
           L.push(...(py ? [`_be = ${be}`, `if _be != ${id}_utolso:`, `    ${id}_utolso = _be`, `    ${id}_mikor = t`,
-            ...(on ? [`${out('v')} = _be and t - ${id}_mikor >= ${ms}  ${c('bekapcsolási késleltetés')}`] : [`if t - ${id}_mikor >= ${ms}:`, `    ${out('v')} = _be`])]
+            ...(on ? [`${out('v')} = _be and t - ${id}_mikor >= ${ms}  ${c(tr('bekapcsolási késleltetés'))}`] : [`if t - ${id}_mikor >= ${ms}:`, `    ${out('v')} = _be`])]
             : [`{ bool be = ${be};`, `  if ((int)be != ${id}_utolso) { ${id}_utolso = be; ${id}_mikor = t; }`,
-              on ? `  ${out('v')} = be && t - ${id}_mikor >= ${ms}; }  ${c('bekapcsolási késleltetés')}` : `  if (t - ${id}_mikor >= ${ms}) ${out('v')} = be; }`]));
+              on ? `  ${out('v')} = be && t - ${id}_mikor >= ${ms}; }  ${c(tr('bekapcsolási késleltetés'))}` : `  if (t - ${id}_mikor >= ${ms}) ${out('v')} = be; }`]));
         }
         break;
       }
       case 'seq': {
         const rows = seqRows(p.preset, p.custom), cnt = rows.length, back = p.dir === 'back';
-        V.push(...(py ? [`${id}_minta = [${rows.map(r => `'${r}'`).join(', ')}]`, `${id}_i = 0`, `${id}_elozo = True  ${c('induláskor nem lép')}`]
-          : [`const char* ${id}_minta[${cnt}] = {${rows.map(r => `"${r}"`).join(', ')}};`, `int ${id}_i = 0;`, `bool ${id}_elozo = true;  ${c('induláskor nem lép')}`]));
+        V.push(...(py ? [`${id}_minta = [${rows.map(r => `'${r}'`).join(', ')}]`, `${id}_i = 0`, `${id}_elozo = True  ${c(tr('induláskor nem lép'))}`]
+          : [`const char* ${id}_minta[${cnt}] = {${rows.map(r => `"${r}"`).join(', ')}};`, `int ${id}_i = 0;`, `bool ${id}_elozo = true;  ${c(tr('induláskor nem lép'))}`]));
         const r = inp(n, 'r', 'bool'), lep = inp(n, 'a', 'bool');
         const dirE = back ? (py ? `1 if ${r} else -1` : `${r} ? 1 : -1`) : (py ? `-1 if ${r} else 1` : `${r} ? -1 : 1`);
-        L.push(...(py ? [`_be = ${lep}`, `if _be and not ${id}_elozo:  ${c('felfutó él: következő sor')}`, `    ${id}_i = (${id}_i + (${dirE})) % ${cnt}`, `${id}_elozo = _be`,
+        L.push(...(py ? [`_be = ${lep}`, `if _be and not ${id}_elozo:  ${c(tr('felfutó él: következő sor'))}`, `    ${id}_i = (${id}_i + (${dirE})) % ${cnt}`, `${id}_elozo = _be`,
           ...[0, 1, 2, 3].map(k => `${out('c' + k)} = ${id}_minta[${id}_i][${k}] == '1'`), `${out('n')} = ${id}_i`]
-          : [`{ bool be = ${lep};`, `  if (be && !${id}_elozo) ${id}_i = (${id}_i + (${dirE}) + ${cnt}) % ${cnt};  ${c('felfutó él: következő sor')}`, `  ${id}_elozo = be; }`,
+          : [`{ bool be = ${lep};`, `  if (be && !${id}_elozo) ${id}_i = (${id}_i + (${dirE}) + ${cnt}) % ${cnt};  ${c(tr('felfutó él: következő sor'))}`, `  ${id}_elozo = be; }`,
             ...[0, 1, 2, 3].map(k => `${out('c' + k)} = ${id}_minta[${id}_i][${k}] == '1';`), `${out('n')} = ${id}_i;`]));
         break;
       }
@@ -177,7 +178,7 @@ export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLan
         break;
       }
     }
-    const head = c(`${n.id} · ${d.label}`);
+    const head = c(`${n.id} · ${tr(d.label)}`);
     setup.push([n.id, S]); vars.push([n.id, V]); step.push([n.id, L.length ? [head, ...L] : []]);
   }
 
@@ -189,18 +190,18 @@ export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLan
     for (const l of ls) outL.push(ind + l);
     if (id) (lines[id] = lines[id] || []).push([a, outL.length]);
   };
-  const title = `Proofboard – generált program${board ? ` (${board})` : ''}`;
+  const title = tr('Proofboard – generált program') + (board ? ` (${board})` : '');
   if (py) {
-    emit(null, [`# ${title}`, '# Ütemenként (20 ms) beolvassa a bemeneteket, kiszámolja a blokkokat, és beállítja a kimeneteket.', 'from machine import Pin, ADC, PWM', 'import time', '', '# --- lábak ---'], '');
+    emit(null, [`# ${title}`, '# ' + tr('Ütemenként (20 ms) beolvassa a bemeneteket, kiszámolja a blokkokat, és beállítja a kimeneteket.'), 'from machine import Pin, ADC, PWM', 'import time', '', '# --- ' + tr('lábak') + ' ---'], '');
     for (const [id, S] of setup) emit(id, S, '');
-    emit(null, ['', '# --- blokkok értékei és állapota ---'], '');
+    emit(null, ['', '# --- ' + tr('blokkok értékei és állapota') + ' ---'], '');
     for (const [id, V] of vars) emit(id, V, '');
     emit(null, ['', 'kezdet = time.ticks_ms()', 'while True:', '    t = time.ticks_diff(time.ticks_ms(), kezdet)'], '');
     for (const [id, L] of step) emit(id, L, '    ');
     emit(null, ['    time.sleep_ms(20)'], '');
   } else {
-    emit(null, [`// ${title}`, '// Ütemenként (20 ms) beolvassa a bemeneteket, kiszámolja a blokkokat, és beállítja a kimeneteket.',
-      ...(target ? [`// Lap: ${target.fqbn}${target.boardUrl ? ` (alaplapkezelő: ${target.boardUrl})` : ''}`] : []), '', '// --- blokkok értékei és állapota ---'], '');
+    emit(null, [`// ${title}`, '// ' + tr('Ütemenként (20 ms) beolvassa a bemeneteket, kiszámolja a blokkokat, és beállítja a kimeneteket.'),
+      ...(target ? [`// ${tr('Lap')}: ${target.fqbn}${target.boardUrl ? ` (${tr('alaplapkezelő')}: ${target.boardUrl})` : ''}`] : []), '', '// --- ' + tr('blokkok értékei és állapota') + ' ---'], '');
     for (const [id, V] of vars) emit(id, V, '');
     emit(null, ['', 'void setup() {', '  analogReadResolution(12);'], '');
     for (const [id, S] of setup) emit(id, S, '  ');
