@@ -116,7 +116,7 @@ export function validatePartDef(def: unknown): Problem[] {
       else if (!ids.has(e[k] as string)) err(`${at}.${k}`, `Nincs ilyen láb: ${e[k]}`);
     }
     if (el.el === 'mcu' && e.vbus != null && (typeof e.vbus !== 'string' || !ids.has(e.vbus))) err(`${at}.vbus`, `Nincs ilyen láb: ${String(e.vbus)}`);
-    const used = MODEL_PINS[el.el].map(k => e[k]);
+    const used = MODEL_PINS[el.el].map(k => e[k]).filter(x => typeof x === 'string' && x); // a hiányzó lábat fent már jelezte
     if (new Set(used).size !== used.length) err(at, 'Egy elem két kivezetése nem lehet ugyanaz a láb.');
     for (const k of MODEL_NUMS[el.el]) {
       if (e[k] == null) continue;

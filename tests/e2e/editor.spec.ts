@@ -32,6 +32,7 @@ test('saját modul: lábsor-generátorral felvéve, mentve, lerakva, visszavonha
   await expect(page.locator('.pe-pins tbody tr')).toHaveCount(8);
   await expect(page.locator('.pe-pins select[data-k="role"]').nth(5)).toHaveValue('vin');
   await expect(page.locator('.pe-pins select[data-k="role"]').nth(7)).toHaveValue('gnd');
+  await page.click('.pe [data-vtab="look"]'); // Megjelenés fül az előnézet alatt
   await page.fill('#pe_ext_t', '4');
   await page.fill('#pe_btext', 'NOKIA 5110');
   await expect(page.locator('.pe [data-ref="probs"]')).toContainText('rendben');
@@ -219,8 +220,16 @@ test('5.6b: balra az előnézet és az alapadatok, jobbra Lábak | Működés | 
   await page.click('#bNewPart');
   const vis = (await page.locator('.pe-vis').boundingBox())!, par = (await page.locator('.pe-par').boundingBox())!;
   expect(vis.x).toBeLessThan(par.x); // a vizuális rész balra
-  await expect(page.locator('.pe-vis #pe_name')).toBeVisible(); // alapadatok az előnézet alatt
-  await expect(page.locator('.pe-vis #pe_s_look')).toBeVisible(); // megjelenés is
+  // az előnézet alatt fülek: Alapadatok | Megjelenés | Problémák; csak a fül tartalma görget, az előnézet marad
+  await expect(page.locator('.pe-vis [data-vtab]')).toHaveText([/Alapadatok/, /Megjelenés/, /Problémák/]);
+  await expect(page.locator('.pe-vis #pe_name')).toBeVisible();
+  await expect(page.locator('.pe-vis #pe_s_look')).toBeHidden();
+  await page.click('.pe [data-vtab="look"]');
+  await expect(page.locator('.pe-vis #pe_s_look')).toBeVisible();
+  await expect(page.locator('.pe-vis #pe_name')).toBeHidden();
+  const cv0 = (await page.locator('.pe-cv').boundingBox())!;
+  await page.locator('.pe-vscroll').evaluate(e => { e.scrollTop = 9999; });
+  expect((await page.locator('.pe-cv').boundingBox())!.y).toBe(cv0.y);
   await expect(page.locator('.pe [data-tab]')).toHaveText(['Lábak', 'Működés', 'JSON']);
   await page.fill('#pe_gnames', 'A,B,Y');
   await page.click('[data-act="gen"]');
@@ -229,6 +238,8 @@ test('5.6b: balra az előnézet és az alapadatok, jobbra Lábak | Működés | 
   await page.click('[data-act="addmodel"]');
   await page.selectOption('[data-model="0"][data-k="pin1"]', '');
   const prob = page.locator('.pe-probs li', { hasText: '1. elem (Ellenállás)' });
+  await expect(page.locator('.pe [data-vtab="probs"] .badge')).toHaveText('1');
+  await page.click('.pe [data-vtab="probs"]');
   await expect(prob).toContainText('2. vég: válassz lábat.');
   await page.click('.pe [data-tab="pins"]');
   await prob.click();

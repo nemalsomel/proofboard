@@ -342,6 +342,8 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (conv.form && !conv.lost.length) { form = conv.form; if (opts.from && !existing) form.name = d.name; tab = 'pins'; }
     else { form = null; jsonDef = d; tab = 'json'; }
   };
+  /** A bal oldali fül az előnézet alatt: Alapadatok, Megjelenés vagy Problémák. */
+  let vtab: 'basic' | 'look' | 'probs' = 'basic';
   /** A lábtáblázat minden oszloppal (különben a kijelölt láb további adatai a sora alatt). */
   let wide = false;
   let sel = -1, selModel = -1, selOut = -1, nameBefore: string | null = null;
@@ -376,8 +378,11 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         <div class="pe-right pe-vis" data-ref="right">
           <canvas class="pe-cv" data-ref="cv" aria-label="Előnézet"></canvas>
           <p class="help" data-ref="cvhelp">Kattints egy üres lyukra: új láb oda. Kattints egy lábra: kijelölés a táblázatban.</p>
-          <section class="pe-probs" aria-label="Az alkatrész problémái"><p class="h">Az alkatrész problémái</p><ul class="issues" data-ref="probs"></ul></section>
-          <div data-ref="basic"></div>
+          <div class="grp seg pe-vtabs" role="tablist" aria-label="Az alkatrész adatai"><button class="btn" data-vtab="basic" role="tab">Alapadatok</button><button class="btn" data-vtab="look" role="tab">Megjelenés</button><button class="btn" data-vtab="probs" role="tab">Problémák <span class="badge" data-ref="pcount" hidden></span></button></div>
+          <div class="pe-vscroll" data-ref="vscroll">
+            <div data-ref="basic"></div>
+            <section class="pe-probs" data-vpane="probs" aria-label="Az alkatrész problémái"><ul class="issues" data-ref="probs"></ul></section>
+          </div>
         </div>
         <div class="pe-left pe-par" data-ref="left"></div>
       </div>
@@ -433,8 +438,12 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       return { at: what, tab: 'func', sel: `[data-model="${i}"][data-k="el"]`, msg };
     }
     if (key === 'model') {
+      if (sub === 'vcc' || sub === 'gnd') return { at: 'Működés › Logika', tab: 'func', sel: `#pe_l${sub}`, msg: `${sub === 'vcc' ? 'Táp (VCC)' : 'Föld (GND)'}: válassz lábat.` };
       const o = sub === 'outs' && j >= 0 ? f.logic?.outs[j] : null;
-      return { at: o ? `Működés › Logika › ${j + 1}. kimenet` : 'Működés › Logika', tab: 'func', sel: o ? `#pe_lx_${j}` : '#pe_s_logic', msg };
+      if (!o) return { at: 'Működés › Logika', tab: 'func', sel: '#pe_s_logic', msg };
+      const pn = f.pins.find(q => q.id === o.pin), name = pn ? pn.name || pn.id : '';
+      const tail = name && msg.startsWith(name + ': ') ? msg.slice(name.length + 2) : msg; // a láb neve már a helyben szerepel
+      return { at: `Működés › Logika › ${j + 1}. kimenet${name ? ` (${name})` : ''}`, tab: 'func', sel: `#pe_lx_${j}`, msg: tail.charAt(0).toUpperCase() + tail.slice(1) };
     }
     if (key === 'controls') return { at: 'Működés › Vezérlő', tab: 'func', sel: '#pe_s_ctl', msg };
     if (key === 'graphics' || key === 'bounds') return { at: 'Megjelenés', sel: '#pe_s_look', msg };
@@ -443,6 +452,8 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   /** Ugrás a hibás mezőhöz: fülváltás, görgetés, fókusz. */
   function goTo(w: { tab?: Tab; sel?: string }): void {
     if (w.tab && w.tab !== tab) switchTab(w.tab);
+    const pane = w.sel ? back.querySelector(w.sel)?.closest<HTMLElement>('[data-vpane]') : null;
+    if (pane && pane.dataset.vpane !== vtab) { vtab = pane.dataset.vpane as typeof vtab; showVtab(); }
     const el = w.sel ? back.querySelector<HTMLElement>(w.sel) || (w.sel.startsWith('#pe_lx_') ? back.querySelector<HTMLElement>('#pe_s_logic') : null) : null;
     if (!el) return;
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -504,8 +515,14 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
     });
     left.innerHTML = tab === 'pins' && form ? pinsHtml(form) : tab === 'func' && form ? funcHtml(form) : jsonHtml();
-    $('basic').innerHTML = form && tab !== 'json' ? basicHtml(form) : '<p class="help pe-sec">JSON-nézetben az alapadatok és a megjelenés a leírásban szerkeszthetők.</p>';
+    $('basic').innerHTML = form && tab !== 'json' ? basicHtml(form) : '<p class="help pe-sec" data-vpane="basic">JSON-nézetben az alapadatok a leírásban szerkeszthetők.</p><p class="help pe-sec" data-vpane="look">JSON-nézetben a megjelenés a leírásban szerkeszthető.</p>';
+    showVtab();
     refresh(); navSync();
+  }
+  /** A bal oldali fül megjelenítése (csak a választott panel látszik). */
+  function showVtab(): void {
+    back.querySelectorAll<HTMLElement>('[data-vtab]').forEach(b => { const on = b.dataset.vtab === vtab; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+    back.querySelectorAll<HTMLElement>('[data-vpane]').forEach(e => { e.hidden = e.dataset.vpane !== vtab; });
   }
   function refresh(): void {
     drawPreview();
@@ -514,6 +531,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       ? ps.map((p, k) => { const w = whereOf(p); return `<li class="${p.level === 'error' ? 'c-err' : 'c-warn'}" data-prob="${k}" tabindex="0" title="${w.sel ? 'Kattints: ugrás a mezőhöz' : ''}"><span class="dot"></span><span class="pe-pmsg">${w.at ? `<b class="pe-where">${esc(w.at)}</b>` : ''}${esc(w.msg)}</span></li>`; }).join('')
       : '<li class="c-ok" style="cursor:default"><span class="dot"></span><span style="color:var(--fg)">A leírás rendben, menthető.</span></li>';
     back.querySelectorAll<HTMLButtonElement>('[data-act="save"]').forEach(b => { b.disabled = err; });
+    const pc = $('pcount'); pc.hidden = !ps.length; pc.textContent = String(ps.length); pc.classList.toggle('err', err);
     const dirty = snapshot() !== clean, dis = back.querySelector<HTMLButtonElement>('[data-act="discard"]')!;
     if (!dirty && !confirmDiscard) dis.hidden = true; else dis.hidden = false;
     host.view.title(draftKey, titleOf() + (dirty ? ' •' : ''));
@@ -541,7 +559,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   /** Bal oldal, az előnézet alatt: alapadatok és megjelenés. */
   function basicHtml(f: Form): string {
     return `
-      <section class="pe-sec" id="pe_s_basic">
+      <section class="pe-sec" id="pe_s_basic" data-vpane="basic">
         <p class="h">Alapadatok</p>
         <div class="pe-grid">
           <label for="pe_name">Név</label><input type="text" id="pe_name" data-f="name" value="${esc(f.name)}">
@@ -550,7 +568,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
           <label></label><label class="check small" title="A panel mellé kerül; a lábaihoz kábel (vezeték) köt be"><input type="checkbox" data-f="off" ${f.off ? 'checked' : ''}> Külső alkatrész (kábellel bekötve)</label>
         </div>
       </section>
-      <section class="pe-sec" id="pe_s_look">
+      <section class="pe-sec" id="pe_s_look" data-vpane="look">
         <p class="h">Megjelenés</p>
         <div class="pe-grid">
           <label>Szín</label><div class="swatches">${FILLS.map(c => `<button class="sw ${c === f.fill ? 'on' : ''}" data-fill="${c}" style="background:${c}" aria-label="${c}" title="${c}"></button>`).join('')}</div>
@@ -1012,6 +1030,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (!b) return;
     if (logicEvent('click', b)) return;
     if (b.dataset.tab) { switchTab(b.dataset.tab as Tab); return; }
+    if (b.dataset.vtab) { vtab = b.dataset.vtab as typeof vtab; showVtab(); $('vscroll').scrollTop = 0; return; }
     if (b.dataset.jump) { left.querySelector(`#pe_s_${b.dataset.jump}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
     if (b.dataset.fill && form) { form.fill = b.dataset.fill; render(); return; }
     const act = b.dataset.act;

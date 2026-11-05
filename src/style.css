@@ -684,3 +684,14 @@ input:disabled::placeholder{color:var(--muted)}
 .pe-where{display:block;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em}
 .pe-vis .pe-sec{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px}
 .pe-vis .pe-sec .h{margin-top:0}
+
+/* Bal oldal: az előnézet mindig látszik, alatta fülek (Alapadatok, Megjelenés, Problémák); csak a fül tartalma görget */
+.pe-view .pe-vis{overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.pe-view .pe-vis>.pe-cv,.pe-view .pe-vis>.help{flex:0 0 auto}
+.pe-vtabs{flex:0 0 auto;margin:8px 0 8px;align-self:flex-start}
+.pe-vtabs .btn{padding:4px 12px;font-size:12.5px}
+.pe-vtabs .badge{margin-left:4px}
+.pe-vtabs .badge.err{background:var(--err);color:#fff}
+.pe-vscroll{flex:1 1 auto;min-height:0;overflow:auto;padding-bottom:12px}
+.pe-probs{margin:0}
+@media (max-width:820px){.pe-view .pe-vis{overflow:visible}.pe-vscroll{overflow:visible}}
