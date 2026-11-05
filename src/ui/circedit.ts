@@ -42,6 +42,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
       <span class="pg-sp"></span><span class="cg-hint small" role="status" hidden></span>
       <button class="btn icon" data-cg="zout" aria-label="Kicsinyítés">${icon('zoomOut')}</button><button class="btn icon" data-cg="zin" aria-label="Nagyítás">${icon('zoomIn')}</button>
       <button class="btn icon" data-cg="fit" aria-label="Az egész kapcsolás látszódjon" title="Az egész kapcsolás látszódjon">${icon('fit')}</button>
+      <button class="btn icon" data-cg="full" aria-pressed="false" aria-label="Teljes képernyő" title="Teljes képernyő (Esc: vissza)">${icon('full')}</button>
     </div>
     <div class="pg-canvas" tabindex="0" aria-label="Belső kapcsolás vászna">
       <div class="pg-layer"><svg class="pg-edges" width="1" height="1"></svg><div class="pg-nodes"></div></div>
@@ -162,7 +163,9 @@ export function mountCircEditor(host: CircHost): CircEditor {
   function addNode(what: string) {
     const r = canvas.getBoundingClientRect(), [wx, wy] = r.width ? toWorld(r.left + r.width / 2 - 70 * view.z, r.top + r.height / 3) : [40, 40];
     let x = Math.round(wx), y = Math.round(wy);
-    while (g.nodes.some(n => Math.abs(n.x - x) < 20 && Math.abs(n.y - y) < 20)) { x += 24; y += 24; }
+    // szabad hely: lefelé lépve, amíg egy meglévő elemmel sem fedné egymást
+    const hits = (px: number, py: number) => g.nodes.some(n => px < n.x + WID[n.k] + 16 && px + 160 > n.x - 16 && py < n.y + height(n) + 12 && py + 110 > n.y - 12);
+    for (let k = 0; k < 60 && hits(x, y); k++) { y += 40; if (k % 15 === 14) { x += 190; y = Math.round(wy); } }
     const base = { id: '', x, y };
     let n: CNode;
     if (what === 'in' || what === 'out') {
@@ -193,6 +196,14 @@ export function mountCircEditor(host: CircHost): CircEditor {
     sel = null; host.onSelect?.(null); save(); render();
   }
   function select(s: typeof sel) { sel = s; exprErr = null; host.onSelect?.(s && s.kind === 'node' ? s.id : null); renderNodes(); renderEdges(); renderProps(); }
+  /** Teljes képernyő: a szerkesztő az egész ablakot kitölti (Esc vagy a gomb: vissza). */
+  function full(on: boolean) {
+    root.classList.toggle('pg-full', on);
+    const b = root.querySelector('[data-cg="full"]') as HTMLElement;
+    b.innerHTML = icon(on ? 'fullExit' : 'full'); b.setAttribute('aria-pressed', String(on));
+    b.title = on ? 'Vissza (Esc)' : 'Teljes képernyő (Esc: vissza)'; b.setAttribute('aria-label', on ? 'Kilépés a teljes képernyőből' : 'Teljes képernyő');
+    requestAnimationFrame(() => fit());
+  }
   function fit() {
     const r = canvas.getBoundingClientRect();
     if (!g.nodes.length || !r.width) { view = { x: 16, y: 16, z: 1 }; applyView(); return; }
@@ -217,6 +228,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
     if (a === 'add') { menu.hidden = !menu.hidden; b.setAttribute('aria-expanded', String(!menu.hidden)); }
     else if (a === 'del') delSel();
     else if (a === 'zin') zoom(1.2); else if (a === 'zout') zoom(1 / 1.2); else if (a === 'fit') fit();
+    else if (a === 'full') full(!root.classList.contains('pg-full'));
   });
   props.addEventListener('change', e => {
     const t = e.target as HTMLInputElement & HTMLSelectElement, n = sel && sel.kind === 'node' ? node(sel.id) : null;
@@ -293,6 +305,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
     if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT')) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); delSel(); }
     else if (e.key === 'Escape' && (sel || pending)) { e.preventDefault(); e.stopPropagation(); pending = null; menu.hidden = true; select(null); }
+    else if (e.key === 'Escape' && root.classList.contains('pg-full')) { e.preventDefault(); e.stopPropagation(); full(false); }
   });
   renderMenu();
 

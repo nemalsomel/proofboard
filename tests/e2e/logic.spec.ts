@@ -63,8 +63,17 @@ test('Logika fül: belső kapcsolás diagramon, kifejezésből építve, igazsá
   await page.click('.pe [data-tab="func"]');
   await page.click('.cg [data-cg="add"]');
   await page.click('.cg [data-add="out"]');
-  await expect(page.locator('#pe_lvcc')).toHaveValue('2');
-  await expect(page.locator('#pe_lgnd')).toHaveValue('1');
+  // a táp és a föld a lábak szerepéből (VCC: tápbemenet, GND: föld), a Működés fülön nincs külön választó
+  await expect(page.locator('#pe_lvcc')).toHaveCount(0);
+  // teljes képernyő: a diagram kitölti az ablakot, Esc-re vissza
+  await page.click('.cg [data-cg="full"]');
+  const vp = page.viewportSize()!, box = (await page.locator('.cg').boundingBox())!;
+  expect(box.width).toBeGreaterThan(vp.width - 2); expect(box.height).toBeGreaterThan(vp.height - 2);
+  await page.locator('.cg .pg-canvas').click({ position: { x: 5, y: 5 } }); // kijelölés nélkül az Esc kilép
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.cg')).not.toHaveClass(/pg-full/);
+  await expect(page.locator('.pe')).toHaveCount(1); // a szerkesztő nyitva maradt
+  await page.locator('.cg [data-k="out"] .pg-head').click();
   await expect(page.locator('#cg_pin option:checked')).toHaveText('Y (azon. 5)'); // a kimenet kijelölve
   // kifejezésből a diagram épül
   await page.fill('#cg_expr', 'A &'); await page.press('#cg_expr', 'Enter');

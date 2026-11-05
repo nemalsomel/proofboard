@@ -41,6 +41,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
       <span class="pg-sp"></span>
       <button class="btn" data-pg="zout" aria-label="Kicsinyítés">−</button><button class="btn" data-pg="zin" aria-label="Nagyítás">+</button>
       <button class="btn" data-pg="fit" title="Az egész program látszódjon">Mind</button>
+      <button class="btn icon" data-pg="full" aria-pressed="false" aria-label="Teljes képernyő" title="Teljes képernyő (Esc: vissza)">${icon('full')}</button>
       <button class="btn" data-pg="run"></button>
     </div>
     <div class="pg-canvas" tabindex="0" aria-label="Programvászon">
@@ -196,6 +197,14 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     host.highlight(pin ? String(n!.props[pin.key] || '') || null : null);
     renderNodes(); renderEdges(); renderProps();
   }
+  /** Teljes képernyő: a szerkesztő az egész ablakot kitölti (Esc vagy a gomb: vissza). */
+  function full(on: boolean) {
+    root.classList.toggle('pg-full', on);
+    const b = root.querySelector('[data-pg="full"]') as HTMLElement;
+    b.innerHTML = icon(on ? 'fullExit' : 'full'); b.setAttribute('aria-pressed', String(on));
+    b.title = on ? 'Vissza (Esc)' : 'Teljes képernyő (Esc: vissza)'; b.setAttribute('aria-label', on ? 'Kilépés a teljes képernyőből' : 'Teljes képernyő');
+    requestAnimationFrame(() => fit());
+  }
   function fit() {
     const r = canvas.getBoundingClientRect();
     if (!prog.nodes.length || !r.width) { view = { x: 20, y: 20, z: 1 }; applyView(); return; }
@@ -222,6 +231,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     if (a === 'add') { menu.hidden = !menu.hidden; b.setAttribute('aria-expanded', String(!menu.hidden)); }
     else if (a === 'del') delSel();
     else if (a === 'zin') zoom(1.2); else if (a === 'zout') zoom(1 / 1.2); else if (a === 'fit') fit();
+    else if (a === 'full') full(!root.classList.contains('pg-full'));
     else if (a === 'run') { host.sim(!host.running()); renderRun(); }
   });
   props.addEventListener('change', e => {
@@ -294,6 +304,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     const t = e.target as HTMLElement;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT')) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); delSel(); }
+    else if (e.key === 'Escape' && !sel && !pending && root.classList.contains('pg-full')) { e.preventDefault(); e.stopPropagation(); full(false); }
     else if (e.key === 'Escape') { pending = null; menu.hidden = true; select(null); }
   });
   renderMenu();

@@ -446,7 +446,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       return { at: `Működés${n ? ' › ' + nodeTitle(n, pinList(f)) : ''}`, tab: 'func', sel: '#pe_s_logic', node: id, msg };
     }
     if (key === 'model') {
-      if (sub === 'vcc' || sub === 'gnd') return { at: 'Működés › Logika', tab: 'func', sel: `#pe_l${sub}`, msg: `${sub === 'vcc' ? 'Táp (VCC)' : 'Föld (GND)'}: válassz lábat.` };
+      if (sub === 'vcc' || sub === 'gnd') return { at: 'Lábak', tab: 'pins', sel: '.pe-pins select[data-k="role"]', msg: `A logikához kell egy ${sub === 'vcc' ? 'tápbemenet' : 'föld (GND)'} szerepű láb.` };
       const G = f.graph?.nodes || [];
       if (sub === 'regs' && j >= 0) { const r = G.filter(n => n.k === 'reg')[j]; return { at: `Működés › Logika › Tároló ${r?.name || ''}`.trim(), tab: 'func', sel: '#pe_s_logic', node: r?.id, msg }; }
       const o = sub === 'outs' && j >= 0 ? f.logic?.outs[j] : null;
@@ -641,7 +641,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   }
   /** Működés fül: villamos modell, logika, vezérlő – az alkatrész belső viselkedése. */
   function funcHtml(f: Form): string {
-    return `<section class="pe-sec" id="pe_s_logic"><p class="h">Belső kapcsolás</p>${logicHtml(f)}</section>`;
+    return `<section class="pe-sec" id="pe_s_logic">${logicHtml(f)}</section>`;
   }
 
 
@@ -686,6 +686,9 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (f.logic) delete f.logic.graph;
     if (hasLogic(f)) {
       const L = ensureLogic(f); if (L.view !== 'table') L.view = 'graph';
+      // a logika tápja és földje a lábak szerepéből (tápbemenet, föld); több ilyen lábnál a korábban választott marad
+      const role = (id: string) => f.pins.find(p => p.id === id)?.role;
+      for (const [k, r] of [['vcc', 'vin'], ['gnd', 'gnd']] as const) if (role(L[k]) !== r) { const p = f.pins.find(x => x.role === r); if (p) L[k] = p.id; }
       const r = graphToLogic(f.graph, pinList(f));
       L.outs = r.outs; L.regs = r.regs.length ? r.regs : undefined; graphProblems.push(...r.problems);
     } else if (f.logic) { f.logic.outs = []; f.logic.regs = undefined; }
@@ -729,15 +732,12 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   }
   function logicHtml(f: Form): string {
     if (!f.pins.length) return '<p class="help">Előbb adj lábakat az alkatrészhez a Lábak fülön.</p>';
-    const intro = `<p class="help">Mi történik az alkatrészen belül a lábak között: <b>villamos elemek</b> (ellenállás, dióda, tranzisztor…), <b>digitális logika</b> (kapuk, tárolók: a bemenetek a táp 70 %-a felett 1, 30 %-a alatt 0, a kimenet a táp vagy a föld felé hajt) és <b>vezérlő</b> (nyomógomb). Üresen az alkatrész csak lábakat ad, pl. egy csatlakozó.</p>`;
-    if (!hasLogic(f)) return `${intro}<div data-circ></div>`;
+    if (!hasLogic(f)) return '<div data-circ></div>';
     const L = ensureLogic(f);
     const view = L.view === 'table' ? 'table' : 'graph';
     const seg = (['graph', 'table'] as const).map(v => `<button class="btn ${v === view ? 'on' : ''}" data-act="lgview" data-v="${v}" role="tab" aria-selected="${v === view}">${{ graph: 'Kapcsolás', table: 'Igazságtábla' }[v]}</button>`).join('');
-    const head = `<div class="pe-grid"><label for="pe_lvcc">Táp (VCC)</label><select id="pe_lvcc" data-lsup="vcc">${pinOpts(f, L.vcc)}</select>
-      <label for="pe_lgnd">Föld (GND)</label><select id="pe_lgnd" data-lsup="gnd">${pinOpts(f, L.gnd)}</select></div>
-      <div class="pe-seg" role="tablist" aria-label="Logika nézete">${seg}</div>`;
-    if (view === 'graph') return `${intro}${head}<div data-circ></div>`;
+    const head = `<div class="pe-seg" role="tablist" aria-label="Logika nézete">${seg}</div>`;
+    if (view === 'graph') return `${head}<div data-circ></div>`;
 
     const outsT = L.outs.map(o => ({ name: pinName(f, o.pin), expr: o.expr, oe: o.oe }));
     const ins = f.pins.filter(p => p.id !== L.vcc && p.id !== L.gnd && !L.outs.some(o => o.pin === p.id)).map(p => p.name || p.id);
@@ -750,7 +750,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (data.tooMany) tbl += `<p class="c-err small">Legfeljebb ${TABLE_MAX_VARS} bemenet fér a táblázatba (most ${vars.length}); ennél többnél a Kapcsolás nézetet használd.</p>`;
     else tbl += `<div class="tablewrap"><table class="tbl lg-tt"><thead><tr>${vars.map(v => `<th>${esc(v)}</th>`).join('')}<th class="sep"></th>${outsT.map(o => `<th class="o">${esc(o.name)}</th>`).join('')}</tr></thead><tbody>` +
       data.cells.map((row, r) => `<tr>${vars.map((_, j) => `<td>${(r >> (vars.length - 1 - j)) & 1}</td>`).join('')}<td class="sep"></td>${row.map((v, oi) => `<td><button class="lg-cell v${v}" data-act="lgcell" data-i="${oi}" data-r="${r}" ${v === 'Z' ? 'disabled title="Itt az engedélyezés 0: a kimenet nem hajt"' : ''}>${v}</button></td>`).join('')}</tr>`).join('') + '</tbody></table></div>';
-    return `${intro}${head}<p class="help">Kattints egy kimeneti cellára: 0 ↔ 1. A kimenet előtti kapuk a táblázatból a legrövidebb alakban (az ÉS-ek VAGY-a) újraépülnek; a <b>Z</b> sorokban az engedélyezés 0, ott mindegy.</p>
+    return `${head}<p class="help">Kattints egy kimeneti cellára: 0 ↔ 1. A kimenet előtti kapuk a táblázatból a legrövidebb alakban (az ÉS-ek VAGY-a) újraépülnek; a <b>Z</b> sorokban az engedélyezés 0, ott mindegy.</p>
       <div class="lg-chips"><span class="small muted">Bemenetek a táblázatban:</span> ${chips || '<span class="small muted">–</span>'}</div>${data.errors.map(e => `<p class="c-err small">${esc(e)}</p>`).join('')}${tbl}`;
   }
   /** A Logika eseményei (a diagramé a komponensben); true, ha kezelte. */

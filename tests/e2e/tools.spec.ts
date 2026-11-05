@@ -175,3 +175,14 @@ test('nézetváltó 1 / 2 / 3, rövid vezeték Shift+W; tulajdonságok: fő műv
   const boxes = await Promise.all(['#pRot', '#pMir', '#pDup', '#pDel'].map(s => page.locator(s).boundingBox()));
   expect(new Set(boxes.map(b => Math.round(b!.y))).size).toBeLessThanOrEqual(2); // legfeljebb két sorban
 });
+
+test('programszerkesztő: teljes képernyő gombbal, Esc-re vissza', async ({ page }) => {
+  await pcb(page, `pcb.program({ nodes: [{ id: 'n1', type: 'blink', x: 40, y: 40, props: {} }], edges: [] }); pcb.work('prog');`);
+  await page.click('[data-pg="full"]');
+  const vp = page.viewportSize()!, box = (await page.locator('.pg.pg-full').boundingBox())!;
+  expect(box.width).toBeGreaterThan(vp.width - 2);
+  await page.locator('.pg .pg-canvas').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.pg.pg-full')).toHaveCount(0);
+  expect(await pcb(page, `return pcb.work();`)).toBe('prog');
+});
