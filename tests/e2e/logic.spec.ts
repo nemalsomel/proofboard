@@ -61,7 +61,8 @@ test('Logika fül: belső kapcsolás diagramon, kifejezésből építve, igazsá
   await page.fill('#pe_gnames', 'GND,VCC,A,B,Y');
   await page.click('[data-act="gen"]');
   await page.click('.pe [data-tab="func"]');
-  await page.click('[data-act="lgstart"]');
+  await page.click('.cg [data-cg="add"]');
+  await page.click('.cg [data-add="out"]');
   await expect(page.locator('#pe_lvcc')).toHaveValue('2');
   await expect(page.locator('#pe_lgnd')).toHaveValue('1');
   await expect(page.locator('#cg_pin option:checked')).toHaveText('Y (azon. 5)'); // a kimenet kijelölve
@@ -139,14 +140,15 @@ test('Logika fül: tároló a diagramon, élek húzással, kimenet a tárolóra;
   await page.fill('#pe_gnames', 'GND,VCC,D,CLK,Q');
   await page.click('[data-act="gen"]');
   await page.click('.pe [data-tab="func"]');
-  await page.click('[data-act="lgstart"]');
+  await page.click('.cg [data-cg="add"]');
+  await page.click('.cg [data-add="out"]');
   await page.fill('#cg_expr', 'D & CLK'); await page.press('#cg_expr', 'Enter'); // a két bemeneti láb a diagramra kerül
   await page.click('.cg [data-cg="add"]');
   await page.click('.cg [data-add="reg"]');
   await page.fill('#cg_name', 'MEM'); await page.locator('#cg_name').press('Enter');
   await page.click('.cg [data-cg="fit"]');
   const id = async (k: string, text: string) => page.locator(`.cg [data-k="${k}"]`, { hasText: text }).getAttribute('data-cnode');
-  const reg = (await id('reg', 'MEM'))!, inD = (await id('in', 'Be: D'))!, inC = (await id('in', 'Be: CLK'))!;
+  const reg = (await id('reg', 'MEM'))!, inD = (await id('in', 'Láb: D'))!, inC = (await id('in', 'Láb: CLK'))!;
   const wire = async (from: string, to: string) => {
     const a = (await page.locator(`[data-cout="${from}"]`).boundingBox())!, b = (await page.locator(`[data-cport="${to}"]`).boundingBox())!;
     await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await page.mouse.down();

@@ -4,9 +4,10 @@
  * a csomópont bárhol megfogva mozgatható; üres helyen húzva vagy középső gombbal a vászon mozog, görgővel nagyít.
  * A kijelölt csomópont beállításai a vászon jobb oldalán. Önálló, típusos komponens: az adatot a gazdától kapja.
  */
-import { GATE_SHORT, connect, nextNodeId, nodeTitle, portsOf, pruneEdges, removeNode, type CGraph, type CKind, type CNode, type PinLite } from '../core/circuit';
+import { EL_KINDS, GATE_SHORT, canConnect, connect, nextNodeId, nodeTitle, portsOf, pruneEdges, removeNode, type CGraph, type CKind, type CNode, type ElKind, type PinLite } from '../core/circuit';
 import type { GateKind } from '../core/logic';
 import { icon } from './icons';
+import { fmtSI } from '../core/expr';
 
 export interface CircHost {
   get(): CGraph;
@@ -24,9 +25,11 @@ export interface CircHost {
 export interface CircEditor { el: HTMLElement; refresh(): void; select(id: string | null): void; fit(): void }
 
 const HEAD = 26, ROW = 22;
-const WID: Record<CKind, number> = { in: 128, const: 104, gate: 128, reg: 150, out: 150 };
-const COLOR: Record<CKind, string> = { in: '#1c7ed6', const: '#868e96', gate: '#7048e8', reg: '#2f9e44', out: '#e8590c' };
+const WID: Record<CKind, number> = { in: 128, const: 104, gate: 128, reg: 150, out: 150, el: 160, press: 140 };
+const COLOR: Record<CKind, string> = { in: '#1c7ed6', const: '#868e96', gate: '#7048e8', reg: '#2f9e44', out: '#e8590c', el: '#a8571f', press: '#c2255c' };
+const KIND_HU: Record<CKind, string> = { in: 'Láb', const: 'Állandó', gate: 'Kapu', reg: 'Tároló', out: 'Kimenet', el: 'Villamos elem', press: 'Nyomógomb' };
 const GATES: GateKind[] = ['and', 'or', 'xor', 'not', 'nand', 'nor', 'xnor', 'buf'];
+const fmtNum = (v: number) => fmtSI(v);
 const esc = (s: unknown) => String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]!));
 
 export function mountCircEditor(host: CircHost): CircEditor {
@@ -36,7 +39,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
     <div class="pg-bar" role="toolbar" aria-label="Belső kapcsolás">
       <div class="pg-add"><button class="btn" data-cg="add" aria-haspopup="true" aria-expanded="false">+ Elem</button><div class="pg-menu" hidden></div></div>
       <button class="btn" data-cg="del" disabled title="A kijelölt elem vagy él törlése (Delete)">Törlés</button>
-      <span class="pg-sp"></span>
+      <span class="pg-sp"></span><span class="cg-hint small" role="status" hidden></span>
       <button class="btn icon" data-cg="zout" aria-label="Kicsinyítés">${icon('zoomOut')}</button><button class="btn icon" data-cg="zin" aria-label="Nagyítás">${icon('zoomIn')}</button>
       <button class="btn icon" data-cg="fit" aria-label="Az egész kapcsolás látszódjon" title="Az egész kapcsolás látszódjon">${icon('fit')}</button>
     </div>
@@ -69,9 +72,11 @@ export function mountCircEditor(host: CircHost): CircEditor {
 
   function renderMenu() {
     const item = (k: string, l: string, t: string) => `<button class="pg-mitem" data-add="${k}" title="${esc(t)}">${esc(l)}</button>`;
-    menu.innerHTML = `<div class="pg-mcat" style="--c:${COLOR.in}">Lábak</div>${item('in', 'Bemenet (láb)', 'Egy bemeneti láb jele')}${item('out', 'Kimenet (láb)', 'Ide kötött jel hajtja a lábat')}`
+    menu.innerHTML = `<div class="pg-mcat" style="--c:${COLOR.in}">Lábak</div>${item('in', 'Láb', 'Az alkatrész egy lába: logikai bemenet, és ide kötnek a villamos elemek is')}${item('out', 'Kimenet (láb)', 'Logikai kimenet: az ide kötött jel hajtja a lábat')}`
       + `<div class="pg-mcat" style="--c:${COLOR.gate}">Kapuk</div>${GATES.map(x => item('g:' + x, GATE_SHORT[x], GATE_SHORT[x] + ' kapu')).join('')}`
-      + `<div class="pg-mcat" style="--c:${COLOR.reg}">Egyéb</div>${item('reg', 'Tároló', 'Az órajel élén felveszi a D értékét, egyébként megtartja')}${item('c:0', 'Állandó 0', 'Mindig 0')}${item('c:1', 'Állandó 1', 'Mindig 1')}`;
+      + `<div class="pg-mcat" style="--c:${COLOR.reg}">Egyéb</div>${item('reg', 'Tároló', 'Az órajel élén felveszi a D értékét, egyébként megtartja')}${item('c:0', 'Állandó 0', 'Mindig 0')}${item('c:1', 'Állandó 1', 'Mindig 1')}`
+      + `<div class="pg-mcat" style="--c:${COLOR.el}">Villamos elemek</div>${(Object.keys(EL_KINDS) as ElKind[]).map(k => item('el:' + k, EL_KINDS[k].label, 'Kivezetései lábakhoz köthetők')).join('')}`
+      + `<div class="pg-mcat" style="--c:${COLOR.press}">Vezérlő</div>${item('press', 'Nyomógomb', 'Szimulációban lenyomva a két lábát összeköti')}`;
   }
 
   function renderEdges() {
@@ -93,6 +98,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
   function sumOf(n: CNode): string {
     if (n.k === 'in' || n.k === 'out') return n.pin ? '' : 'nincs láb kiválasztva';
     if (n.k === 'reg') return n.edge === 'fall' ? 'lefutó él ↓' : 'felfutó él ↑';
+    if (n.k === 'el') { const K = EL_KINDS[n.el || 'resistor']; return K.vals.map(([, , u], i) => (n.vals?.[i] ? n.vals[i] + (u ? ' ' + u : '') : '')).filter(Boolean).join(' · '); }
     return '';
   }
   function renderNodes() {
@@ -104,7 +110,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
         const right = P.out && i === 0 ? `<span class="pg-pr">${n.k === 'reg' ? 'Q' : ''}</span><span class="pg-port out${pending === n.id ? ' pend' : ''}" data-cout="${n.id}" title="kimenet"></span>` : '<span></span><span></span>';
         return `<div class="pg-row">${left}${right}</div>`;
       }).join('');
-      const title = n.k === 'in' || n.k === 'out' ? `${n.k === 'in' ? 'Be' : 'Ki'}: ${pinName(n.pin) || '–'}` : n.k === 'reg' ? `Tároló ${n.name || ''}` : nodeTitle(n, pins);
+      const title = n.k === 'in' || n.k === 'out' ? `${n.k === 'in' ? 'Láb' : 'Ki'}: ${pinName(n.pin) || '–'}` : n.k === 'reg' ? `Tároló ${n.name || ''}` : nodeTitle(n, pins);
       const sm = sumOf(n);
       return `<div class="pg-node cg-${n.k}${s ? ' sel' : ''}${err ? ' err' : ''}" data-cnode="${n.id}" data-k="${n.k}" style="left:${n.x}px;top:${n.y}px;width:${WID[n.k]}px;--c:${COLOR[n.k]}">
         <div class="pg-head">${icon('grip', 'pg-grip')}<span>${esc(title)}</span></div>${ports}
@@ -130,6 +136,13 @@ export function mountCircEditor(host: CircHost): CircEditor {
     } else if (n.k === 'reg') body = `<label class="small" for="cg_name">Név</label><input type="text" id="cg_name" data-cp="name" value="${esc(n.name || '')}" spellcheck="false" title="Erre a névre a kifejezések is hivatkozhatnak">
         <label class="small" for="cg_edge">Órajel</label><select id="cg_edge" data-cp="edge">${opt('rise', 'felfutó él ↑', n.edge || 'rise')}${opt('fall', 'lefutó él ↓', n.edge || 'rise')}</select>
         <p class="help">A <b>törlés</b> (0-ra) és a <b>beállítás</b> (1-re) bemenet nem kötelező; 1 szintnél azonnal hat.</p>`;
+    else if (n.k === 'el') {
+      const K = EL_KINDS[n.el || 'resistor'];
+      body = `<label class="small" for="cg_el">Elem</label><select id="cg_el" data-cp="el">${(Object.keys(EL_KINDS) as ElKind[]).map(k => opt(k, EL_KINDS[k].label, n.el || 'resistor')).join('')}</select>`
+        + K.vals.map(([, l, u], i) => `<label class="small" for="cg_val${i}">${esc(l)}</label><div class="row"><input type="text" id="cg_val${i}" data-cv="${i}" value="${esc(n.vals?.[i] ?? '')}" style="width:96px"><span class="small muted">${esc(u)}</span></div>`).join('')
+        + (n.el === 'mcu' ? `<span></span><label class="check small" title="ESP32-szerű lap: a buszfunkció bármely GPIO-ra kiosztható; a képességek ekkor az alapértelmezett lábak"><input type="checkbox" id="cg_mux" data-cp="mux" ${n.mux ? 'checked' : ''}> szabadon kiosztható buszok</label>` : '')
+        + `<p class="help">A kivezetéseit egy-egy <b>Láb</b> elemhez kösd (a láb kimeneti pontjától húzva).</p>`;
+    } else if (n.k === 'press') body = `<p class="help">Szimuláció közben a gombot lenyomva a két lábát összeköti. Mindkét kivezetését egy-egy <b>Láb</b> elemhez kösd.</p>`;
     else {
       const ex = host.exprOf(n.id) || { v: '', oe: '' };
       const msg = (w: string) => (exprErr && exprErr.id === n.id && exprErr.which === w ? `<p class="pg-err" data-cgmsg="${w}">${esc(exprErr.msg)}</p>` : '');
@@ -140,7 +153,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
         <p class="help">A kifejezést átírva (Enter) a kimenet előtti kapuk ebből újraépülnek.</p>`;
     }
     props.hidden = false;
-    props.innerHTML = `<p class="h" style="margin:0 0 4px;color:${COLOR[n.k]}">${esc({ in: 'Bemenet', const: 'Állandó', gate: 'Kapu', reg: 'Tároló', out: 'Kimenet' }[n.k])}</p>${body}
+    props.innerHTML = `<p class="h" style="margin:0 0 4px;color:${COLOR[n.k]}">${esc(KIND_HU[n.k])}</p>${body}
       ${err ? `<p class="pg-err" style="margin-top:6px">${esc(err)}</p>` : ''}
       <div class="row" style="margin-top:8px"><button class="btn danger" data-cg="del">Elem törlése</button></div>`;
   }
@@ -152,13 +165,28 @@ export function mountCircEditor(host: CircHost): CircEditor {
     while (g.nodes.some(n => Math.abs(n.x - x) < 20 && Math.abs(n.y - y) < 20)) { x += 24; y += 24; }
     const base = { id: '', x, y };
     let n: CNode;
-    if (what === 'in' || what === 'out') { const used = new Set(g.nodes.filter(m => m.k === what).map(m => m.pin)); n = { ...base, k: what, pin: pins.find(p => !used.has(p.id))?.id || '' }; }
+    if (what === 'in' || what === 'out') {
+      // kimenetnek a kimeneti szerepű (vagy az utolsó szabad) láb, bemenetnek az első szabad jel-láb
+      const used = new Set(g.nodes.filter(m => m.k === what).map(m => m.pin)), free = pins.filter(p => !used.has(p.id) && p.role !== 'gnd' && p.role !== 'vin');
+      const pick = what === 'out' ? free.find(p => p.role === 'out') || free[free.length - 1] : free[0];
+      n = { ...base, k: what, pin: pick?.id || '' };
+    }
     else if (what === 'reg') { let k = 1; while (g.nodes.some(m => m.name === 'F' + k) || pins.some(p => p.name === 'F' + k)) k++; n = { ...base, k: 'reg', name: 'F' + k, edge: 'rise' }; }
     else if (what.startsWith('c:')) n = { ...base, k: 'const', v: what === 'c:1' ? 1 : 0 };
+    else if (what.startsWith('el:')) { const k = what.slice(3) as ElKind; n = { ...base, k: 'el', el: k, vals: EL_KINDS[k].vals.map(v => fmtNum(v[3])) }; }
+    else if (what === 'press') n = { ...base, k: 'press' };
     else { const gk = what.slice(2) as GateKind; n = { ...base, k: 'gate', g: gk, ...(gk === 'not' || gk === 'buf' ? {} : { n: 2 }) }; }
-    n.id = nextNodeId(g, { in: 'i', out: 'o', reg: 'r', const: 'c', gate: 'g' }[n.k]);
+    n.id = nextNodeId(g, { in: 'i', out: 'o', reg: 'r', const: 'c', gate: 'g', el: 'e', press: 'p' }[n.k]);
     g = { nodes: [...g.nodes, n], edges: g.edges }; sel = { kind: 'node', id: n.id }; save(); render();
   }
+  /** Él, ha szabályos; különben rövid üzenet a sávban. */
+  function tryConnect(from: string, to: string, port: string) {
+    const why = canConnect(g, from, to);
+    if (why) { hint(why); return; }
+    g = connect(g, from, to, port); save();
+  }
+  let hintT = 0;
+  function hint(m: string) { const h = $<HTMLElement>('.cg-hint'); h.textContent = m; h.hidden = false; clearTimeout(hintT); hintT = window.setTimeout(() => { h.hidden = true; }, 3500); }
   function delSel() {
     if (!sel) return;
     g = sel.kind === 'node' ? removeNode(g, sel.id) : { nodes: g.nodes, edges: g.edges.filter((_, i) => i !== (sel as { i: number }).i) };
@@ -199,6 +227,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
       if (!err) return; // a gazda frissít
       renderProps(); return;
     }
+    if (t.dataset.cv != null) { const i = +t.dataset.cv, vs = [...(n.vals || [])]; vs[i] = t.value.trim(); n.vals = vs; save(); renderNodes(); renderEdges(); return; }
     const k = t.dataset.cp; if (!k) return;
     if (k === 'pin') n.pin = t.value;
     else if (k === 'v') n.v = t.value === '1' ? 1 : 0;
@@ -207,6 +236,8 @@ export function mountCircEditor(host: CircHost): CircEditor {
     else if (k === 'name') n.name = t.value.trim();
     else if (k === 'edge') n.edge = t.value === 'fall' ? 'fall' : 'rise';
     else if (k === 'od') { if (t.value === 'od') n.od = true; else delete n.od; }
+    else if (k === 'el') { const nk = t.value as ElKind; n.el = nk; n.vals = EL_KINDS[nk].vals.map(v => fmtNum(v[3])); if (nk !== 'mcu') delete n.mux; }
+    else if (k === 'mux') { if (t.checked) n.mux = true; else delete n.mux; }
     g = pruneEdges(g); save(); render();
   });
   props.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.target as HTMLElement).dataset.cx) (e.target as HTMLInputElement).dispatchEvent(new Event('change', { bubbles: true })); });
@@ -219,7 +250,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
     if (out) { drag = { kind: 'wire', from: out.dataset.cout!, x0: e.clientX, y0: e.clientY, moved: false }; root.classList.add('wiring'); canvas.setPointerCapture(e.pointerId); return; }
     if (pin) {
       const ref = pin.dataset.cport!, k = ref.lastIndexOf('.');
-      if (pending) { g = connect(g, pending, ref.slice(0, k), ref.slice(k + 1)); pending = null; save(); render(); return; }
+      if (pending) { tryConnect(pending, ref.slice(0, k), ref.slice(k + 1)); pending = null; render(); return; }
       const i = g.edges.findIndex(x => x.to === ref.slice(0, k) && x.port === ref.slice(k + 1)); if (i >= 0) select({ kind: 'edge', i });
       return;
     }
@@ -251,7 +282,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
     if (d.kind === 'wire') {
       if (!d.moved) { pending = pending === d.from ? null : d.from; renderNodes(); renderEdges(); return; }
       const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-cport]') as HTMLElement | null;
-      if (over) { const ref = over.dataset.cport!, k = ref.lastIndexOf('.'); g = connect(g, d.from, ref.slice(0, k), ref.slice(k + 1)); save(); }
+      if (over) { const ref = over.dataset.cport!, k = ref.lastIndexOf('.'); tryConnect(d.from, ref.slice(0, k), ref.slice(k + 1)); }
       render();
     }
   });

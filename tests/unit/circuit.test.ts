@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { connect, dropUnused, graphToLogic, setPortExpr, logicToGraph, portsOf, pruneEdges, removeNode, type CGraph } from '../../src/core/circuit';
+import { addModelToGraph, canConnect, connect, dropUnused, graphToLogic, graphToModel, setPortExpr, logicToGraph, portsOf, pruneEdges, removeNode, type CGraph } from '../../src/core/circuit';
 import { evalExpr, parseExpr } from '../../src/core/logic';
 
 const pins = [{ id: '1', name: 'GND' }, { id: '2', name: 'VCC' }, { id: '3', name: 'A' }, { id: '4', name: 'B' }, { id: '5', name: 'Y' }, { id: '6', name: 'Q' }];
@@ -95,5 +95,27 @@ describe('belső kapcsolás: diagram ↔ kifejezés', () => {
     const r = graphToLogic(g, pins);
     expect(r.problems[0].msg).toMatch(/nincs láb/);
     expect(r.outs[0].expr).toBe('0');
+  });
+
+  it('villamos elemek és nyomógomb: a régi leírásból a diagramra és vissza; a lábak csomópontjai közösek', () => {
+    const rows = [{ el: 'resistor' as const, pins: ['3', '4'], vals: ['4.7k'] }, { el: 'diode' as const, pins: ['4', '1'], vals: ['0.7'] }];
+    const g = addModelToGraph(logicToGraph({ outs: [{ pin: '5', expr: 'A', oe: '', type: 'pp' }] }, pins), rows, ['3', '1']);
+    expect(g.nodes.filter(n => n.k === 'in').map(n => n.pin).sort()).toEqual(['1', '3', '4']); // az A láb a logikával közös
+    const m = graphToModel(g);
+    expect(m.model).toEqual(rows);
+    expect(m.press).toEqual(['3', '1']);
+    expect(m.problems).toEqual([]);
+    expect(graphToLogic(g, pins).outs[0].expr).toBe('A'); // a villamos élek a logikát nem zavarják
+  });
+
+  it('villamos elem kivezetése csak lábhoz köthető; a félig bekötött nyomógomb hiba', () => {
+    const g: CGraph = { nodes: [{ id: 'i', k: 'in', pin: '3', x: 0, y: 0 }, { id: 'n', k: 'gate', g: 'not', x: 0, y: 0 }, { id: 'e', k: 'el', el: 'resistor', vals: ['1k'], x: 0, y: 0 }, { id: 'p', k: 'press', x: 0, y: 0 }, { id: 'o', k: 'out', pin: '5', x: 0, y: 0 }], edges: [{ from: 'i', to: 'p', port: 'a' }] };
+    expect(canConnect(g, 'i', 'e')).toBeNull();
+    expect(canConnect(g, 'n', 'e')).toMatch(/csak lábhoz/);
+    expect(canConnect(g, 'o', 'n')).toMatch(/nincs kimenete/);
+    const m = graphToModel(g);
+    expect(m.press).toBeNull();
+    expect(m.problems[0].msg).toMatch(/Nyomógomb/);
+    expect(m.model).toEqual([{ el: 'resistor', pins: ['', ''], vals: ['1k'] }]);
   });
 });

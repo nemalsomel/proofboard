@@ -743,3 +743,4 @@ input:disabled::placeholder{color:var(--muted)}
 .cg .pg-port.opt{background:var(--panel2);box-shadow:0 0 0 1px #868e96}
 .cg .pg-sum{margin-top:4px;padding-bottom:6px}
 @media (max-width:820px){.cg>.pg-canvas{height:320px}}
+.ptab .pgo{display:block;text-align:left}

@@ -144,9 +144,13 @@ test('Űrlap ↔ JSON: a beállítások mindkét irányban átkerülnek; amit az
   await expect(page.locator('#pe_name')).toHaveValue('JSON-ból');
   await expect(page.locator('.pe-pins tbody tr')).toHaveCount(4);
   await expect(page.locator('.pe-pins select[data-k="role"]').nth(2)).toHaveValue('adc');
-  await page.click('.pe [data-tab="func"]'); // a villamos modell a Működés fülön
-  await expect(page.locator('[data-model="0"][data-k="val0"]')).toHaveValue('4.7k');
-  await expect(page.locator('[data-model="0"][data-k="pin0"] option:checked')).toHaveText('VCC (azon. 1)');
+  await page.click('.pe [data-tab="func"]'); // a villamos elem a belső kapcsolás diagramján, a lábaihoz kötve
+  const el = page.locator('.cg [data-k="el"]');
+  await expect(el).toContainText('Ellenállás');
+  await expect(el).toContainText('4.7k Ω');
+  await expect(page.locator('.cg [data-k="in"]')).toHaveText([/Láb: VCC/, /Láb: GND/]);
+  await el.locator('.pg-head').click();
+  await expect(page.locator('#cg_val0')).toHaveValue('4.7k');
   // haladó elem: paraméter → figyelmeztetés, maradhat JSON-ban
   await page.click('.pe [data-tab="json"]');
   const k = JSON.parse(await page.locator('#pe_json').inputValue());
@@ -194,10 +198,9 @@ test('5.6: a szerkesztő középső nézet, fül a nézetsávban; háttérbe teh
   await page.check('#pe_wide');
   await expect(page.locator('.pe-pins th', { hasText: 'Táp' })).toHaveCount(1); // minden oszlop: a Táp csak, ha van tápbemenet
   await expect(page.locator('.pe-det')).toHaveCount(0);
-  // Működés fül: szakaszugrás (Villamos modell, Logika, Vezérlő)
+  // Működés fül: a belső kapcsolás diagramja
   await page.click('.pe [data-tab="func"]');
-  await page.click('.pe-nav [data-jump="ctl"]');
-  await expect(page.locator('#pe_s_ctl')).toBeInViewport();
+  await expect(page.locator('#pe_s_logic .cg')).toBeVisible();
   await page.click('.pe [data-tab="pins"]');
   // fejlécben nincs külön bezáró; a fül × nem mentett módosításnál csak háttérbe tesz, a fül marad
   await expect(page.locator('.pe [data-act="close"]')).toHaveCount(0);
@@ -237,20 +240,20 @@ test('5.6b: balra az előnézet és az alapadatok, jobbra Lábak | Működés | 
   await expect(page.locator('.pe [data-tab]')).toHaveText(['Lábak', 'Működés', 'JSON']);
   await page.fill('#pe_gnames', 'A,B,Y');
   await page.click('[data-act="gen"]');
-  // Működés: egy ellenállás láb nélkül → „Működés › 1. elem (Ellenállás)”, kattintásra a lábválasztóra ugrik
+  // Működés: egy ellenállás lábak nélkül → „Működés › Ellenállás: 1. vég: nincs lábhoz kötve”, kattintásra a diagramon kijelölve
   await page.click('.pe [data-tab="func"]');
-  await page.click('[data-act="addmodel"]');
-  await page.selectOption('[data-model="0"][data-k="pin1"]', '');
-  const prob = page.locator('.pe-probs li', { hasText: '1. elem (Ellenállás)' });
-  await expect(page.locator('.pe [data-vtab="probs"] .badge')).toHaveText('1');
+  await page.click('.cg [data-cg="add"]');
+  await expect(page.locator('.cg [data-add="press"]')).toBeVisible(); // a nyomógomb (vezérlő) is innen jön
+  await page.click('.cg [data-add="el:resistor"]');
+  const prob = page.locator('.pe-probs li', { hasText: 'Működés › Ellenállás' }).first();
+  await expect(page.locator('.pe [data-vtab="probs"] .badge')).toHaveText('2');
   await page.click('.pe [data-vtab="probs"]');
-  await expect(prob).toContainText('2. vég: válassz lábat.');
+  await expect(prob).toContainText('1. vég: nincs lábhoz kötve.');
+  await page.locator('.cg .pg-canvas').click({ position: { x: 5, y: 5 } }); // kijelölés megszüntetése
   await page.click('.pe [data-tab="pins"]');
   await prob.click();
   await expect(page.locator('.pe [data-tab="func"]')).toHaveClass(/on/);
-  await expect(page.locator('[data-model="0"][data-k="pin1"]')).toBeFocused();
-  // a nyomógomb (Vezérlő) is a Működés fülön
-  await expect(page.locator('#pe_s_ctl [data-press="on"]')).toBeVisible();
+  await expect(page.locator('.cg .pg-node.sel')).toHaveAttribute('data-k', 'el');
 });
 
 test('több alkatrész egyszerre: mindegyik saját fület kap, a másik megnyitása nem zárja be az előzőt', async ({ page }) => {
