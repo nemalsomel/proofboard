@@ -78,6 +78,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
   const summary = (n: PNode): string[] => {
     const d = NODE_DEFS[n.type], out: string[] = [];
     for (const pr of d.params) {
+      if (pr.when && String(n.props[pr.when.key]) !== pr.when.is) continue;
       const v = n.props[pr.key];
       if (pr.type === 'pin') out.push(pinLabel(v));
       else if (pr.type === 'select') out.push(`${pr.label}: ${(pr.options || []).find(o => o[0] === v)?.[1] ?? v}`);

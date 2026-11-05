@@ -24,7 +24,9 @@ function hl(line: string, lang: CodeLang): string {
   const cm = lang === 'micropython' ? '#' : '//', i = line.indexOf(cm);
   const code = i >= 0 ? line.slice(0, i) : line, com = i >= 0 ? line.slice(i) : '';
   const KW = lang === 'micropython' ? /\b(from|import|while|if|else|not|and|or|True|False|None|int|max|min)\b/g : /\b(void|bool|int|float|unsigned|long|if|else|return|true|false|const)\b/g;
-  const c = esc(code).replace(/(&quot;[^&]*&quot;|'[^']*')/g, '<span class="tk-s">$1</span>').replace(KW, '<span class="tk-k">$1</span>').replace(/\b(\d+(?:\.\d+)?f?)\b/g, '<span class="tk-n">$1</span>');
+  // szövegek először (kimarad belőlük a kulcsszó- és számkiemelés), a számok nem eshetnek HTML-entitásba (&#39;)
+  const parts = esc(code).split(/(&quot;.*?&quot;|&#39;.*?&#39;)/g);
+  const c = parts.map((x, i) => i % 2 ? `<span class="tk-s">${x}</span>` : x.replace(KW, '<span class="tk-k">$1</span>').replace(/(?<![&#\w])(\d+(?:\.\d+)?f?)\b/g, '<span class="tk-n">$1</span>')).join('');
   return c + (com ? `<span class="tk-c">${esc(com)}</span>` : '');
 }
 
