@@ -29,7 +29,7 @@ describe('fordítás', () => {
       .replace(/<([a-z]+)[^>]*data-i18n-skip[^>]*>[\s\S]*?<\/\1>/g, '\u0000');
     for (const m of html.matchAll(/\b(?:title|aria-label|placeholder|alt)="([^"]*\p{L}[^"]*)"/gu)) keys.add(m[1].replace(/\s+/g, ' ').trim());
     for (const m of html.replace(/<[^>]+>/g, '\u0000').split('\u0000')) { const s = m.replace(/\s+/g, ' ').trim(); if (/\p{L}/u.test(s)) keys.add(s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')); }
-    for (const f of files('src')) { if (f.includes('i18n')) continue; for (const m of readFileSync(f, 'utf8').matchAll(/\bt\(\s*'((?:[^'\\]|\\.)*)'/g)) keys.add(m[1].replace(/\\'/g, "'")); }
+    for (const f of files('src')) { if (f.includes('i18n')) continue; for (const m of readFileSync(f, 'utf8').matchAll(/\b(?:t|tr|N_)\(\s*'((?:[^'\\]|\\.)*)'/g)) keys.add(m[1].replace(/\\'/g, "'")); }
     const miss = [...keys].filter(k => !(k in EN));
     expect(miss).toEqual([]);
     for (const [k, v] of Object.entries(EN)) expect([...v.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort(), k).toEqual([...k.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort());

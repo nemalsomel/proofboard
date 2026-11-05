@@ -27,7 +27,7 @@ def code_strings():
     out = []
     for f in (ROOT / 'src').rglob('*.ts'):
         if 'i18n' in f.parts: continue
-        for m in re.finditer(r"\bt\(\s*'((?:[^'\\]|\\.)*)'", f.read_text()): out.append(m.group(1).replace("\\'", "'"))
+        for m in re.finditer(r"\b(?:t|tr|N_)\(\s*'((?:[^'\\]|\\.)*)'", f.read_text()): out.append(m.group(1).replace("\\'", "'"))
     return out
 def en_keys():
     src = (ROOT / 'src/i18n/en.ts').read_text()

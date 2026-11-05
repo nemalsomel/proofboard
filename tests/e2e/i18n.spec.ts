@@ -23,6 +23,11 @@ test('Fájl → Nyelv: English, majd vissza Magyar; újratöltés után is megma
   await expect(page.locator('#toast')).toContainText('in progress');
   await expect(page.locator('#bUndo')).toHaveAttribute('title', 'Undo (Ctrl+Z)');
   await expect(page.locator('#exSearch')).toHaveAttribute('placeholder', 'Search the examples');
+  // a program által épített részek is (eszközsáv, állapotsor)
+  await expect(page.locator('[data-tool="select"] .tl')).toHaveText('Select');
+  await expect(page.locator('[data-tool="erase"]')).toHaveAttribute('aria-label', 'Delete');
+  await expect(page.locator('#status')).toContainText('parts: 0');
+  await expect(page.locator('#sbTool')).toContainText('Tool: Select');
   expect(await page.evaluate(() => (window as any).pcb.lang())).toBe('en');
   await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
   await expect(page.locator('#bFile')).toContainText('File');
@@ -30,5 +35,7 @@ test('Fájl → Nyelv: English, majd vissza Magyar; újratöltés után is megma
   await expect(page.locator('#bFile')).toContainText('Fájl');
   await expect(page.locator('#bExamples')).toContainText('Példák…');
   await expect(page.locator('#exSearch')).toHaveAttribute('placeholder', 'Keresés a példák között');
+  await expect(page.locator('[data-tool="select"] .tl')).toHaveText('Kijelölés');
+  await expect(page.locator('#status')).toContainText('0 alkatrész');
   await expect(page.locator('html')).toHaveAttribute('lang', 'hu');
 });

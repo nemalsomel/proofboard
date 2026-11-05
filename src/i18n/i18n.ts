@@ -2,7 +2,7 @@
  * Többnyelvű felület (előkészítés). A forrásnyelv a magyar: a kódban és a HTML-ben a magyar szöveg áll, és ugyanez
  * a fordítás kulcsa (gettext-stílus). Más nyelven a szótár adja a fordítást; ami még nincs benne, magyarul marad.
  *
- * - kódban: `t('Kijelölés')`, paraméterrel `t('{n} híd', { n: 3 })` (a `{név}` helyére kerül az érték);
+ * - kódban: `t('Kijelölés')` (az app.ts-ben `tr` néven, mert ott sok a `t` nevű helyi változó), adattáblában `N_('…')`, paraméterrel `t('{n} híd', { n: 3 })` (a `{név}` helyére kerül az érték);
  * - statikus HTML: `translateDom(root)` a szövegcsomópontokat és a `title` / `aria-label` / `placeholder` / `alt`
  *   jellemzőket fordítja (az eredetit megjegyzi, így oda-vissza váltható); `data-i18n-skip` alatt nem fordít.
  *
@@ -39,6 +39,8 @@ export function t(src: string, params?: Readonly<Record<string, string | number>
   const tr = lang === 'hu' ? src : DICTS[lang][src] ?? src;
   return params ? tr.replace(/\{(\w+)\}/g, (m, k: string) => (k in params ? String(params[k]) : m)) : tr;
 }
+/** Csak jelöli a szöveget a kigyűjtésnek (adattáblákban); a fordítás a felhasználás helyén, `t()`-vel történik. */
+export const N_ = (src: string): string => src;
 /** Van-e fordítás (a szótár lefedettségéhez). */
 export const hasTr = (src: string, lang: Exclude<Lang, 'hu'>): boolean => src in DICTS[lang];
 export const dict = (lang: Exclude<Lang, 'hu'>): Readonly<Record<string, string>> => DICTS[lang];

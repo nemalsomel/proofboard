@@ -11,12 +11,13 @@ import { compileAll, compilePart, penvD } from './core/compile';
 import { hasErrors, validatePartDef } from './core/validate';
 import { exportLibrary, importLibrary, typeKeyFor } from './core/library';
 import { History } from './ui/history';
+import { drawBoard, stubOf as stubOfW } from './ui/drawboard';
 import { ROLEC, makePainter, plugColor, rgba } from './ui/drawpart';
 import { applyRotation, fromScreen as vpFrom, toScreen as vpTo } from './ui/viewport';
 import { EventLog } from './ui/log';
 import { favToggled, libPref, libPrefSet, libraryHtml, recentWith } from './ui/library';
 import { EXAMPLES, EX_CATS } from './ui/examples';
-import { LANGS, detectLang, getLang, isLang, setLang, t, translateDom } from './i18n/i18n';
+import { N_, detectLang, getLang, isLang, setLang, t as tr, translateDom } from './i18n/i18n';
 import { canInstall, install, offlineReady, registerPwa, standalone } from './ui/pwa';
 import { editorHistory, formToDef, openEditor, restoreParked } from './ui/editor';
 import { LEDC, PARTS, PICO_NAMES, picoRole } from './parts/builtin';
@@ -52,7 +53,7 @@ const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 /** LED látható fényereje 0…1: a szem kb. az áram négyzetgyöke szerint érzékel, ~15 mA-nél telítve. */
 const WCOL=[['#1c7ed6','kék'],['#e03131','piros'],['#212529','fekete'],['#f59f00','sárga'],['#2f9e44','zöld'],['#f1f3f5','fehér'],['#e8590c','narancs']];
 /** Eszközök: azonosító, név, gyorsbillentyű, ikon, súgó. */
-const TOOLS=[['select','Kijelölés','V','tSelect','Kijelölés és mozgatás; Shift+kattintás vagy keret: több elem'],['bridge','Híd','B','tBridge','Forrasztóhíd szomszédos lyukak között (húzással több is)'],['wire','Vezeték','W','tWire','Huzal két tetszőleges lyuk között'],['link','Kapcsolat','C','tLink','Két láb összekötése; az útvonalat a program keresi meg'],['cut','Csíkvágás','K','tCut','A réz megszakítása két lyuk között, vagy egy lyuk kifúrása'],['note','Jegyzet','J','tNote','Szöveges cédula a panelon'],['erase','Törlés','E','tErase','Kattintásra vagy húzással töröl'],['pan','Mozgatás','H','tHand','A nézet mozgatása (Szóköz + húzás is)']];
+const TOOLS=[['select',N_('Kijelölés'),'V','tSelect',N_('Kijelölés és mozgatás; Shift+kattintás vagy keret: több elem')],['bridge',N_('Híd'),'B','tBridge',N_('Forrasztóhíd szomszédos lyukak között (húzással több is)')],['wire',N_('Vezeték'),'W','tWire',N_('Huzal két tetszőleges lyuk között')],['link',N_('Kapcsolat'),'C','tLink',N_('Két láb összekötése; az útvonalat a program keresi meg')],['cut',N_('Csíkvágás'),'K','tCut',N_('A réz megszakítása két lyuk között, vagy egy lyuk kifúrása')],['note',N_('Jegyzet'),'J','tNote',N_('Szöveges cédula a panelon')],['erase',N_('Törlés'),'E','tErase',N_('Kattintásra vagy húzással töröl')],['pan',N_('Mozgatás'),'H','tHand',N_('A nézet mozgatása (Szóköz + húzás is)')]];
 /** Egyszerű módban rejtett eszközök. */
 const ADV_TOOLS=new Set(['cut']);
 /** Szimulációban is használható eszközök. */
@@ -102,8 +103,7 @@ const VR=()=>(D&&D.settings.vrot)|0,VA=()=>VR()*Math.PI/2;
 const bw=()=>2*M+D.board.cols*P,bh=()=>2*M+D.board.rows*P;
 function toScreen(x,y){return vpTo(x,y,bw(),bh(),VR());} // ui/viewport.ts
 function fromScreen(x,y){return vpFrom(x,y,bw(),bh(),VR());}
-function applyView(){applyRotation(ctx,bw(),bh(),VR());}
-function vlabel(x,y,str,col){ctx.save();ctx.translate(x,y);ctx.rotate(-VA());ctx.fillStyle=col;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(str,0,0);ctx.restore();}const MONO='"IBM Plex Mono",ui-monospace,monospace';
+const MONO='"IBM Plex Mono",ui-monospace,monospace';
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const cu=()=>ui.view==='cu';
 const hx=c=>M+(cu()?D.board.cols-1-c:c)*P+P/2;
@@ -135,126 +135,31 @@ function centerView(){const sc=$('#scroll');sc.scrollLeft=cv.offsetLeft+cv.offse
 /** Kiinduló nézet: a panel teteje, vízszintesen középen (ha szélesebb, a bal széle). */
 function homeView(){const sc=$('#scroll'),W=cv.offsetWidth,m=Math.max(0,M-36);
   sc.scrollLeft=W<=sc.clientWidth?cv.offsetLeft+W/2-sc.clientWidth/2:cv.offsetLeft+m;sc.scrollTop=cv.offsetTop+m;}
-function netTint(root,A){
-  const qs=A.netPins.get(root)||[];
-  if(ui.sim&&SIM){if(!qs.length&&(A.netSecs.get(root)||0)<2)return null;
-    if(!qs.length)return null;
-    if(SIM.floating.has(root))return'hsla(210,8%,62%,A)';
-    const v=SIM.netV.get(root)||0;const h=v<=3.3?215-190*Math.max(0,v)/3.3:Math.max(0,25-25*(v-3.3)/1.7);return`hsla(${h},78%,50%,A)`;}
-  if(!qs.length&&(A.netSecs.get(root)||0)<2)return null;
-  const pq=qs.filter(q=>isMcu(q.part));
-  if(pq.some(q=>q.role==='gnd'))return'hsla(210,10%,20%,A)';
-  if(pq.some(q=>q.role==='p33'))return'hsla(0,75%,52%,A)';
-  if(pq.some(q=>q.role==='pwr'))return'hsla(290,60%,55%,A)';
-  const g=pq.find(q=>q.role==='gpio');if(g)return`hsla(${((g.num??(+String(g.name).replace(/\D/g,'')||0))*67)%360},65%,48%,A)`;
-  return`hsla(${(root*137.5)%360},55%,50%,A)`;
-}
 /** A rajz villogtatás közben a pillanatnyi szimulációt mutatja. */
 function draw(){const keep=SIM;if(ui.sim&&ui.blinkSim)SIM=ui.blinkSim;try{draw0();}finally{SIM=keep;}}
+/** A panel rajza: ui/drawboard.ts; itt csak a pillanatnyi állapot összeállítása. */
 function draw0(){
   if(!D||!A0)return;
-  const B=D.board,A=ui.sim?AS:A0,C=cu();
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  const W=bw(),H=bh();
-  ctx.fillStyle=css('--stage');ctx.fillRect(0,0,Math.max(W,H),Math.max(W,H));
-  ctx.save();applyView();
-  // panel
-  ctx.fillStyle=C?'#d7b68a':'#ead6a8';ctx.fillRect(M-4,M-4,B.cols*P+8,B.rows*P+8);
-  // vonalzók
-  ctx.font=`${Math.max(8,Math.min(11,P*0.55))}px ${css('--mono')}`;ctx.textBaseline='middle';
-  const hv=ui.hover;
-  for(let r=0;r<B.rows;r++){if(r%B.sec&&!(hv&&hv.r===r))continue;vlabel(M-14,hy(r),r,hv&&hv.r===r?css('--accent'):css('--muted'));}
-  const step=P>=17?1:2;
-  for(let c=0;c<B.cols;c++){if(c%step&&!(hv&&hv.c===c))continue;vlabel(hx(c),M-12,c,hv&&hv.c===c?css('--accent'):css('--muted'));}
-  // szekciók
-  const hoverNet=hv&&inb(hv.r,hv.c)?A.find(A.sid(hv.r,hv.c)):-1;
-  const tints=new Map();
-  const LY=LAY();
-  for(const sg of LY.segs){if(sg.drilled)continue;const c=sg.c,s=sg.r0;
-    const x=hx(c)-P*0.44,y=hy(s)-P*0.45,w=P*0.88,h=(sg.r1-sg.r0)*P+P*0.9;
-    const root=A.find(A.sid(s,c));
-    if(!tints.has(root))tints.set(root,netTint(root,A));
-    const t=tints.get(root);
-    if(C){ctx.fillStyle='#c4844f';rr(x,y,w,h,P*0.12);ctx.fill();if(t){ctx.fillStyle=t.replace('A',ui.sim?'.55':'.38');ctx.fill();}}
-    else{if(t){ctx.fillStyle=t.replace('A',ui.sim?'.42':'.24');rr(x,y,w,h,P*0.12);ctx.fill();}
-      ctx.strokeStyle='rgba(120,88,40,.22)';ctx.lineWidth=1;rr(x,y,w,h,P*0.12);ctx.stroke();}
-    if(root===hoverNet&&ui.tool!=='cut'){ctx.strokeStyle=css('--accent');ctx.lineWidth=2;rr(x-1,y-1,w+2,h+2,P*0.14);ctx.stroke();}
-  }
-  // lyukak
-  ctx.fillStyle=C?'#3a2414':'#4a3c24';
-  for(let r=0;r<B.rows;r++)for(let c=0;c<B.cols;c++){ctx.beginPath();ctx.arc(hx(c),hy(r),P*0.16,0,7);ctx.fill();}
-  // csíkvágások: rés a sorok között, kifúrt lyuk (az automatikusak szaggatottan)
-  const autoK=new Set(((D.auto&&D.auto.cuts)||[]).map(x=>x.join(',')));
-  for(const [r,c,k] of LY.cuts){const au=autoK.has([r,c,k].join(','));ctx.save();
-    if(k){ctx.fillStyle=C?'#d7b68a':'#ead6a8';ctx.beginPath();ctx.arc(hx(c),hy(r),P*0.4,0,7);ctx.fill();ctx.strokeStyle=C?'#7a4a22':'#b0473a';ctx.lineWidth=1.6;if(au)ctx.setLineDash([3,2]);ctx.stroke();
-      ctx.fillStyle=C?'#3a2414':'#4a3c24';ctx.beginPath();ctx.arc(hx(c),hy(r),P*0.2,0,7);ctx.fill();}
-    else{const y=(hy(r)+hy(r+1))/2,x0=hx(c)-P*0.5,x1=hx(c)+P*0.5;if(C){ctx.fillStyle='#d7b68a';ctx.fillRect(x0,y-P*0.09,x1-x0,P*0.18);}
-      ctx.strokeStyle=C?'#7a4a22':'#b0473a';ctx.lineWidth=Math.max(1.5,P*0.1);if(au)ctx.setLineDash([3,2]);ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(x1,y);ctx.stroke();}
-    ctx.restore();}
-  if(ui.tool==='cut'&&hv&&inb(hv.r,hv.c)&&!ui.sim){const ct=cutAt(hv);ctx.save();ctx.strokeStyle=css('--accent');ctx.lineWidth=2;ctx.setLineDash([4,3]);
-    if(ct[2]){ctx.beginPath();ctx.arc(hx(ct[1]),hy(ct[0]),P*0.42,0,7);ctx.stroke();}else{const y=(hy(ct[0])+hy(ct[0]+1))/2;ctx.beginPath();ctx.moveTo(hx(ct[1])-P*0.55,y);ctx.lineTo(hx(ct[1])+P*0.55,y);ctx.stroke();}ctx.restore();}
-  // hidak
-  D.bridges.forEach((b,i)=>{const x1=hx(b[1]),y1=hy(b[0]),x2=hx(b[3]),y2=hy(b[2]);const sel=ui.sel&&((ui.sel.kind==='bridge'&&ui.sel.i===i)||(isGroup()&&ui.sel.bridges.has(i)));
-    ctx.lineCap='round';
-    if(C){ctx.strokeStyle=sel?css('--accent'):'#a9aeb4';ctx.lineWidth=P*0.58;line(x1,y1,x2,y2);ctx.strokeStyle='#dde1e5';ctx.lineWidth=P*0.2;line(x1,y1,x2,y2);}
-    else{ctx.setLineDash([P*0.18,P*0.14]);ctx.strokeStyle=sel?css('--accent'):'rgba(105,112,120,.8)';ctx.lineWidth=P*0.13;line(x1,y1,x2,y2);ctx.setLineDash([]);}
-  });
-  for(const b of D.auto.bridges){if(autoHidden(b[4]))continue;ctx.save();if(ui.rats)ctx.globalAlpha=0.3;const x1=hx(b[1]),y1=hy(b[0]),x2=hx(b[3]),y2=hy(b[2]);ctx.lineCap='round';
-    if(C){ctx.strokeStyle='#8fa9c2';ctx.lineWidth=P*0.58;line(x1,y1,x2,y2);ctx.strokeStyle='#d7e6f4';ctx.lineWidth=P*0.2;line(x1,y1,x2,y2);}
-    else{ctx.setLineDash([P*0.18,P*0.14]);ctx.strokeStyle='rgba(56,120,190,.9)';ctx.lineWidth=P*0.15;line(x1,y1,x2,y2);ctx.setLineDash([]);}ctx.restore();}
-  // forrpontok rézoldalon
-  if(C){for(const q of A.pins){if(!q.on)continue;ctx.fillStyle='#b8bdc3';ctx.beginPath();ctx.arc(hx(q.c),hy(q.r),P*0.36,0,7);ctx.fill();ctx.fillStyle='#e6e9ec';ctx.beginPath();ctx.arc(hx(q.c)-P*0.08,hy(q.r)-P*0.08,P*0.12,0,7);ctx.fill();}}
-  // vezetékek (alatta a rézoldali nézetben)
-  if(C){drawWires(0.28);drawPlugs(0.28);}
-  // alkatrészek (ui/drawpart.ts)
-  const PNT=makePainter({ctx,P,M,cols:B.cols,cu:C,angle:VA(),xray:!!ui.xray,accent:css('--accent'),mono:MONO,design:D,sim:ui.sim?SIM:null,pressed:id=>!!ui.pressed[id],phase:id=>ui.phase[id]||0});
-  for(const p of D.parts)PNT.drawPart(p,C?0.32:1,isSelPart(p));
-  if(!C){drawWires(1);drawPlugs(1);}
-  drawNotes();
-  // szellem
-  if(ui.placing&&hv){const g=ghostPart(hv);PNT.drawPart(g,0.6,false,!partFits(g));}
-  if(ui.tool==='wire'&&ui.wireStart&&hv){ctx.setLineDash([5,4]);ctx.strokeStyle=ui.wireColor;ctx.lineWidth=P*0.18;line(hx(ui.wireStart[1]),hy(ui.wireStart[0]),hx(hv.c),hy(hv.r));ctx.setLineDash([]);}
-  if(ui.tool==='wire'&&ui.wireStart){ring(ui.wireStart[0],ui.wireStart[1],css('--accent'));}
-  drawRats(A);
-  drawLinkSel();
-  if(ui.linkStart){const q=findPin(ui.linkStart);if(q){ring(q.r,q.c,css('--accent'),P*0.55,3);if(hv){ctx.setLineDash([4,4]);ctx.strokeStyle=css('--accent');ctx.lineWidth=2;line(hx(q.c),hy(q.r),hx(hv.c),hy(hv.r));ctx.setLineDash([]);}}}
-  if(hv&&inb(hv.r,hv.c)&&!ui.placing&&ui.tool!=='pan'&&ui.tool!=='cut'){ctx.strokeStyle=css('--accent');ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(hx(hv.c),hy(hv.r),P*0.42,0,7);ctx.stroke();}
-  if(ui.progHi){const q=findPin(ui.progHi);if(q){ring(q.r,q.c,css('--accent'),P*0.62,3.5);ring(q.r,q.c,'rgba(255,255,255,.8)',P*0.78,1.5);}} // a programban kijelölt csomópont lába
-  if(ui.flash&&performance.now()<ui.flash.until){for(const [r,c] of ui.flash.holes)ring(r,c,'#e03131',P*0.62,3);}
-  if(ui.drag&&ui.drag.kind==='box'){const a=ui.drag.h0,b2=ui.drag.h1;const x1=hx(Math.min(a.cf,b2.cf)),x2=hx(Math.max(a.cf,b2.cf)),y1=hy(Math.min(a.rf,b2.rf)),y2=hy(Math.max(a.rf,b2.rf));ctx.save();ctx.setLineDash([6,4]);ctx.strokeStyle=css('--accent');ctx.lineWidth=1.5;ctx.fillStyle=rgba(css('--accent'),.08);ctx.beginPath();ctx.rect(Math.min(x1,x2),y1,Math.abs(x2-x1),y2-y1);ctx.fill();ctx.stroke();ctx.restore();}
-  ctx.restore();
+  const hv=ui.hover,A=ui.sim?AS:A0;
+  drawBoard({ctx,dpr,P,M,vrot:VR(),cu:cu(),design:D,A,layout:LAY(),simOn:!!ui.sim,sim:SIM||null,
+    colors:{stage:css('--stage'),accent:css('--accent'),muted:css('--muted'),mono:css('--mono'),monoFont:MONO},
+    hover:hv,tool:ui.tool,ghost:ui.placing&&hv?(()=>{const g=ghostPart(hv);return{part:g,fits:partFits(g)};})():null,
+    xray:!!ui.xray,pressed:id=>!!ui.pressed[id],phase:id=>ui.phase[id]||0,
+    selPart:isSelPart,selBridge:i=>!!(ui.sel&&((ui.sel.kind==='bridge'&&ui.sel.i===i)||(isGroup()&&ui.sel.bridges.has(i)))),
+    selWire:i=>!!(ui.sel&&((ui.sel.kind==='wire'&&ui.sel.i===i)||(isGroup()&&ui.sel.wires.has(i)))),
+    stub:!!ui.stub,hoverWire:ui.hoverWire,selLink:ui.selLink||null,rats:!!ui.rats,autoHidden,cutAt,
+    wireStart:ui.wireStart||null,wireColor:ui.wireColor,linkStart:ui.linkStart||null,progHi:ui.progHi||null,findPin,
+    flash:ui.flash||null,box:ui.drag&&ui.drag.kind==='box'?{h0:ui.drag.h0,h1:ui.drag.h1}:null,
+    layers:{plugs:drawPlugs,notes:drawNotes,rats:drawRats,linkSel:drawLinkSel}});
 }
 function rr(x,y,w,h,r){ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);}
 function line(x1,y1,x2,y2){ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
 function ring(r,c,col,rad,w){ctx.strokeStyle=col;ctx.lineWidth=w||2.5;ctx.beginPath();ctx.arc(hx(c),hy(r),rad||P*0.48,0,7);ctx.stroke();}
-/* Rövidített vezetékrajz: hosszú vezetéknél csak a két vég csonkja látszik, szakadásjellel;
-   rámutatva (bármelyik végére vagy csonkjára), kijelölve vagy kapcsolatkiemeléskor a teljes vonal. */
-const STUB_MIN=5; // lyuk: ennél rövidebb vezeték mindig teljes
-function stubOf(w){if(!ui.stub)return null;const dr=w.b[0]-w.a[0],dc=w.b[1]-w.a[1],len=Math.hypot(dr,dc);if(len<STUB_MIN)return null;const k=Math.min(1.6,len*0.25)/len;return{k,len};}
+/* Rövid vezeték nézet (ui/drawboard.ts rajzolja): a találatvizsgálathoz kell, látszik-e a teljes vonal. */
+const stubOf=w=>stubOfW(w,!!ui.stub);
 function wireFull(w,i,auto){const hv=ui.hover;if(hv&&((hv.r===w.a[0]&&hv.c===w.a[1])||(hv.r===w.b[0]&&hv.c===w.b[1])))return true;
   if(!auto&&ui.sel&&((ui.sel.kind==='wire'&&ui.sel.i===i)||(isGroup()&&ui.sel.wires.has(i))))return true;
   if(!auto&&hv&&ui.hoverWire===i)return true;if(auto&&ui.selLink&&(w.links||[]).includes(ui.selLink))return true;return false;}
-function wireStroke(x1,y1,x2,y2,w,dash,auto,full){const sb=full?null:stubOf(w);
-  const seg=(a,b,c,d)=>{ctx.strokeStyle='rgba(0,0,0,.45)';ctx.lineWidth=P*0.26;line(a,b,c,d);if(dash)ctx.setLineDash([P*0.4,P*0.2]);ctx.strokeStyle=w.color||'#1c7ed6';ctx.lineWidth=P*0.17;line(a,b,c,d);ctx.setLineDash([]);};
-  if(!sb){seg(x1,y1,x2,y2);return;}
-  const dx=(x2-x1)*sb.k,dy=(y2-y1)*sb.k,ux=dx/Math.hypot(dx,dy),uy=dy/Math.hypot(dx,dy),nx=-uy*P*0.32,ny=ux*P*0.32;
-  for(const [x,y,sx,sy] of [[x1,y1,dx,dy],[x2,y2,-dx,-dy]]){seg(x,y,x+sx,y+sy);
-    // szakadásjel: két ferde vonás a csonk végén
-    const ex=x+sx,ey=y+sy,s=Math.sign(sx*ux+sy*uy)||1;ctx.strokeStyle=w.color||'#1c7ed6';ctx.lineWidth=Math.max(1.4,P*0.1);
-    for(const o of [0.18,0.42]){const cx=ex+ux*s*P*o,cy=ey+uy*s*P*o;line(cx-nx+ux*s*P*0.12,cy-ny+uy*s*P*0.12,cx+nx-ux*s*P*0.12,cy+ny-uy*s*P*0.12);}}}
-function drawWires(alpha){
-  ctx.save();ctx.globalAlpha=alpha;ctx.lineCap='round';
-  for(const w of D.auto.wires){if(autoHidden(w.links))continue;const x1=hx(w.a[1]),y1=hy(w.a[0]),x2=hx(w.b[1]),y2=hy(w.b[0]);
-    wireStroke(x1,y1,x2,y2,w,true,true,wireFull(w,-1,true));
-    for(const [x,y] of [[x1,y1],[x2,y2]]){ctx.fillStyle=w.color;ctx.beginPath();ctx.arc(x,y,P*0.2,0,7);ctx.fill();}}
-  D.wires.forEach((w,i)=>{const x1=hx(w.a[1]),y1=hy(w.a[0]),x2=hx(w.b[1]),y2=hy(w.b[0]);const sel=ui.sel&&((ui.sel.kind==='wire'&&ui.sel.i===i)||(isGroup()&&ui.sel.wires.has(i)));
-    const full=wireFull(w,i,false);
-    if(sel){ctx.strokeStyle=css('--accent');ctx.lineWidth=P*0.42;line(x1,y1,x2,y2);}
-    else if(full&&stubOf(w)){ctx.strokeStyle='rgba(168,87,31,.35)';ctx.lineWidth=P*0.42;line(x1,y1,x2,y2);}
-    wireStroke(x1,y1,x2,y2,w,false,false,full);
-    for(const [x,y] of [[x1,y1],[x2,y2]]){ctx.fillStyle='rgba(0,0,0,.5)';ctx.beginPath();ctx.arc(x,y,P*0.24,0,7);ctx.fill();ctx.fillStyle=w.color||'#1c7ed6';ctx.beginPath();ctx.arc(x,y,P*0.17,0,7);ctx.fill();}
-  });ctx.restore();
-}
 function stext(x,y,str,size,color,halo){ctx.save();ctx.translate(x,y);ctx.rotate(-VA());ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`600 ${size}px ${MONO}`;if(halo){ctx.lineWidth=3;ctx.lineJoin='round';ctx.strokeStyle=halo;ctx.strokeText(str,0,0);}ctx.fillStyle=color;ctx.fillText(str,0,0);ctx.restore();}
 /* Az alkatrészek rajza: ui/drawpart.ts (makePainter) */
 
@@ -315,7 +220,7 @@ function onDown(ev,hAt){
 }
 /** A kattintás helye szerinti vágás: lyuk közepén kifúrt lyuk, két sor között rés. */
 /** A csíkvágás típusa: hely szerint (a kattintás helye dönt: lyuk közepén furat, két lyuk között rés), furat vagy rés. */
-const CUT_KINDS=[['auto','Hely szerint','A kattintás helye dönt: lyuk közepén furat, két lyuk között rés'],['hole','Furat','A lyuk kifúrása: a csík ott megszakad'],['gap','Rés','Szakadás két lyuk között: a csík a két lyuk között megszakad']];
+const CUT_KINDS=[['auto',N_('Hely szerint'),N_('A kattintás helye dönt: lyuk közepén furat, két lyuk között rés')],['hole',N_('Furat'),N_('A lyuk kifúrása: a csík ott megszakad')],['gap',N_('Rés'),N_('Szakadás két lyuk között: a csík a két lyuk között megszakad')]];
 const cutKind=()=>{const k=uiPref().cutKind;return k==='hole'||k==='gap'?k:'auto';};
 function cutAt(h){const k=cutKind(),gap=()=>{const r=Math.floor(h.rf);return[Math.max(0,Math.min(D.board.rows-2,r)),h.c,0];};
   if(k==='hole')return[h.r,h.c,1];if(k==='gap')return gap();
@@ -693,11 +598,11 @@ const ACT=(id,ic,l,k,t='',cls='')=>`<button class="btn${cls}" id="${id}" data-kb
 function toolFit(){const ts=$('#toolstrip'),t=$('#tools');if(!ts||!t||ts.classList.contains('col'))return;ts.classList.remove('icons');if(t.scrollWidth>t.clientWidth+1)ts.classList.add('icons');}
 new ResizeObserver(()=>toolFit()).observe(document.querySelector('#carea'));
 function renderLeft0(){
-  $('#tools').innerHTML=TOOLS.filter(x=>!(isSimple()&&ADV_TOOLS.has(x[0]))).map(([id,l,k,ic,h])=>`<button class="btn tool ${ui.tool===id&&!ui.placing?'on':''}" data-tool="${id}" title="${l} (${k}) – ${h}" aria-label="${l}" aria-keyshortcuts="${k}" ${ui.sim&&!SIM_TOOLS.has(id)?'disabled':''}><span class="ti">${icon(ic)}<kbd>${k}</kbd></span><span class="tl">${l}</span></button>`).join('');
+  $('#tools').innerHTML=TOOLS.filter(x=>!(isSimple()&&ADV_TOOLS.has(x[0]))).map(([id,l0,k,ic,h0])=>{const l=esc(tr(l0)),h=esc(tr(h0));return `<button class="btn tool ${ui.tool===id&&!ui.placing?'on':''}" data-tool="${id}" title="${l} (${k}) – ${h}" aria-label="${l}" aria-keyshortcuts="${k}" ${ui.sim&&!SIM_TOOLS.has(id)?'disabled':''}><span class="ti">${icon(ic)}<kbd>${k}</kbd></span><span class="tl">${l}</span></button>`;}).join('');
   renderLib();
   $('#wireColorRow').hidden=ui.tool!=='wire'||!!ui.placing;
   $('#cutKindRow').hidden=ui.tool!=='cut'||!!ui.placing;
-  {const ck=cutKind();$('#cutKinds').innerHTML=CUT_KINDS.map(([k,l,t])=>`<button class="btn ${ck===k?'on':''}" data-ck="${k}" aria-pressed="${ck===k}" title="${t}">${l}</button>`).join('');}
+  {const ck=cutKind();$('#cutKinds').innerHTML=CUT_KINDS.map(([k,l,h])=>`<button class="btn ${ck===k?'on':''}" data-ck="${k}" aria-pressed="${ck===k}" title="${esc(tr(h))}">${esc(tr(l))}</button>`).join('');}
   {const g=isGroup()?ui.sel:null,sp=selPart();$('#selSumm').textContent=sp?sp.label:g&&gSize(g)?`${gSize(g)} elem`:ui.sel&&ui.sel.kind==='wire'?'vezeték':ui.sel&&ui.sel.kind==='bridge'?'híd':ui.sel&&ui.sel.kind==='note'?'jegyzet':'';}
   $('#swatches').innerHTML=WCOL.map(([c,l])=>`<button class="sw ${ui.wireColor===c?'on':''}" data-col="${c}" title="${l}" aria-label="${l}" style="background:${c}"></button>`).join('');
   const pr=$('#props');const p=selPart();
@@ -841,12 +746,12 @@ $('#mHold').onclick=()=>{D.settings.btnMode='hold';ui.pressed={};save();recomput
 $('#mToggle').onclick=()=>{D.settings.btnMode='toggle';save();recompute();};
 
 function status(){
-  const s=$('#status'),h=ui.hover;if(ui.selLink&&(!h||!inb(h.r,h.c))){const t=linkStatusText();if(t){s.textContent=t;return;}}if(!h||!inb(h.r,h.c)){const ab=D.auto.bridges.length,aw=D.auto.wires.length;s.textContent=`${D.parts.length} alkatrész · ${D.bridges.length+ab} híd · ${D.wires.length+aw} vezeték`;return;}
+  const s=$('#status'),h=ui.hover;if(ui.selLink&&(!h||!inb(h.r,h.c))){const t=linkStatusText();if(t){s.textContent=t;return;}}if(!h||!inb(h.r,h.c)){const ab=D.auto.bridges.length,aw=D.auto.wires.length;s.textContent=tr('{p} alkatrész · {b} híd · {w} vezeték',{p:D.parts.length,b:D.bridges.length+ab,w:D.wires.length+aw});return;}
   const A=ui.sim?AS:A0,root=A.find(A.sid(h.r,h.c)),qs=A.netPins.get(root)||[],sg=segOf(h.r,h.c);
-  let t=sg.drilled?`${h.r}:${h.c} · kifúrt lyuk (nincs réz)`:`${h.r}:${h.c} · ${D.board.sec>=D.board.rows||sg.r1-sg.r0+1<Math.min(D.board.sec,D.board.rows-sg.r0)?'csík':'szekció'} ${sg.r0}–${sg.r1}:${h.c}`;
-  if(qs.length)t+=` · net: ${qs.slice(0,7).map(pinLabel).join(', ')}${qs.length>7?` +${qs.length-7}`:''}`;
+  let t=sg.drilled?`${h.r}:${h.c} · ${tr('kifúrt lyuk (nincs réz)')}`:`${h.r}:${h.c} · ${D.board.sec>=D.board.rows||sg.r1-sg.r0+1<Math.min(D.board.sec,D.board.rows-sg.r0)?tr('csík'):tr('szekció')} ${sg.r0}–${sg.r1}:${h.c}`;
+  if(qs.length)t+=` · ${tr('net')}: ${qs.slice(0,7).map(pinLabel).join(', ')}${qs.length>7?` +${qs.length-7}`:''}`;
   {const here=A.pins.find(q=>q.on&&q.r===h.r&&q.c===h.c);if(here&&isMcu(here.part)&&here.role==='gpio'){const f=pinFns(here);if(f.length)t+=` · ${here.name}: ${f.join(', ')}`;}else if(here&&here.fn)t+=` · ${pinLabel(here)}: ${fnName(here.fn)}`;}
-  if(ui.sim&&SIM&&qs.length)t+=SIM.floating.has(root)?' · lebeg':` · ${(SIM.netV.get(root)||0).toFixed(2)} V`;
+  if(ui.sim&&SIM&&qs.length)t+=SIM.floating.has(root)?` · ${tr('lebeg')}`:` · ${(SIM.netV.get(root)||0).toFixed(2)} V`;
   s.textContent=t;
 }
 function recompute(){A0=analyze(false);AS=ui.sim?analyze(true):A0;SIM=simulate(AS);ui.simGen=(ui.simGen||0)+1;ui.blinkSim=null;linkStates();ISSUES=checkAll();renderRight();renderLinks();status();sbUpdate();introUI();draw();animate();blink();}
@@ -954,12 +859,12 @@ menu.addEventListener('keydown',e=>{const it=[...menu.querySelectorAll('.menu-it
   else if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();it[(i+(e.key==='ArrowDown'?1:it.length-1))%it.length].focus();}});
 $('#bExamples').onclick=()=>{renderExamples();openDlg('#dlgEx');};
 /* Névjegy; telepítés alkalmazásként (PWA); új verzió értesítése */
-function aboutUI(){$('#aboutVer').textContent=t('Verzió: {v} · {d}',{v:__APP_VERSION__,d:__BUILD_DATE__});
-  $('#aboutOffline').textContent=standalone()?t('Telepített alkalmazásként fut; internet nélkül is működik.'):offlineReady()?t('Internet nélkül is működik (a böngésző eltárolta). Telepíthető is önálló alkalmazásként.'):'';
+function aboutUI(){$('#aboutVer').textContent=tr('Verzió: {v} · {d}',{v:__APP_VERSION__,d:__BUILD_DATE__});
+  $('#aboutOffline').textContent=standalone()?tr('Telepített alkalmazásként fut; internet nélkül is működik.'):offlineReady()?tr('Internet nélkül is működik (a böngésző eltárolta). Telepíthető is önálló alkalmazásként.'):'';
   $('#aboutOffline').hidden=!$('#aboutOffline').textContent;installUI();}
 function installUI(){const c=canInstall();$('#bInstall').hidden=!c;$('#bInstall2').hidden=!c;}
 $('#bAbout').onclick=()=>{aboutUI();openDlg('#dlgAbout');};
-const doInstall=async()=>{const ok=await install();installUI();if(ok)toast(t('Telepítve: a Proofboard önálló alkalmazásként is elindítható.'));};
+const doInstall=async()=>{const ok=await install();installUI();if(ok)toast(tr('Telepítve: a Proofboard önálló alkalmazásként is elindítható.'));};
 $('#bInstall').onclick=doInstall;$('#bInstall2').onclick=doInstall;
 let updApply=null;
 $('#bUpd').onclick=()=>{save();if(updApply)updApply();};
@@ -983,8 +888,8 @@ document.querySelectorAll('[data-theme-set]').forEach(b=>b.addEventListener('cli
    fokozatosan kapnak t()-t; ami még nincs lefordítva, magyarul marad. */
 const LANGKEY='proofboard.lang';
 function langUI(){const v=getLang();document.querySelectorAll('[data-lang-set]').forEach(b=>{const on=b.dataset.langSet===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});}
-function applyLang(l,remember){if(!isLang(l))return;const was=getLang();setLang(l);document.documentElement.lang=l;translateDom(document.body,l);undoUI();langUI();
-  if(remember){try{localStorage.setItem(LANGKEY,l);}catch(e){}if(l!=='hu'&&l!==was)toast(t('Az angol fordítás készül: a felület egy része még magyar.'));}}
+function applyLang(l,remember){if(!isLang(l))return;const was=getLang();setLang(l);document.documentElement.lang=l;if(D){renderLeft();renderRight();status();sbUpdate();}translateDom(document.body,l);undoUI();langUI();
+  if(remember){try{localStorage.setItem(LANGKEY,l);}catch(e){}if(l!=='hu'&&l!==was)toast(tr('Az angol fordítás készül: a felület egy része még magyar.'));}}
 document.querySelectorAll('[data-lang-set]').forEach(b=>b.addEventListener('click',()=>applyLang(b.dataset.langSet,true)));
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>draw());
 setTheme(themeGet(),false);
@@ -1005,9 +910,9 @@ $('#introEx').onclick=()=>{renderExamples();openDlg('#dlgEx');};
 function introUI(){const el=$('#intro');if(!el||!D)return;el.hidden=!(isEmpty()&&!ui.introOff&&!ui.placing&&!ui.sim&&ui.work!=='prog');}
 /* állapotsor: üzenet, eszköz, kijelölés, problémák (kattintásra a Problémák fül), szimuláció */
 function sbUpdate(){const tl=$('#sbTool');if(!tl||!D)return;const T=TOOLS.find(x=>x[0]===ui.tool);
-  tl.innerHTML=ui.sim?'':ui.placing?`Lerakás: <b>${esc(DEFS[ui.placing]?DEFS[ui.placing].name:ui.placing)}</b>`:`Eszköz: <b>${T?T[1]:esc(ui.tool)}</b>`;
-  let sel='';if(ui.sel){if(ui.sel.kind==='group'){const p=selPart(),n=gSize(ui.sel);sel=p?p.label:n?`${n} elem`:'';}else sel={wire:'vezeték',bridge:'híd',note:'jegyzet'}[ui.sel.kind]||'';}
-  $('#sbSel').innerHTML=sel?`Kijelölve: <b>${esc(sel)}</b>`:'';
+  tl.innerHTML=ui.sim?'':ui.placing?tr('Lerakás: {x}',{x:`<b>${esc(DEFS[ui.placing]?DEFS[ui.placing].name:ui.placing)}</b>`}):tr('Eszköz: {x}',{x:`<b>${esc(T?tr(T[1]):ui.tool)}</b>`});
+  let sel='';if(ui.sel){if(ui.sel.kind==='group'){const p=selPart(),n=gSize(ui.sel);sel=p?p.label:n?tr('{n} elem',{n}):'';}else sel={wire:tr('vezeték'),bridge:tr('híd'),note:tr('jegyzet')}[ui.sel.kind]||'';}
+  $('#sbSel').innerHTML=sel?tr('Kijelölve: {x}',{x:`<b>${esc(sel)}</b>`}):'';
   const ne=ISSUES.filter(i=>i.sev==='err').length,nw=isSimple()?0:ISSUES.filter(i=>i.sev==='warn').length,ni=isSimple()?0:ISSUES.length-ne-ISSUES.filter(i=>i.sev==='warn').length,b=$('#sbIss');
   b.className='sb-item sb-btn '+(ne?'err':nw?'warn':'ok');
   b.innerHTML=ne||nw?icon(ne?'error':'warn')+[ne?`${ne} hiba`:'',nw?`${nw} figyelmeztetés`:''].filter(Boolean).join(' · '):ni?icon('info')+`${ni} megjegyzés`:icon('check')+'Nincs probléma';
@@ -1112,7 +1017,7 @@ window.addEventListener('resize',()=>PW.place());
 /* Visszavonás / újra: csak akkor aktív, ha van mit */
 /** A fejléc visszavonása: ha egy alkatrész-szerkesztő látszik, az övé (a panelé addig érintetlen), egyébként a panelé. */
 function undoUI(){const u=$('#bUndo'),r=$('#bRedo'),E=editorHistory(),cu=E?E.canUndo:HIST.canUndo,cr=E?E.canRedo:HIST.canRedo;
-  if(u){u.disabled=!cu;u.title=E?t('Visszavonás az alkatrész-szerkesztőben (Ctrl+Z)'):t('Visszavonás (Ctrl+Z)');}if(r){r.disabled=!cr;r.title=E?t('Újra az alkatrész-szerkesztőben (Ctrl+Y)'):t('Újra (Ctrl+Y)');}}
+  if(u){u.disabled=!cu;u.title=E?tr('Visszavonás az alkatrész-szerkesztőben (Ctrl+Z)'):tr('Visszavonás (Ctrl+Z)');}if(r){r.disabled=!cr;r.title=E?tr('Újra az alkatrész-szerkesztőben (Ctrl+Y)'):tr('Újra (Ctrl+Y)');}}
 /* A kurzor mutatja, mit csinál a kattintás: az eszköz ikonja a célkereszt mellett */
 const CURSORS={};
 function toolCursor(){if(ui.sim||ui.placing||ui.tool==='select')return'';if(ui.tool==='pan')return'grab';const t=TOOLS.find(x=>x[0]===ui.tool);if(!t)return'';
