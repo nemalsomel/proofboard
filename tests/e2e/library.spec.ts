@@ -78,3 +78,20 @@ test('könyvtár export és import a tervtől függetlenül; keresés és kedven
   await page.click('[data-ltab="lib"]');
   await expect(page.locator('details[data-grp="fav"] [data-lib="c_kijelzo_modul"]')).toBeVisible();
 });
+
+test('alkatrészlista: kedvenc elöl, szerkesztés a végén, egybeolvadó gombsor; Új alkatrész és minden csoport kinyitása / becsukása a kereső alatt', async ({ page }) => {
+  const t = await pcb<string>(page, `return pcb.addPart(${JSON.stringify(part('Rendezett modul'))}).type;`);
+  await page.click('[data-ltab="lib"]');
+  const row = page.locator(`details[data-grp="lib"] .libitem`).filter({ has: page.locator(`[data-lib="${t}"]`) });
+  const btns = row.locator('> .btn');
+  await expect(btns.first()).toHaveAttribute('data-fav', t);
+  await expect(btns.last()).toHaveAttribute('data-edit', t);
+  const [a, b] = [(await btns.nth(0).boundingBox())!, (await btns.nth(1).boundingBox())!];
+  expect(Math.abs(a.x + a.width - b.x)).toBeLessThan(2); // nincs köz a gombok között
+  const s = (await page.locator('#libSearch').boundingBox())!, n = (await page.locator('#bNewPart').boundingBox())!;
+  expect(n.y).toBeGreaterThan(s.y); expect(n.y).toBeLessThan((await page.locator('#lib').boundingBox())!.y);
+  await page.click('#libCloseAll');
+  await expect(page.locator('#lib details[open]')).toHaveCount(0);
+  await page.click('#libOpenAll');
+  expect(await page.locator('#lib details[open]').count()).toBe(await page.locator('#lib details').count());
+});

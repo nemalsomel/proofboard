@@ -1299,10 +1299,11 @@ function libRecent(t){const r=(libPref().recent||[]).filter(x=>x!==t);r.unshift(
 function renderLib(){const q=(ui.libQ||'').trim(),pref=libPref(),fav=new Set(pref.fav||[]),closed=new Set(pref.closed||[]);
   const ok=t=>DEFS[t]&&matchPart(DEFS[t].def,q);
   const item=t=>{const d=DEFS[t],own=!(t in PARTS),projOnly=own&&!(t in LIB);
-    return `<div class="libitem"><button class="btn ${ui.placing===t?'on':''}" data-lib="${t}" ${ui.sim?'disabled':''}>${esc(d.name)}<span>${esc(d.fp)}</span></button>`+
+    return `<div class="libitem" role="group">`+
       `<button class="btn libfav ${fav.has(t)?'on':''}" data-fav="${t}" title="${fav.has(t)?'Kedvenc (kattintásra kiveszi)':'Kedvencekhez'}" aria-label="${esc(d.name)} kedvenc" aria-pressed="${fav.has(t)}">${fav.has(t)?'★':'☆'}</button>`+
-      (own?`<button class="btn" data-edit="${t}" title="Szerkesztés" aria-label="${esc(d.name)} szerkesztése" ${ui.sim?'disabled':''}>✎</button>`:'')+
-      (projOnly?`<button class="btn" data-tolib="${t}" title="Hozzáadás a saját könyvtárhoz (más tervekben is elérhető lesz)" aria-label="${esc(d.name)} a könyvtárba" ${ui.sim?'disabled':''}>＋</button>`:'')+`</div>`;};
+      `<button class="btn ${ui.placing===t?'on':''}" data-lib="${t}" ${ui.sim?'disabled':''}>${esc(d.name)}<span>${esc(d.fp)}</span></button>`+
+      (projOnly?`<button class="btn" data-tolib="${t}" title="Hozzáadás a saját könyvtárhoz (más tervekben is elérhető lesz)" aria-label="${esc(d.name)} a könyvtárba" ${ui.sim?'disabled':''}>＋</button>`:'')+
+      (own?`<button class="btn" data-edit="${t}" title="Szerkesztés" aria-label="${esc(d.name)} szerkesztése" ${ui.sim?'disabled':''}>✎</button>`:'')+`</div>`;};
   const group=(id,title,ts,hint)=>{ts=ts.filter(ok);if(!ts.length)return'';const open=q||!closed.has(id);
     return `<details class="libgrp" data-grp="${esc(id)}" ${open?'open':''}><summary><span>${esc(title)}</span><span class="muted small">${ts.length}</span></summary>${hint?`<p class="help" style="margin:2px 0 4px">${hint}</p>`:''}${ts.map(item).join('')}</details>`;};
   const all=Object.keys(DEFS),proj=Object.keys(D.customParts||{}).filter(t=>!(t in LIB)),libT=Object.keys(LIB),cats=[...new Set(all.filter(t=>t in PARTS).map(t=>DEFS[t].cat))];
@@ -1312,7 +1313,11 @@ function renderLib(){const q=(ui.libQ||'').trim(),pref=libPref(),fav=new Set(pre
   h+=group('lib','Saját könyvtár',libT);
   for(const c of cats)h+=group('cat:'+c,c,all.filter(t=>t in PARTS&&DEFS[t].cat===c));
   $('#lib').innerHTML=h||'<p class="help">Nincs találat.</p>';}
-$('#libSearch').addEventListener('input',e=>{ui.libQ=e.target.value;renderLib();});
+$('#libSearch').addEventListener('input',e=>{ui.libQ=e.target.value;renderLib();libBar();});
+/** Minden csoport kinyitása / becsukása (keresés közben minden találati csoport nyitva, ezért ott nem élnek). */
+function libBar(){const q=!!(ui.libQ||'').trim();$('#libOpenAll').disabled=q;$('#libCloseAll').disabled=q;}
+$('#libOpenAll').onclick=()=>{libPrefSet({closed:[]});renderLib();};
+$('#libCloseAll').onclick=()=>{libPrefSet({closed:[...document.querySelectorAll('#lib details[data-grp]')].map(d=>d.dataset.grp)});renderLib();};
 $('#lib').addEventListener('toggle',e=>{const d=e.target.closest&&e.target.closest('details[data-grp]');if(!d||(ui.libQ||'').trim())return;const c=new Set(libPref().closed||[]);if(d.open)c.delete(d.dataset.grp);else c.add(d.dataset.grp);libPrefSet({closed:[...c]});},true);
 const editorHost={
   builtin:PARTS,

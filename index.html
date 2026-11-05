@@ -72,10 +72,15 @@
     <div class="rpane" id="lpLib" data-lpane="lib" role="tabpanel">
       <section>
       <div class="lib-search"><input type="search" id="libSearch" placeholder="Keresés: név, láb, funkció (pl. i2c, adc, motor)" aria-label="Alkatrész keresése" autocomplete="off"></div>
-      <div class="lib" id="lib"></div>
-      <div class="grp" style="margin-top:8px">
-        <button class="btn" id="bNewPart" data-icon="plus">Saját alkatrész</button>
+      <div class="lib-bar">
+        <button class="btn" id="bNewPart" data-icon="plus" title="Saját alkatrész leírása az Alkatrész-szerkesztőben">Új alkatrész</button>
+        <span class="sp"></span>
+        <div class="grp seg" role="group" aria-label="Csoportok">
+          <button class="btn icon" id="libOpenAll" data-icon="down" aria-label="Minden csoport kinyitása" title="Minden csoport kinyitása"></button>
+          <button class="btn icon" id="libCloseAll" data-icon="up" aria-label="Minden csoport becsukása" title="Minden csoport becsukása"></button>
+        </div>
       </div>
+      <div class="lib" id="lib"></div>
       <p class="help" id="libMsg" aria-live="polite" style="margin-top:6px"></p>
       <p class="help" style="margin-top:6px">A <b>saját könyvtár</b> a böngésződben marad, terv váltásakor is; exportálni és importálni a Fájl menüben lehet. Amit egy tervbe leraksz, az a terv része lesz (<b>Projekt</b>), így a tervfájllal együtt utazik.</p>
       <p class="help" style="margin-top:8px">Lerakás közben: <kbd>R</kbd> forgatás, <kbd>M</kbd> tükrözés, <kbd>Esc</kbd> mégse.</p>
