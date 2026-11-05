@@ -132,10 +132,24 @@ export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLan
         break;
       }
       case 'delay': {
-        const ms = Math.max(0, Math.round(num(p.ms, 500)));
-        V.push(py ? `${id}_utolso = None` : `int ${id}_utolso = -1;`, py ? `${id}_mikor = 0` : `unsigned long ${id}_mikor = 0;`);
-        L.push(...(py ? [`_be = ${inp(n, 'a', 'bool')}`, `if _be != ${id}_utolso:`, `    ${id}_utolso = _be`, `    ${id}_mikor = t`, `if t - ${id}_mikor >= ${ms}:`, `    ${out('v')} = _be`]
-          : [`{ bool be = ${inp(n, 'a', 'bool')};`, `  if ((int)be != ${id}_utolso) { ${id}_utolso = be; ${id}_mikor = t; }`, `  if (t - ${id}_mikor >= ${ms}) ${out('v')} = be; }`]));
+        const ms = Math.max(0, Math.round(num(p.ms, 500))), mode = String(p.mode ?? 'filter');
+        const be = inp(n, 'a', 'bool');
+        if (mode === 'off') {
+          V.push(py ? `${id}_mikor = -${ms}` : `long ${id}_mikor = -${ms};`);
+          L.push(...(py ? [`_be = ${be}`, `if _be:`, `    ${id}_mikor = t`, `${out('v')} = _be or t - ${id}_mikor < ${ms}  ${c('utánfutás')}`]
+            : [`{ bool be = ${be};`, `  if (be) ${id}_mikor = (long)t;`, `  ${out('v')} = be || (long)t - ${id}_mikor < ${ms}; }  ${c('utánfutás')}`]));
+        } else if (mode === 'pulse') {
+          V.push(py ? `${id}_mikor = -${ms}` : `long ${id}_mikor = -${ms};`, py ? `${id}_elozo = False` : `bool ${id}_elozo = false;`);
+          L.push(...(py ? [`_be = ${be}`, `if _be and not ${id}_elozo and t - ${id}_mikor >= ${ms}:  ${c('felfutó él: impulzus')}`, `    ${id}_mikor = t`, `${id}_elozo = _be`, `${out('v')} = t - ${id}_mikor < ${ms}`]
+            : [`{ bool be = ${be};`, `  if (be && !${id}_elozo && (long)t - ${id}_mikor >= ${ms}) ${id}_mikor = (long)t;  ${c('felfutó él: impulzus')}`, `  ${id}_elozo = be;`, `  ${out('v')} = (long)t - ${id}_mikor < ${ms}; }`]));
+        } else {
+          V.push(py ? `${id}_utolso = None` : `int ${id}_utolso = -1;`, py ? `${id}_mikor = 0` : `unsigned long ${id}_mikor = 0;`);
+          const on = mode === 'on';
+          L.push(...(py ? [`_be = ${be}`, `if _be != ${id}_utolso:`, `    ${id}_utolso = _be`, `    ${id}_mikor = t`,
+            ...(on ? [`${out('v')} = _be and t - ${id}_mikor >= ${ms}  ${c('bekapcsolási késleltetés')}`] : [`if t - ${id}_mikor >= ${ms}:`, `    ${out('v')} = _be`])]
+            : [`{ bool be = ${be};`, `  if ((int)be != ${id}_utolso) { ${id}_utolso = be; ${id}_mikor = t; }`,
+              on ? `  ${out('v')} = be && t - ${id}_mikor >= ${ms}; }  ${c('bekapcsolási késleltetés')}` : `  if (t - ${id}_mikor >= ${ms}) ${out('v')} = be; }`]));
+        }
         break;
       }
       case 'seq': {

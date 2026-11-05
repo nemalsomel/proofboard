@@ -24,6 +24,8 @@ export interface NodeParam {
   /** Csak akkor látszik, ha a megadott paraméter értéke ez (pl. a saját minta csak „saját” választásnál). */
   when?: { key: string; is: string };
   default: unknown; min?: number; max?: number; unit?: string;
+  /** Régi (e paraméter előtti) mentésben hiányzó érték: így a régi program viselkedése nem változik. */
+  legacy?: unknown;
   options?: ReadonlyArray<readonly [string, string]>;
 }
 /** Egy csomópont kiértékelése: bemenetek, paraméterek, saját állapot, idő (ms) és a GPIO-olvasás. */
@@ -64,6 +66,7 @@ export function seqRows(preset: unknown, custom: unknown): string[] {
   return rows.map(r => r.slice(0, SEQ_CH).padEnd(SEQ_CH, '0'));
 }
 /** Felfutó él: az előző ütem óta 0 → 1. */
+export const DELAY_OPTS = [['off', 'Utánfutás (ki késleltetve)'], ['on', 'Bekapcsolási késleltetés'], ['pulse', 'Impulzus'], ['filter', 'Szűrés (mindkét változás)']] as const;
 const rise = (st: Record<string, unknown>, k: string, v: boolean): boolean => { const was = !!st[k]; st[k] = v; return v && !was; };
 
 export const NODE_DEFS: Record<string, NodeDef> = {
@@ -121,13 +124,25 @@ export const NODE_DEFS: Record<string, NodeDef> = {
     },
   },
   delay: {
-    label: 'Késleltetés', cat: 'Idő', help: 'A bemenet változását a megadott idő múlva adja tovább (pl. „a gomb elengedése után még 2 s-ig világít”).',
-    ins: [bin('a', 'be')], outs: [bin('v', 'ki')], params: [{ key: 'ms', label: 'Késés', type: 'number', default: 500, min: 0, unit: 'ms' }],
+    label: 'Időzítő', cat: 'Idő', help: 'Késleltetés vagy utánfutás a megadott idővel. Utánfutás: azonnal bekapcsol, és a bemenet megszűnése után még ennyi ideig igaz (lépcsőházi világítás). Bekapcsolási késleltetés: csak akkor kapcsol be, ha a bemenet ennyi ideig folyamatosan igaz. Impulzus: felfutó élre ennyi ideig igaz. Szűrés: mindkét változást csak akkor adja tovább, ha ennyi ideig tart (pergésmentesítés).',
+    ins: [bin('a', 'be')], outs: [bin('v', 'ki')],
+    params: [{ key: 'mode', label: 'Működés', type: 'select', default: 'off', legacy: 'filter', options: DELAY_OPTS },
+      { key: 'ms', label: 'Idő', type: 'number', default: 500, min: 0, unit: 'ms' }],
     eval: c => {
-      const v = B(c.in.a), d = Math.max(0, num(c.p.ms, 500));
-      if (c.st.last !== v) { c.st.last = v; c.st.at = c.t; }
-      if (c.t - num(c.st.at, 0) >= d) c.st.v = v;
-      return { v: !!c.st.v };
+      const v = B(c.in.a), d = Math.max(0, num(c.p.ms, 500)), t = c.t, st = c.st;
+      switch (c.p.mode) {
+        case 'off': if (v) st.at = t; return { v: v || (st.at !== undefined && t - num(st.at, 0) < d) };
+        case 'on': if (st.last !== v) { st.last = v; st.at = t; } return { v: v && t - num(st.at, 0) >= d };
+        case 'pulse': {
+          const busy = st.at !== undefined && t - num(st.at, 0) < d;
+          if (rise(st, 'a', v) && !busy) st.at = t;
+          return { v: st.at !== undefined && t - num(st.at, 0) < d };
+        }
+        default:
+          if (st.last !== v) { st.last = v; st.at = t; }
+          if (t - num(st.at, 0) >= d) st.v = v;
+          return { v: !!st.v };
+      }
     },
   },
   seq: {
@@ -169,7 +184,7 @@ export function normProgram(raw: unknown): Program | undefined {
   for (const n of r.nodes as Array<Record<string, unknown>>) {
     if (!n || typeof n.id !== 'string' || typeof n.type !== 'string' || !NODE_DEFS[n.type]) continue;
     const d = NODE_DEFS[n.type], props: Record<string, unknown> = {};
-    for (const pr of d.params) props[pr.key] = (n.props as Record<string, unknown> | undefined)?.[pr.key] ?? pr.default;
+    for (const pr of d.params) props[pr.key] = (n.props as Record<string, unknown> | undefined)?.[pr.key] ?? (pr.legacy !== undefined ? pr.legacy : pr.default);
     nodes.push({ id: n.id, type: n.type, x: num(n.x, 0), y: num(n.y, 0), props });
   }
   const ids = new Map(nodes.map(n => [n.id, n]));

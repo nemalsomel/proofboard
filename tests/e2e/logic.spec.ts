@@ -186,3 +186,38 @@ test('Logika fül: tároló a diagramon, élek húzással, kimenet a tárolóra;
   expect(j.model[0].regs).toEqual([{ name: 'MEM', clk: 'CLK', d: 'D' }]);
   expect(j.model[0].outs).toEqual([{ pin: '5', expr: 'MEM' }]);
 });
+
+test('Alkatrész-szerkesztő: saját visszavonás (gomb és Ctrl+Z, teljes képernyős diagramon is), a panel előzményeit nem érinti', async ({ page }) => {
+  await page.click('[data-ltab="lib"]');
+  await page.click('#bNewPart');
+  await page.fill('#pe_name', 'Visszavonás próba');
+  await page.fill('#pe_gnames', 'GND,VCC,A,B,Y');
+  await page.click('[data-act="gen"]');
+  const undo = page.locator('[data-act="undo"]'), redo = page.locator('[data-act="redo"]');
+  await expect(undo).toBeEnabled();
+  await page.click('.pe [data-tab="func"]');
+  await page.click('.cg [data-cg="add"]');
+  await page.click('.cg [data-add="out"]');
+  await page.fill('#cg_expr', 'A & B'); await page.press('#cg_expr', 'Enter');
+  await expect(page.locator('.cg [data-k="gate"]')).toHaveCount(1);
+  await undo.click(); // a kifejezés előtti állapot: kimenet, kapu nélkül
+  await expect(page.locator('.cg [data-k="gate"]')).toHaveCount(0);
+  await expect(page.locator('.cg [data-k="out"]')).toHaveCount(1);
+  await redo.click();
+  await expect(page.locator('.cg [data-k="gate"]')).toHaveCount(1);
+  // teljes képernyőn, billentyűvel; a panel visszavonása közben nem fut
+  const boardUndo = await page.evaluate(() => (document.querySelector('#bUndo') as HTMLButtonElement | null)?.disabled);
+  await page.click('.cg [data-cg="full"]');
+  await page.locator('.cg .pg-canvas').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.cg [data-k="gate"]')).toHaveCount(0);
+  await page.keyboard.press('Control+y');
+  await expect(page.locator('.cg [data-k="gate"]')).toHaveCount(1);
+  expect(await page.evaluate(() => (document.querySelector('#bUndo') as HTMLButtonElement | null)?.disabled)).toBe(boardUndo);
+  await page.keyboard.press('Escape');
+  // a lábak visszavonása: a generált lábsor eltűnik
+  await page.click('.pe [data-tab="pins"]');
+  for (let i = 0; i < 10 && await undo.isEnabled(); i++) await undo.click();
+  await expect(undo).toBeDisabled();
+  await expect(page.locator('.pe [data-pin="0"]').first()).toHaveCount(0);
+});

@@ -31,6 +31,20 @@ describe('kódgenerálás', () => {
     expect(lines.findIndex(l => l.includes('# n1 ·'))).toBeLessThan(lines.findIndex(l => l.includes('# n2 ·'))); // élek szerinti sorrend
   });
 
+  it('Időzítő: mindegyik működés kódot ad (utánfutás a lépcsőházi példában)', () => {
+    const { D, A } = load('prog-delay');
+    expect(generateCode(D, A, D.program!, 'micropython').code).toContain('n2_v = _be or t - n2_mikor < 2000');
+    for (const mode of ['off', 'on', 'pulse', 'filter']) {
+      D.program!.nodes[1].props.mode = mode;
+      for (const lang of ['micropython', 'arduino'] as const) {
+        const c = generateCode(D, A, D.program!, lang);
+        expect(c.warnings).toEqual([]);
+        expect(c.code).toContain('2000');
+      }
+    }
+    expect(generateCode(D, A, D.program!, 'arduino').code).toContain('if (t - n2_mikor >= 2000) n2_v = be;');
+  });
+
   it('Arduino: lapfüggő PWM-frekvencia és ADC; Picón analogWriteFreq, ESP32-n analogWriteFrequency(pin, f)', () => {
     const pico = load('prog-dimmer'), c = generateCode(pico.D, pico.A, pico.D.program!, 'arduino');
     expect(c.file).toBe('proofboard.ino');

@@ -356,18 +356,17 @@ export const EXAMPLES: Example[] = [
       ], edges: [{ id: 'e1', from: 'n1.v', to: 'n2.a' }, { id: 'e2', from: 'n2.f', to: 'n3.a' }] } }),
   },
   {
-    id: 'prog-delay', cat: 'Program', title: 'Lépcsőházi világítás – késleltetés',
-    desc: 'A gomb felkapcsolja a LED-et, és elengedés után még két másodpercig ég: a jel és a késleltetett jel VAGY-a.',
+    id: 'prog-delay', cat: 'Program', title: 'Lépcsőházi világítás – utánfutás',
+    desc: 'A gomb felkapcsolja a LED-et, és elengedés után még két másodpercig ég: Időzítő blokk Utánfutás működéssel.',
     design: pico([{ id: 'p2', type: 'button', label: 'SW1', r: 20, c: 8 }, res('p3', 'R1', 20, 26, 330), led('p4', 'LED1', 26, 30, 'yellow')],
       [['p2.A1', 'GPIO'], ['p2.B1', 'GND'], ['p3.1', 'GPIO'], ['p3.2', 'p4.A'], ['p4.K', 'GND']], [
-        note(31, 2, 17, 9, 'Késleltetés\nA Késleltetés a bemenet minden változását 2000 ms-mal később adja tovább. A VAGY blokk miatt a LED azonnal kigyullad (a gomb jele), és csak a késleltetett elengedéskor alszik ki.', YEL, 'p2'),
-        note(31, 21, 15, 9, 'Próbáld ki\nSzimulációban nyomd meg és engedd el a gombot: a LED még két másodpercig ég. A késést a blokk beállításában módosíthatod.', GRN, 'p4'),
+        note(31, 2, 17, 9, 'Időzítő\nUtánfutás: a kimenet a gombnyomásra azonnal bekapcsol, és az elengedés után még 2000 ms-ig igaz marad. A Működés beállítás másik módjai: bekapcsolási késleltetés, impulzus, szűrés.', YEL, 'p2'),
+        note(31, 21, 15, 9, 'Próbáld ki\nSzimulációban nyomd meg és engedd el a gombot: a LED még két másodpercig ég. Az időt és a működést a blokk beállításában módosíthatod.', GRN, 'p4'),
       ], { program: { nodes: [
         { id: 'n1', type: 'in', x: 40, y: 60, props: { pin: 'p2.A1', pull: 'pullup', active: 'low' } },
-        { id: 'n2', type: 'delay', x: 280, y: 150, props: { ms: 2000 } },
-        { id: 'n3', type: 'or', x: 500, y: 60 },
-        { id: 'n4', type: 'out', x: 720, y: 60, props: { pin: 'p3.1' } },
-      ], edges: [{ id: 'e1', from: 'n1.v', to: 'n3.a' }, { id: 'e2', from: 'n1.v', to: 'n2.a' }, { id: 'e3', from: 'n2.v', to: 'n3.b' }, { id: 'e4', from: 'n3.v', to: 'n4.a' }] } }),
+        { id: 'n2', type: 'delay', x: 300, y: 60, props: { mode: 'off', ms: 2000 } },
+        { id: 'n3', type: 'out', x: 560, y: 60, props: { pin: 'p3.1' } },
+      ], edges: [{ id: 'e1', from: 'n1.v', to: 'n2.a' }, { id: 'e2', from: 'n2.v', to: 'n3.a' }] } }),
   },
   /* ---------- Saját alkatrész: belső kapcsolás ---------- */
   {
@@ -404,7 +403,7 @@ const META: Record<string, [Example['level'], string[]]> = {
   'prog-and': ['kezdő', ['logika a programban', 'két bemenet egy döntéshez', 'Kapcsoló mód a szimulációban']],
   'prog-chase': ['kezdő', ['Sorozat blokk', 'minta és irány', 'négy kimenet egy blokkból']],
   'prog-counter': ['haladó', ['Számláló blokk', 'arány → PWM-kitöltés', 'állapot a programban']],
-  'prog-delay': ['haladó', ['Késleltetés blokk', 'jel és késleltetett jel VAGY-a', 'időzítés gomb után']],
+  'prog-delay': ['kezdő', ['Időzítő blokk', 'utánfutás és késleltetés', 'időzítés gomb után']],
   'prog-dimmer': ['haladó', ['analóg érték → PWM', 'összehasonlítás', 'két kimenet egy bemenetről']],
   npn: ['haladó', ['bázisellenállás', 'tranzisztor kapcsolóként', 'áramerősítés']],
   'mosfet-pwm': ['haladó', ['MOSFET kapcsoló', 'PWM-kitöltés', 'logikai szintű vezérlés']],

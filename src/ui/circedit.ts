@@ -24,6 +24,8 @@ export interface CircHost {
   onSelect?(id: string | null): void;
   /** Teljes képernyőből kilépve, ha a régi helye közben eltűnt: a gazda tegye vissza. */
   reattach?(): void;
+  /** Billentyű a gazdának (pl. visszavonás; teljes képernyőn is); igaz, ha kezelte. */
+  key?(e: KeyboardEvent): boolean;
 }
 export interface CircEditor { el: HTMLElement; refresh(): void; select(id: string | null): void; fit(): void }
 
@@ -237,6 +239,8 @@ export function mountCircEditor(host: CircHost): CircEditor {
     const t = e.target as HTMLInputElement & HTMLSelectElement, n = sel && sel.kind === 'node' ? node(sel.id) : null;
     if (!n) return;
     if (t.dataset.cx) { // kifejezés → a diagram a gazdánál újraépül
+      const cur = host.exprOf(n.id)?.[t.dataset.cx as 'v' | 'oe'];
+      if (cur !== undefined && cur.replace(/\s+/g, '') === t.value.replace(/\s+/g, '') && !(exprErr && exprErr.id === n.id)) return; // változatlan (pl. Enter után a fókusz elvesztése): nem épül újra
       const err = host.setExpr(n.id, t.dataset.cx as 'v' | 'oe', t.value);
       exprErr = err ? { id: n.id, which: t.dataset.cx, msg: err } : null;
       if (!err) return; // a gazda frissít
@@ -304,6 +308,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
   canvas.addEventListener('pointercancel', () => { drag = null; tmp = null; root.classList.remove('wiring'); renderEdges(); });
   canvas.addEventListener('wheel', e => { e.preventDefault(); zoom(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY); }, { passive: false });
   root.addEventListener('keydown', e => {
+    if (host.key?.(e)) return;
     const t = e.target as HTMLElement;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT')) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); delSel(); }

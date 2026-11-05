@@ -94,6 +94,46 @@ test('példák ablaka: balra a kategóriák darabszámmal, jobbra kártyák (szi
   await page.fill('#exSearch', 'késleltetés');
   await expect(page.locator('.ex-item')).toHaveCount(1);
   await expect(page.locator('.ex-item')).toHaveAttribute('data-ex', 'prog-delay');
+  await page.fill('#exSearch', '');
+  // a lábléc kevés kártyánál is az ablak alján
+  await page.click('.ex-cat[data-excat="Passzív"]');
+  const dlg = (await page.locator('#dlgEx').boundingBox())!, foot = (await page.locator('#dlgEx .dlg-foot').boundingBox())!;
+  expect(Math.abs(dlg.y + dlg.height - (foot.y + foot.height))).toBeLessThan(3);
+  // címkeszűrő: a kategóriában szűr, a kategóriák darabszáma követi, az üres kategória nem választható
+  await page.click('.ex-cat[data-excat="Program"]');
+  await page.click('[data-exf="haladó"]');
+  await expect(page.locator('[data-exf="haladó"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.ex-item .ex-tag.lv-beg')).toHaveCount(0);
+  await expect(page.locator('.ex-item')).toHaveCount(2); // számláló, joystick
+  await expect(page.locator('.ex-cat[data-excat="Bemenet"]')).toBeDisabled();
+  await page.click('[data-exf="program"]'); // a szint és a program együtt
+  await expect(page.locator('.ex-cat[data-excat="Félvezető"]')).toBeDisabled(); // programos és haladó csak a Programban van
+  await expect(page.locator('.ex-cat[data-excat="Program"]')).toHaveClass(/on/);
+  await page.click('.ex-fclear');
+  await expect(page.locator('[data-exf]')).toHaveCount(3);
+  await page.click('.ex-cat[data-excat="Félvezető"]');
+  await expect(page.locator('.ex-item')).toHaveCount(2);
+  // Összes kategória: minden példa, a kártyán a kategóriája; a szűrő itt is működik
+  await page.click('.ex-cat[data-excat="*"]');
+  const total = await page.locator('.ex-item').count();
+  expect(total).toBeGreaterThan(20);
+  await expect(page.locator('.ex-cat[data-excat="*"] .ex-n')).toHaveText(String(total));
+  await expect(page.locator('.ex-item[data-ex="custom-xor"] .ex-tag').first()).toHaveText('Saját alkatrész');
+  const nProg = +(await page.locator('[data-exf="program"] .ex-n').textContent())!;
+  await page.click('[data-exf="program"]');
+  await expect(page.locator('.ex-item')).toHaveCount(nProg);
+  expect(nProg).toBeGreaterThanOrEqual(7);
+});
+
+test('lépcsőházi világítás: rövid gombnyomásra is felgyullad, és elengedés után még ég', async ({ page }) => {
+  const led = `return ((pcb.simInfo().leds.find(x => x.label === 'LED1') || {}).I || 0) > 2e-4;`;
+  await pcb(page, `pcb.example('prog-delay'); pcb.sim(true);`);
+  await expect.poll(() => pcb(page, led)).toBe(false);
+  await pcb(page, `pcb.press('SW1', true);`);
+  await page.waitForTimeout(150);
+  await pcb(page, `pcb.press('SW1', false);`);
+  await expect.poll(() => pcb(page, led), { timeout: 1500 }).toBe(true);
+  await expect.poll(() => pcb(page, led), { timeout: 5000 }).toBe(false);
 });
 
 test('új tanító példák: futófény, ÉS gombokkal, saját XOR modul belső kapcsolással', async ({ page }) => {

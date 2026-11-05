@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { analyze } from '../../src/engine/netlist';
 import { presetMacropad } from '../../src/engine/presets';
-import { evalProgram, gpioOf, newRuntime, normProgram, withProgram, type Program } from '../../src/engine/program';
+import { NODE_DEFS, evalProgram, gpioOf, newRuntime, normProgram, withProgram, type Program } from '../../src/engine/program';
 import { simulate } from '../../src/engine/simulate';
 
 const lab = (D: ReturnType<typeof presetMacropad>, l: string) => D.parts.find(p => p.label === l)!.id;
@@ -99,5 +99,30 @@ describe('Sorozat blokk, léptetőmotor sablon, régi Jelsorozat', () => {
     expect(pg.nodes[1].props).toMatchObject({ preset: 'custom', custom: '00 10', dir: 'back' });
     expect(pg.nodes.slice(2).map(n => n.props.pin)).toEqual(['p1.4', 'p1.5']);
     expect(signalToProgram({ preset: 'half', custom: '', pins: [null], step: 0, rate: 4, dir: 1 })).toBeUndefined();
+  });
+});
+
+describe('Időzítő blokk', () => {
+  /** A bemenet idősora [t, érték] párokban; a kimenet minden mintavételkor. */
+  const run = (mode: string | undefined, seq: Array<[number, boolean]>) => {
+    const st: Record<string, unknown> = {}, p: Record<string, unknown> = { ms: 100 };
+    if (mode) p.mode = mode;
+    return seq.map(([t, a]) => !!NODE_DEFS.delay.eval({ in: { a }, p, st, t } as never).v);
+  };
+  const press: Array<[number, boolean]> = [[0, false], [10, true], [40, false], [80, false], [130, false], [150, false], [200, true], [250, true], [320, true], [330, false]];
+  it('utánfutás: azonnal be, elengedés után még az idő végéig', () => {
+    expect(run('off', press)).toEqual([false, true, true, true, false, false, true, true, true, true]);
+  });
+  it('bekapcsolási késleltetés: csak a tartós bemenetre kapcsol, kikapcsolás azonnal', () => {
+    expect(run('on', press)).toEqual([false, false, false, false, false, false, false, false, true, false]);
+  });
+  it('impulzus: felfutó élre az ideig, a hossz nem függ a bemenettől', () => {
+    expect(run('pulse', press)).toEqual([false, true, true, true, false, false, true, true, false, false]);
+  });
+  it('szűrés: a rövid gombnyomás elnyelődik; régi mentésben (mód nélkül) ez marad', () => {
+    expect(run('filter', press)).toEqual([false, false, false, false, false, false, false, false, true, true]);
+    const old = normProgram({ nodes: [{ id: 'd', type: 'delay', x: 0, y: 0, props: { ms: 100 } }], edges: [] })!;
+    expect(old.nodes[0].props.mode).toBe('filter');
+    expect(normProgram({ nodes: [{ id: 'd', type: 'delay', x: 0, y: 0 }], edges: [] })!.nodes[0].props.mode).toBe('filter');
   });
 });

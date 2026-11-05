@@ -899,16 +899,26 @@ function loadExample(id){const ex=EXAMPLES.find(e=>e.id===id);if(!ex)return fals
   toast(`Betöltve: ${ex.title}. Az előző terv visszavonással (Ctrl+Z) visszahozható.`);
   closeDlg('#dlgEx');renderExamples();return true;}
 /** Példák: balra a kategóriák (darabszámmal), jobbra kártyák (cím, leírás, szint, mit tanulsz); keresés a fejlécben. */
-function renderExamples(){const el=$('#examples');if(!el)return;const cat=ui.exCat||'Alapok',q=(($('#exSearch')||{}).value||'').trim().toLowerCase();
-  const hit=e=>!q||[e.title,e.desc,e.cat,...(e.learn||[])].join(' ').toLowerCase().includes(q);
-  const list=EXAMPLES.filter(e=>(q?true:e.cat===cat)&&hit(e));
-  el.innerHTML=`<nav class="ex-cats" role="tablist" aria-label="Példák kategóriái" aria-orientation="vertical">${EX_CATS.map(c=>{const n=EXAMPLES.filter(e=>e.cat===c&&hit(e)).length;
-      return `<button class="ex-cat ${c===cat&&!q?'on':''}" role="tab" aria-selected="${c===cat&&!q}" data-excat="${c}" ${q&&!n?'disabled':''}><span>${c}</span><span class="ex-n">${n}</span></button>`;}).join('')}</nav>
-    <div class="ex-main">${q?`<p class="small muted ex-q">Találatok minden kategóriában: ${list.length}</p>`:''}<ul class="ex-list">${list.map(e=>`<li><button class="ex-item" data-ex="${e.id}">
-      <span class="ex-tags">${q?`<span class="ex-tag">${esc(e.cat)}</span>`:''}${e.level?`<span class="ex-tag lv-${e.level==='haladó'?'adv':'beg'}">${esc(e.level)}</span>`:''}${e.design.program?'<span class="ex-tag prog">program</span>':''}</span>
+/** Példák ablak: kategóriák balra, kártyák jobbra; keresés és címkeszűrő (szint: VAGY, program: ÉS) minden kategórián. */
+const EX_FILTERS=[['kezdő','kezdő','lv-beg'],['haladó','haladó','lv-adv'],['program','program','prog']];
+function renderExamples(){const el=$('#examples');if(!el)return;const q=(($('#exSearch')||{}).value||'').trim().toLowerCase(),F=ui.exF||(ui.exF=new Set());
+  const lv=['kezdő','haladó'].filter(x=>F.has(x)),fl=lv.length||F.has('program'),every=ui.exCat==='*',all=!!q||every;
+  const tag=(e,k)=>k==='program'?!!e.design.program:e.level===k;
+  const pass=e=>(!lv.length||lv.includes(e.level))&&(!F.has('program')||!!e.design.program);
+  const found=e=>!q||[e.title,e.desc,e.cat,...(e.learn||[])].join(' ').toLowerCase().includes(q);
+  const hit=e=>found(e)&&pass(e),nOf=c=>EXAMPLES.filter(e=>e.cat===c&&hit(e)).length;
+  let cat=every?'*':ui.exCat||'Alapok';if(!all&&fl&&!nOf(cat))cat=EX_CATS.find(c=>nOf(c))||cat; // üres kategóriából a szűrő az első találatosra visz
+  const scope=e=>(all||e.cat===cat)&&found(e),list=EXAMPLES.filter(e=>scope(e)&&pass(e));
+  const cnt=k=>EXAMPLES.filter(e=>scope(e)&&tag(e,k)).length;
+  el.innerHTML=`<nav class="ex-cats" role="tablist" aria-label="Példák kategóriái" aria-orientation="vertical"><button class="ex-cat ex-all ${every&&!q?'on':''}" role="tab" aria-selected="${every&&!q}" data-excat="*"><span>Összes kategória</span><span class="ex-n">${EXAMPLES.filter(hit).length}</span></button>${EX_CATS.map(c=>{const n=EXAMPLES.filter(e=>e.cat===c&&hit(e)).length;
+      return `<button class="ex-cat ${c===cat&&!all?'on':''}" role="tab" aria-selected="${c===cat&&!all}" data-excat="${c}" ${(all||fl)&&!n?'disabled':''}><span>${c}</span><span class="ex-n">${n}</span></button>`;}).join('')}</nav>
+    <div class="ex-main"><div class="ex-filters" role="group" aria-label="Szűrés címkére"><span class="small muted">Szűrés:</span>${EX_FILTERS.map(([k,l,c])=>`<button class="ex-tag ex-f ${c} ${F.has(k)?'on':''}" data-exf="${k}" aria-pressed="${F.has(k)}" ${!F.has(k)&&!cnt(k)?'disabled':''}>${l} <span class="ex-n">${cnt(k)}</span></button>`).join('')}${fl?'<button class="btn ghost ex-fclear" data-exf="">Szűrők törlése</button>':''}</div>
+    ${q?`<p class="small muted ex-q">Találatok minden kategóriában: ${list.length}</p>`:''}<ul class="ex-list">${list.map(e=>`<li><button class="ex-item" data-ex="${e.id}">
+      <span class="ex-tags">${all?`<span class="ex-tag">${esc(e.cat)}</span>`:''}${e.level?`<span class="ex-tag lv-${e.level==='haladó'?'adv':'beg'}">${esc(e.level)}</span>`:''}${e.design.program?'<span class="ex-tag prog">program</span>':''}</span>
       <b>${esc(e.title)}</b><span class="ex-desc">${esc(e.desc)}</span>
       ${e.learn&&e.learn.length?`<span class="ex-learn"><span class="small muted">Mit tanulsz:</span><ul>${e.learn.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></span>`:''}</button></li>`).join('')||'<li class="muted">Nincs ilyen példa.</li>'}</ul></div>`;}
 $('#examples').addEventListener('click',e=>{const c=e.target.closest('[data-excat]');if(c){ui.exCat=c.dataset.excat;$('#exSearch').value='';renderExamples();return;}
+  const f=e.target.closest('[data-exf]');if(f){const F=ui.exF||(ui.exF=new Set()),k=f.dataset.exf;if(!k)F.clear();else if(F.has(k))F.delete(k);else F.add(k);renderExamples();const b=$(`#examples [data-exf="${k}"]`);if(b)b.focus();return;}
   const x=e.target.closest('[data-ex]');if(x)loadExample(x.dataset.ex);});
 $('#exSearch').addEventListener('input',()=>renderExamples());
 renderExamples();
