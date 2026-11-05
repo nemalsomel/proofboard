@@ -296,3 +296,21 @@ test('az előnézeten a láb megfogva áthelyezhető; foglalt lyukba nem kerül,
   await page.mouse.move(b.x, b.y); await page.mouse.down(); await page.mouse.move(o.x, o.y, { steps: 4 }); await page.mouse.up();
   await expect(page.locator('.pe-pins input[data-pin="1"][data-k="lc"]')).toHaveValue('1');
 });
+
+test('a fül gombjai egy gombsorban; sok alkatrészfül a nézetváltók alá törik, nem görget', async ({ page }) => {
+  const ts: string[] = [];
+  for (const n of ['Első hosszú nevű modul', 'Második hosszú nevű modul', 'Harmadik hosszú nevű modul'])
+    ts.push(await pcb<string>(page, `return pcb.addPart(${JSON.stringify({ ...nokia, name: n })}).type;`));
+  for (const t of ts) await pcb(page, `pcb.openEditor('${t}');`);
+  await page.click('#bNewPart');
+  await page.fill('#pe_name', 'Negyedik');
+  // a látható fül: cím, kuka, mentés, háttérbe – összefüggő sor
+  const cur = page.locator('#partTabs .ptab.cur');
+  const xs = await cur.locator('button:visible').evaluateAll(bs => bs.map(b => { const r = b.getBoundingClientRect(); return [r.left, r.right]; }));
+  for (let i = 1; i < xs.length; i++) expect(Math.abs(xs[i][0] - xs[i - 1][1])).toBeLessThan(2);
+  await page.click('#workSw [data-work="board"]'); // a nézetmódok is látszanak: nem fér ki
+  await expect(page.locator('.vbar')).toHaveClass(/pt-wrap/);
+  const c = page.locator('#partTabs');
+  expect(await c.evaluate(e => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
+  expect((await c.boundingBox())!.y).toBeGreaterThan((await page.locator('#workSw').boundingBox())!.y + 10);
+});

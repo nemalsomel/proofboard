@@ -1342,10 +1342,13 @@ const PT=new Map();let partCur=null; // nyitott szerkesztők: azonosító → {e
 /** A fül vége: a látható, nem mentett szerkesztőnél „háttérbe” (a fül marad), különben bezárás. */
 const pxOf=(id,t)=>{const park=ui.part&&partCur===id&&/ •$/.test(t.title);
   return park?{ic:'minimize',lab:'Háttérbe: '+t.title,tip:'Háttérbe (Esc): a nem mentett alkatrész a fülén vár'}:{ic:'close',lab:'Bezárás: '+t.title,tip:'Bezárás (Esc)'+(/ •$/.test(t.title)?'; a piszkozat megmarad, az Új alkatrész folytatja':'')};};
+/** Ha a fülek nem férnek ki a nézetsávban, görgetés helyett új sorba kerülnek (a nézetváltók alá). */
+function ptWrap(){const v=$('.vbar'),c=$('#partTabs');v.classList.remove('pt-wrap');if(c.hidden)return;if(c.scrollWidth>c.clientWidth+1||v.scrollWidth>v.clientWidth+1)v.classList.add('pt-wrap');}
+new ResizeObserver(()=>ptWrap()).observe(document.querySelector('.vbar'));
 function partTabs(){const c=$('#partTabs');c.hidden=!PT.size;
   c.innerHTML=[...PT].map(([id,t])=>{const on=ui.part&&partCur===id,x=pxOf(id,t);return `<div class="grp seg ptab${on?' cur':''}" data-pt="${esc(id)}"><button class="btn pgo${on?' on':''}" aria-pressed="${on}" title="Az alkatrész szerkesztése">${esc(t.title)}</button><button class="btn icon px" aria-label="${esc(x.lab)}" title="${esc(x.tip)}">${icon(x.ic)}</button></div>`;}).join('');
   // a látható szerkesztő saját gombjai (Elvetés, Mentés) a fülén, a bezárás előtt
-  if(ui.part&&partCur!=null){const t=PT.get(partCur),g=[...c.querySelectorAll('[data-pt]')].find(e=>e.dataset.pt===partCur);if(t&&t.acts&&g)g.insertBefore(t.acts,g.querySelector('.px'));}}
+  if(ui.part&&partCur!=null){const t=PT.get(partCur),g=[...c.querySelectorAll('[data-pt]')].find(e=>e.dataset.pt===partCur);if(t&&t.acts&&g)g.insertBefore(t.acts,g.querySelector('.px'));}ptWrap();}
 /** A látható szerkesztő váltása (null: egyik sem, a Panel / Program látszik). Csak a látható van a DOM-ban. */
 function partShow(id){const on=id!=null&&PT.has(id);if(on)partCur=id;ui.part=on;const v=$('#partView');v.hidden=!on;
   if(on){const el=PT.get(id).el;if(v.firstChild!==el)v.replaceChildren(el);}else v.replaceChildren();
@@ -1354,7 +1357,7 @@ function partShow(id){const on=id!=null&&PT.has(id);if(on)partCur=id;ui.part=on;
   partTabs();if(!on){resize();draw();}}
 editorHost.view={
   open(id,el,title,onClose,show=true,acts=null){PT.set(id,{el,title,onClose,acts});if(!show){partTabs();return;}partShow(id);if(MOB.matches)sheet('');log('Alkatrész-szerkesztő: '+title.replace(/^Alkatrész: /,''));},
-  title(id,t){const x=PT.get(id);if(!x||x.title===t)return;const flip=/ •$/.test(t)!==/ •$/.test(x.title);x.title=t;if(flip){partTabs();return;}const g=[...document.querySelectorAll('#partTabs [data-pt]')].find(e=>e.dataset.pt===id);if(g)g.querySelector('.pgo').textContent=t;},
+  title(id,t){const x=PT.get(id);if(!x||x.title===t)return;const flip=/ •$/.test(t)!==/ •$/.test(x.title);x.title=t;if(flip){partTabs();return;}const g=[...document.querySelectorAll('#partTabs [data-pt]')].find(e=>e.dataset.pt===id);if(g)g.querySelector('.pgo').textContent=t;ptWrap();},
   close(id){if(!PT.has(id))return;const was=ui.part&&partCur===id;PT.delete(id);if(partCur===id)partCur=null;
     if(was){const next=[...PT.keys()].pop();partShow(next??null);}else partTabs();},
   hide(id){if(ui.part&&partCur===id)partShow(null);toast('A nem mentett alkatrész a fülén vár: kattints rá a folytatáshoz.');},
