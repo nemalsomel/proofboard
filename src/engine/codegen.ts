@@ -158,7 +158,8 @@ export function generateCode(D: Design, A: Netlist, prog: Program, lang: CodeLan
         const f = Math.max(1, Math.round(num(p.freq, 1000)));
         if (py) S.push(`${id}_pwm = PWM(Pin(${pin!.gpio}))  ${c(`${pin!.ref} → ${pin!.name}`)}`, `${id}_pwm.freq(${f})`);
         else S.push(`pinMode(${pin!.gpio}, OUTPUT);  ${c(`${pin!.ref} → ${pin!.name}`)}`, (target ? target.pwmFreq : 'analogWriteFreq({f});').replace('{pin}', String(pin!.gpio)).replace('{f}', String(f)));
-        L.push(py ? `${id}_pwm.duty_u16(int(max(0, min(1, ${inp(n, 'a', 'num')})) * 65535))` : `analogWrite(${pin!.gpio}, (int)(constrain(${inp(n, 'a', 'num')}, 0.0f, 1.0f) * 255));`);
+        const duty = byTo.has(n.id + '.a') ? inp(n, 'a', 'num') : lit(Math.max(0, Math.min(100, num(p.duty, 50))) / 100); // bemenet nélkül a beállított kitöltés
+        L.push(py ? `${id}_pwm.duty_u16(int(max(0, min(1, ${duty})) * 65535))` : `analogWrite(${pin!.gpio}, (int)(constrain(${duty}, 0.0f, 1.0f) * 255));`);
         break;
       }
     }

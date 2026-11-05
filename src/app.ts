@@ -33,7 +33,7 @@ import { emptyDesign, normalize, normCutList, rekeyAgainstLibrary, NOTE_COL } fr
 import { swapMcu as swapMcuOf } from './engine/swap';
 import { presetMacropad, presetRouted } from './engine/presets';
 import { route as routeOf, suggestCuts as suggestCutsOf, manualToAuto as manualToAutoOf, autoCutOn as autoCutOnOf } from './engine/route';
-import { findPin as findPinOf, linkText as linkTextOf, linkStates as linkStatesOf, partGroups, equivPins, groupLabel } from './engine/links';
+import { findPin as findPinOf, linkText as linkTextOf, linkStates as linkStatesOf, partGroups, equivPins, groupLabel, pinRows, linkTargets, setPinLink, setLinkTarget, ROLE_HU } from './engine/links';
 import { simulate as simulateOf, gpioMode as gpioModeOf, pwmCfg as pwmCfgOf, gpioLevel, BLINK_HZ, LSTATE, STSTATE } from './engine/simulate';
 import { hasCap, hasAdc, SPECIAL_CAPS, fnWant, fnCaps, mcuMux, capLabel, fnName, pinFns, fnPenalty, gpioPenalty, gpioFits, GPIO_MODES, gpioModeOk, gpioDefault } from './engine/mcu';
 
@@ -741,6 +741,17 @@ function bindParams(root,p){
       const nv=pr.series==='E12'?stepE12(base,dir):+(base+dir*(pr.step||Math.max(1e-6,Math.abs(base)*0.05))).toPrecision(4);el.value=fmtSI(nv);set(el.dataset.pk,el.value);});
   });
 }
+/** Lábak és bekötés: lábcsoportonként a szerep, a mostani bekötés (háló vagy kapcsolat) és a kapcsolat célja. */
+function targetSelect(attr,id,cur,except){const ts=linkTargets(D,A0,except),groups=new Map();
+  if(cur&&!ts.some(t=>t.value===cur)){const q=findPin(cur);ts.push({value:cur,label:q?groupLabel(q):cur,group:'Jelenlegi'});}
+  for(const t of ts){if(!groups.has(t.group))groups.set(t.group,[]);groups.get(t.group).push(t);}
+  return `<select ${attr}="${esc(id)}"><option value="">– nincs kapcsolat –</option>${[...groups].map(([g,xs])=>`<optgroup label="${esc(g)}">${xs.map(t=>`<option value="${esc(t.value)}" ${t.value===cur?'selected':''}>${esc(t.label)}</option>`).join('')}</optgroup>`).join('')}</select>`;}
+function pinsUI(p){const rows=pinRows(D,A0,p),open=uiPref().pinsOpen!==false,nf=rows.filter(r=>r.floating&&r.on).length;
+  return `<details class="pr-sec" id="pinsSec" ${open?'open':''}><summary>Lábak és bekötés <span class="muted small">${rows.length} láb${nf?` · <span class="c-warn">${nf} lebeg</span>`:''}</span></summary><div class="pins">${rows.map(r=>{
+    const st=!r.on?'<span class="muted">a panelon kívül</span>':r.link?`<span class="muted">kapcsolat${(ui.linkState.get(r.link.id)||{}).ok?', bekötve':', <span class="c-err">nincs bekötve</span>'}</span>`:r.net.length?`<span class="muted" title="${esc(r.net.join(', '))}">háló: ${esc(r.net.slice(0,3).join(', '))}${r.net.length>3?` +${r.net.length-3}`:''}</span>`:'<span class="c-warn">lebeg (sehova sincs kötve)</span>';
+    return `<div class="pin${r.floating&&r.on?' float':''}"><div class="pin-n"><b>${esc(r.name)}</b>${ROLE_HU[r.role]?`<span class="muted small"> ${esc(ROLE_HU[r.role])}</span>`:''}</div>${targetSelect('data-pinlink',r.ref,r.target||'',p.id)}<div class="pin-s small">${st}</div></div>`;}).join('')}</div></details>`;}
+function bindPins(pr){const d=pr.querySelector('#pinsSec');if(d)d.addEventListener('toggle',()=>uiPrefSet({pinsOpen:d.open}));
+  pr.querySelectorAll('[data-pinlink]').forEach(s=>s.addEventListener('change',()=>{pushUndo();if(!setPinLink(D,s.dataset.pinlink,s.value,()=>'l'+(D.seq++))){ui.undo.pop();renderLeft();return;}commit();}));}
 /** Tulajdonság-művelet gomb: ikon + név, a gyorsbillentyű súgóban és Ctrl-címkén. */
 const ACT=(id,ic,l,k,t='',cls='')=>`<button class="btn${cls}" id="${id}" data-kbd="${k}" title="${t?t+' ':''}(${k})">${icon(ic)}${l}</button>`;
 function renderLeft0(){
@@ -755,10 +766,11 @@ function renderLeft0(){
       <div class="small muted">${d.name} · origó <span class="mono">${p.r}:${p.c}</span> · ${p.rot*90}°${p.mir?' · tükrözve':''}</div>
       <div class="pr-acts">${ACT('pRot','rotate','Forgatás','R')}${ACT('pMir','mirror','Tükrözés','M')}${ACT('pDup','copy','Duplikálás','D','Új példány ugyanezekkel a beállításokkal')}${ACT('pDel','trash','Törlés','Del','',' danger')}</div>
       <label class="check small"><input type="checkbox" id="pXray" ${p.xray?'checked':''}> Röntgen (csak körvonal és lábak)</label>${extra}
+      ${pinsUI(p)}
       <div class="pr-more" id="pMore"></div>`;
     const ch=(id,fn)=>{const e=$(id);if(e)e.addEventListener('change',()=>{pushUndo();fn(e.value);commit();});};
     ch('#pLabel',v=>p.label=v.trim()||p.label);
-    bindParams(pr,p);
+    bindParams(pr,p);bindPins(pr);
     $('#pRot').onclick=rotate;$('#pMir').onclick=mirror;$('#pDel').onclick=delSel;
     const more=$('#pMore');
     {$('#pDup').onclick=()=>duplicate(p);$('#pXray').onchange=e=>{pushUndo();if(e.target.checked)p.xray=true;else delete p.xray;commit(true);};}
@@ -823,9 +835,10 @@ $('#swatches').addEventListener('click',e=>{const b=e.target.closest('[data-col]
 
 function renderRight(){const fk=focusKey();renderRight0();restoreFocus(fk);}
 function renderRight0(){
-  const ne=ISSUES.filter(i=>i.sev==='err').length,nw=ISSUES.length-ne;
-  for(const t of [$('#tabIss'),$('#bpIssN')]){t.textContent=ISSUES.length?String(ISSUES.length):'';t.classList.toggle('err',ne>0);}
-  $('#issues').innerHTML=ISSUES.length?ISSUES.map((x,i)=>[x,i]).sort((a,b)=>(a[0].sev==='err'?0:1)-(b[0].sev==='err'?0:1)).map(([x,i])=>`<li data-i="${i}" class="${x.sev==='err'?'c-err':'c-warn'}"><span class="dot"></span><span style="color:var(--fg)">${esc(x.msg)}</span></li>`).join(''):'<li class="muted" style="cursor:default">Nincs zárlat vagy bekötési hiba.</li>';
+  const ne=ISSUES.filter(i=>i.sev==='err').length,nw=ISSUES.filter(i=>i.sev==='warn').length,np=ne+nw;
+  for(const t of [$('#tabIss'),$('#bpIssN')]){t.textContent=np?String(np):'';t.classList.toggle('err',ne>0);}
+  const SO={err:0,warn:1,info:2};
+  $('#issues').innerHTML=ISSUES.length?ISSUES.map((x,i)=>[x,i]).sort((a,b)=>SO[a[0].sev]-SO[b[0].sev]).map(([x,i])=>`<li data-i="${i}" class="c-${x.sev}"><span class="dot"></span><span style="color:var(--fg)">${esc(x.msg)}</span></li>`).join(''):'<li class="muted" style="cursor:default">Nincs zárlat vagy bekötési hiba.</li>';
   $('#usb').checked=!!D.settings.usb;
   $('#mHold').classList.toggle('on',D.settings.btnMode!=='toggle');$('#mToggle').classList.toggle('on',D.settings.btnMode==='toggle');
   let h='';
@@ -957,6 +970,7 @@ $('#bRoute').onclick=()=>{pushUndo();route({full:true});commit(true);log(routeSu
 $('#bFreeze').onclick=()=>{if(!D.auto.bridges.length&&!D.auto.wires.length&&!(D.auto.cuts||[]).length)return;pushUndo();D.cuts=[...(D.cuts||[]),...(D.auto.cuts||[])];D.settings.autoCut=false;D.bridges.push(...D.auto.bridges.map(b=>b.slice(0,4)));D.wires.push(...D.auto.wires.map(w=>({a:w.a,b:w.b,color:w.color})));D.auto={bridges:[],wires:[],cuts:[]};commit(true);log('Az automatikus bekötés kézivé rögzítve.');};
 $('#bToAuto').onclick=()=>{const n=manualToAuto(null);if(!n)flashMsg('Nincs kézi bekötés, amit át lehetne alakítani');};
 $('#bUnroute').onclick=()=>{pushUndo();D.auto={bridges:[],wires:[],cuts:[]};D.settings.autoRoute=false;commit(true);log('Az automatikus hidak törölve, az útvonaltervezés kikapcsolva.');};
+$('#links').addEventListener('change',e=>{const s=e.target.closest('[data-linkto]');if(!s)return;pushUndo();if(!setLinkTarget(D,s.dataset.linkto,s.value)){ui.undo.pop();renderLinks();return;}commit();});
 $('#links').addEventListener('click',e=>{const b=e.target.closest('[data-dl]');if(b){pushUndo();D.links=D.links.filter(l=>l.id!==b.dataset.dl);commit();return;}
   const li=e.target.closest('[data-li]');if(li){const id=li.dataset.li;ui.selLink=ui.selLink===id?null:id;renderLinks();draw();status();
     if(ui.selLink){const g=linkGeom(D.links.find(x=>x.id===id));if(g){const sc=$('#scroll'),pts=[g.start,g.end].filter(Boolean).map(([r,c])=>toScreen(hx(c),hy(r)));const vx=pts.reduce((t,p)=>t+p[0],0)/pts.length,vy=pts.reduce((t,p)=>t+p[1],0)/pts.length;sc.scrollTo({left:vpX(vx)-sc.clientWidth/2,top:vpY(vy)-sc.clientHeight/2,behavior:'smooth'});}}}});
@@ -1008,9 +1022,9 @@ function sbUpdate(){const tl=$('#sbTool');if(!tl||!D)return;const T=TOOLS.find(x
   tl.innerHTML=ui.sim?'':ui.placing?`Lerakás: <b>${esc(DEFS[ui.placing]?DEFS[ui.placing].name:ui.placing)}</b>`:`Eszköz: <b>${T?T[1]:esc(ui.tool)}</b>`;
   let sel='';if(ui.sel){if(ui.sel.kind==='group'){const p=selPart(),n=gSize(ui.sel);sel=p?p.label:n?`${n} elem`:'';}else sel={wire:'vezeték',bridge:'híd',note:'jegyzet'}[ui.sel.kind]||'';}
   $('#sbSel').innerHTML=sel?`Kijelölve: <b>${esc(sel)}</b>`:'';
-  const ne=ISSUES.filter(i=>i.sev==='err').length,nw=ISSUES.length-ne,b=$('#sbIss');
+  const ne=ISSUES.filter(i=>i.sev==='err').length,nw=ISSUES.filter(i=>i.sev==='warn').length,ni=ISSUES.length-ne-nw,b=$('#sbIss');
   b.className='sb-item sb-btn '+(ne?'err':nw?'warn':'ok');
-  b.innerHTML=ne||nw?icon(ne?'error':'warn')+[ne?`${ne} hiba`:'',nw?`${nw} figyelmeztetés`:''].filter(Boolean).join(' · '):icon('check')+'Nincs probléma';
+  b.innerHTML=ne||nw?icon(ne?'error':'warn')+[ne?`${ne} hiba`:'',nw?`${nw} figyelmeztetés`:''].filter(Boolean).join(' · '):ni?icon('info')+`${ni} megjegyzés`:icon('check')+'Nincs probléma';
   const sm=$('#sbSim');sm.className='sb-item'+(ui.sim?' run':'');sm.innerHTML=`<i class="sb-dot"></i>${ui.sim?'Szimuláció fut':'Szimuláció áll'}`;}
 $('#sbIss').onclick=()=>{bottomPanel(true,'issues');};
 /* ---------- Elrendezések (5.2): Tervezés, Program, Szimuláció; a kézi módosítás elrendezésenként megmarad ---------- */
@@ -1185,7 +1199,7 @@ function renderLinks(){
   $('#linkSum').innerHTML=n?`<span class="chip ${ok===n?'c-ok':'c-warn'}">${ok}/${n} bekötve</span>`:'';
   $('#links').innerHTML=n?D.links.map(l=>{const s=ui.linkState.get(l.id)||{};
     const st=!s.ok?'<span class="c-err">nincs</span>':s.cable?'<span class="c-ok">kábel</span>':s.wire?'<span class="c-warn">vezeték</span>':s.nb?`<span class="c-ok">${s.nb} híd</span>`:'<span class="muted">kézi</span>';
-    return `<li class="lk${ui.selLink===l.id?' on':''}" data-li="${l.id}" title="Kattints: kezdő- és végpont, útvonal kiemelése"><span class="t">${esc(linkText(l))}${s.gpio&&l.b==='GPIO'?` <b>${s.gpio}</b>`:''}</span>${st}<button data-dl="${l.id}" aria-label="Kapcsolat törlése" title="Törlés">×</button></li>`;}).join('')
+    return `<li class="lk${ui.selLink===l.id?' on':''}" data-li="${l.id}" title="Kattints: kezdő- és végpont, útvonal kiemelése"><span class="t">${esc(linkText(l))}${s.gpio&&l.b==='GPIO'?` <b>${s.gpio}</b>`:''}</span>${st}<button data-dl="${l.id}" aria-label="Kapcsolat törlése" title="Törlés">×</button></li>${ui.selLink===l.id?`<li class="lk-edit"><label class="small muted" for="lkTo">Cél</label>${targetSelect('data-linkto',l.id,l.b,l.a.split('.')[0]).replace('<select ','<select id="lkTo" ').replace('<option value="">– nincs kapcsolat –</option>','')}</li>`:''}`;}).join('')
     :'<li class="muted small" style="padding:4px 6px">Még nincs kapcsolat.</li>';
   const ab=D.auto.bridges.length,aw=D.auto.wires.length,mb=D.bridges.length,mw=D.wires.length;
   const sum=[...ui.linkState.values()].reduce((t,s)=>t+(s.nb||0),0);
@@ -1428,7 +1442,12 @@ window.pcb={
   sim(on=true){setSim(!!on);},
   press(label,down=true){const p=D.parts.find(x=>x.label===label&&hasPress(x));if(!p)return false;if(!ui.sim)setSim(true);ui.pressed[p.id]=!!down;recompute();return true;},
   read(){return SIM?SIM.gpios.map(g=>({pin:g.q.name,mode:g.mode,V:+g.V.toFixed(3),level:logic(g)})):[];},
-  issues(){return ISSUES.map(i=>({sev:i.sev,msg:i.msg,holes:i.holes}));},
+  /** Problémák (hiba, figyelmeztetés); all: a megjegyzésekkel (info) együtt. */
+  issues(all){return ISSUES.filter(i=>all||i.sev!=='info').map(i=>({sev:i.sev,msg:i.msg,holes:i.holes}));},
+  /** Az alkatrész lábai bekötöttséggel (a tulajdonságok Lábak táblázata). */
+  pinRows(label){const p=D.parts.find(x=>x.label===label);return p?pinRows(D,A0,p).map(r=>({ref:r.ref,label:r.label,name:r.name,role:r.role,target:r.target,net:r.net,floating:r.floating})):null;},
+  /** A láb kapcsolatának beállítása: cél 'GND' | 'GPIO' | lábhivatkozás | '' (törlés). */
+  setPin(label,pin,target){const p=D.parts.find(x=>x.label===label);const q=p&&gpins(p).find(x=>x.id===pin||x.name===pin);if(!q)return false;pushUndo();if(!setPinLink(D,p.id+'.'+q.id,target,()=>'l'+(D.seq++))){ui.undo.pop();return false;}commit();return true;},
   route(){route({full:true});commit(true);return pcb.links();},
   move(label,dr,dc){const p=D.parts.find(x=>x.label===label);if(!p)return false;const t={...p,r:p.r+dr,c:p.c+dc};if(!partFits(t))return false;pushUndo();p.r=t.r;p.c=t.c;ui.moved=new Set([p.id]);commit();return true;},
   links(){return D.links.map(l=>({...l,text:linkText(l),...(ui.linkState.get(l.id)||{})}));},

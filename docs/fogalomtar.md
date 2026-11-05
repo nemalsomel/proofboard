@@ -25,6 +25,7 @@ Egy dologra egy szó: a felületen, a súgóban, a példák jegyzeteiben és a h
 | --- | --- | --- |
 | **alkatrész** | a panelra rakott elem (ellenállás, LED, vezérlőlap…) | komponens, elem |
 | **láb** | az alkatrész kivezetése, egy lyukba kerül | pin, tüske |
+| **lebegő láb** | sehova sincs kötve: se kapcsolat, se háló | szabad, bekötetlen |
 | **vezérlőlap** | mikrovezérlős fejlesztőlap (Pico W, ESP32…) | MCU, kontroller |
 | **GPIO** | a vezérlőlap programozható lába | port |
 | **külső alkatrész** | a panel mellé kerülő alkatrész (motor, kijelző), kábellel csatlakozik | panelen kívüli elem |
@@ -46,7 +47,7 @@ Egy dologra egy szó: a felületen, a súgóban, a példák jegyzeteiben és a h
 | **sorozat** | a minta soronkénti léptetése a kimenetekre (pl. léptetőmotor tekercsei); a régi „Jelsorozat” helyett | jelsorozat, szekvencia |
 | **kód** | a programból generált MicroPython vagy Arduino forrás | szkript |
 | **szimuláció** | a kör egyenáramú számítása, futás közben a programmal | futtatás |
-| **Problémák** | az ellenőrzés eredménye: **hiba** (nem fog működni) és **figyelmeztetés** (gyanús) | Ellenőrzés (régi fülnév), alert |
+| **Problémák** | az ellenőrzés eredménye: **hiba** (nem fog működni), **figyelmeztetés** (gyanús) és **megjegyzés** (tájékoztatás, pl. lebegő föld- vagy tápláb) | Ellenőrzés (régi fülnév), alert |
 | **napló** | események időrendben: betöltés, mentés, útvonalkeresés, szimuláció (az alsó panel Napló füle) | log, konzol |
 
 ## Felület

@@ -154,10 +154,10 @@ export const NODE_DEFS: Record<string, NodeDef> = {
     gpio: (p, i) => ({ ref: p.pin, mode: B(i.a) ? 'out_high' : 'out_low' }),
   },
   pwm: {
-    label: 'PWM kimenet', cat: 'Kimenet', help: 'A bemenet (0…1) a kitöltés: LED fényereje, motor fordulatszáma. Szervóhoz 50 Hz és 0,025…0,125.',
-    ins: [nin('a', 'kitöltés')], outs: [], params: [PIN(), { key: 'freq', label: 'Frekvencia', type: 'number', default: 1000, min: 1, unit: 'Hz' }],
+    label: 'PWM kimenet', cat: 'Kimenet', help: 'Kitöltés: LED fényereje, motor fordulatszáma. Ha a bemenet nincs bekötve, a beállított kitöltés érvényes; bekötve a bemenet (0…1) adja, pl. Állandó 0,3 = 30 % vagy potméter. Logikai jel (pl. Ütemadó) 0 % vagy 100 %. Szervóhoz 50 Hz és 2,5…12,5 %.',
+    ins: [nin('a', 'kitöltés')], outs: [], params: [PIN(), { key: 'duty', label: 'Kitöltés (bemenet nélkül)', type: 'number', default: 50, min: 0, max: 100, unit: '%' }, { key: 'freq', label: 'Frekvencia', type: 'number', default: 1000, min: 1, unit: 'Hz' }],
     eval: () => ({}),
-    gpio: (p, i) => ({ ref: p.pin, mode: 'pwm', pwm: { duty: Math.round(Math.max(0, Math.min(1, N(i.a))) * 1000) / 10, freq: Math.max(1, num(p.freq, 1000)) } }),
+    gpio: (p, i) => ({ ref: p.pin, mode: 'pwm', pwm: { duty: Math.round(Math.max(0, Math.min(1, i.a === undefined ? num(p.duty, 50) / 100 : N(i.a))) * 1000) / 10, freq: Math.max(1, num(p.freq, 1000)) } }),
   },
 };
 

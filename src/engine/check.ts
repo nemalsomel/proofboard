@@ -7,13 +7,14 @@ import type { PartInstance } from '../core/schema';
 import { DEFS, hasPress, isMcu, isOff } from './defs';
 import { plugOf } from './plug';
 import { inBoard, placedPins, xf } from './geometry';
-import { findPin, linkText, partGroups, type LinkState } from './links';
+import { findPin, linkText, partGroups, pinRows, REQUIRED_ROLES, ROLE_HU, type LinkState } from './links';
 import { fnCaps, fnName, fnWant, GPIO_MODES, hasAdc, hasCap, mcuMux, SPECIAL_CAPS } from './mcu';
 import { layoutOf, pinLabel, type Netlist } from './netlist';
 import { gpioMode, pwmCfg, type SimResult } from './simulate';
 import type { Design, Hole, NetPin } from './types';
 
-export interface Issue { sev: 'err' | 'warn'; msg: string; holes: Hole[] }
+/** err: nem fog működni; warn: gyanús; info: tájékoztatás (pl. lebegő kötelező láb egy részben bekötött alkatrészen). */
+export interface Issue { sev: 'err' | 'warn' | 'info'; msg: string; holes: Hole[] }
 export interface CheckCtx {
   /** Netlista lenyomott gombok nélkül. */
   A0: Netlist;
@@ -43,6 +44,13 @@ export function checkAll(D: Design, { A0: A, AS, SIM, linkState }: CheckCtx): Is
   for (const p of D.parts) if (p.plug && !plugOf(D, p)) {
     const h = D.parts.find(x => x.id === p.plug);
     if (h) add('warn', `${p.label}: a ${h.label} csatlakozónak kevesebb lába van, mint a kábelnek (${DEFS[p.type].pins(p).length}), így nincs bedugva`, placedPins(h).map(q => [q.r, q.c] as Hole));
+  }
+  // lebegő kötelező láb (föld, tápbemenet) egy már bekötött alkatrészen; a vezérlőlap kimarad (sok lába szabad)
+  for (const p of D.parts) {
+    if (isMcu(p)) continue;
+    const rows = pinRows(D, A, p);
+    if (!rows.some(r => !r.floating)) continue;
+    for (const r of rows) if (r.floating && r.on && REQUIRED_ROLES.has(r.role)) add('info', `${r.label}: a ${ROLE_HU[r.role]} láb sehova sincs kötve`, (() => { const q = findPin(D, r.ref); return q ? at(q) : []; })());
   }
   const hole = new Map<string, NetPin[]>();
   for (const q of A.pins) { if (!q.on) continue; const k = q.r + ':' + q.c; if (!hole.has(k)) hole.set(k, []); hole.get(k)!.push(q); }
