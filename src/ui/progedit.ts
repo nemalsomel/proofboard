@@ -7,6 +7,7 @@
  * bemenet); csomópont húzása a fejlécénél; üres helyen húzva a vászon mozog, görgővel nagyít.
  */
 import { icon } from './icons';
+import { setFull } from './fullscreen';
 import { NODE_DEFS, stepperTemplate, type NodeDef, type PEdge, type PNode, type Program, type Val } from '../engine/program';
 
 export interface PinChoice { ref: string; part: string; name: string; gpio: string | null }
@@ -199,7 +200,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
   }
   /** Teljes képernyő: a szerkesztő az egész ablakot kitölti (Esc vagy a gomb: vissza). */
   function full(on: boolean) {
-    root.classList.toggle('pg-full', on);
+    setFull(root, on);
     const b = root.querySelector('[data-pg="full"]') as HTMLElement;
     b.innerHTML = icon(on ? 'fullExit' : 'full'); b.setAttribute('aria-pressed', String(on));
     b.title = on ? 'Vissza (Esc)' : 'Teljes képernyő (Esc: vissza)'; b.setAttribute('aria-label', on ? 'Kilépés a teljes képernyőből' : 'Teljes képernyő');

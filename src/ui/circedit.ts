@@ -7,6 +7,7 @@
 import { EL_KINDS, GATE_SHORT, canConnect, connect, nextNodeId, nodeTitle, portsOf, pruneEdges, removeNode, type CGraph, type CKind, type CNode, type ElKind, type PinLite } from '../core/circuit';
 import type { GateKind } from '../core/logic';
 import { icon } from './icons';
+import { setFull } from './fullscreen';
 import { fmtSI } from '../core/expr';
 
 export interface CircHost {
@@ -21,6 +22,8 @@ export interface CircHost {
   /** Kimenet kifejezése szövegből (a diagram ebből újraépül); hibánál az üzenet. */
   setExpr(id: string, which: 'v' | 'oe', src: string): string | null;
   onSelect?(id: string | null): void;
+  /** Teljes képernyőből kilépve, ha a régi helye közben eltűnt: a gazda tegye vissza. */
+  reattach?(): void;
 }
 export interface CircEditor { el: HTMLElement; refresh(): void; select(id: string | null): void; fit(): void }
 
@@ -198,7 +201,7 @@ export function mountCircEditor(host: CircHost): CircEditor {
   function select(s: typeof sel) { sel = s; exprErr = null; host.onSelect?.(s && s.kind === 'node' ? s.id : null); renderNodes(); renderEdges(); renderProps(); }
   /** Teljes képernyő: a szerkesztő az egész ablakot kitölti (Esc vagy a gomb: vissza). */
   function full(on: boolean) {
-    root.classList.toggle('pg-full', on);
+    setFull(root, on, () => host.reattach?.());
     const b = root.querySelector('[data-cg="full"]') as HTMLElement;
     b.innerHTML = icon(on ? 'fullExit' : 'full'); b.setAttribute('aria-pressed', String(on));
     b.title = on ? 'Vissza (Esc)' : 'Teljes képernyő (Esc: vissza)'; b.setAttribute('aria-label', on ? 'Kilépés a teljes képernyőből' : 'Teljes képernyő');

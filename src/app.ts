@@ -533,7 +533,7 @@ function panStart(ev,el){ev.preventDefault();const sc=$('#scroll');let x=ev.clie
   const up=()=>{sc.classList.remove('panning');el.removeEventListener('pointermove',mv);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',up);};
   el.addEventListener('pointermove',mv);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);}
 $('#scroll').addEventListener('pointerdown',ev=>{if(ev.pointerType==='touch')return;if(ev.target===$('#scroll')&&ev.button===0||ev.button===1)panStart(ev,$('#scroll'));},true);
-document.addEventListener('keydown',ev=>{if(ev.code!=='Space'||ev.repeat)return;const t=ev.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.tagName==='BUTTON'||t.closest&&t.closest('#progView,#partView,dialog'))||ui.part)return;ev.preventDefault();ui.space=true;$('.app').classList.add('space');});
+document.addEventListener('keydown',ev=>{if(ev.code!=='Space'||ev.repeat)return;const t=ev.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.tagName==='BUTTON'||t.closest&&t.closest('#progView,#partView,.pg,dialog'))||ui.part)return;ev.preventDefault();ui.space=true;$('.app').classList.add('space');});
 document.addEventListener('keyup',ev=>{if(ev.code==='Space'){ui.space=false;$('.app').classList.remove('space');}});
 window.addEventListener('blur',()=>{ui.space=false;$('.app').classList.remove('space');});
 
@@ -667,7 +667,7 @@ document.addEventListener('keydown',ev=>{
   if((ev.ctrlKey||ev.metaKey)&&k==='o'){ev.preventDefault();$('#bOpenFile').click();return;}
   if(ev.altKey&&k==='n'){ev.preventDefault();openNew();return;}
   if(ev.altKey&&!ev.ctrlKey&&['1','2','3'].includes(ev.key)){ev.preventDefault();applyLayout(LAYOUTS[+ev.key-1].id);return;}
-  if(t&&t.closest&&t.closest('#progView,#partView,dialog'))return; // a program- és az alkatrész-szerkesztő, valamint a párbeszédablakok saját billentyűi
+  if(t&&t.closest&&t.closest('#progView,#partView,.pg,dialog'))return; // a program- és az alkatrész-szerkesztő, valamint a párbeszédablakok saját billentyűi
   if(ui.part&&!['1','2','3'].includes(ev.key)&&!(ev.ctrlKey||ev.metaKey))return; // az Alkatrész-szerkesztő látszik: a panel billentyűi nem élnek
   if((ev.ctrlKey||ev.metaKey)&&k==='a'&&!ui.sim){ev.preventDefault();ui.sel=grp(D.parts.map(p=>p.id),D.bridges.map((b,i)=>i),D.wires.map((w,i)=>i));setTool('select');return;}
   if(ev.ctrlKey||ev.metaKey||ev.altKey)return;

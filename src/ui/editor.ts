@@ -7,6 +7,7 @@ import { pinLabelPositions } from '../core/labels';
 import { parseExpr, pinRef, renameVars, varsOf } from '../core/logic';
 import { EL_KINDS, addModelToGraph, emptyGraph, graphToLogic, graphToModel, logicToGraph, nextNodeId, nodeTitle, setPortExpr, type CGraph, type ElKind, type GraphProblem } from '../core/circuit';
 import { mountCircEditor, type CircEditor, type CircHost } from './circedit';
+import { isFull } from './fullscreen';
 import { tableVars, toggleCell, truthTable, TABLE_MAX_VARS } from './logicview';
 import { fmtSI, parseSI } from '../core/expr';
 import { BUS_FNS, hasErrors, validatePartDef, type Problem } from '../core/validate';
@@ -483,6 +484,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (keep && dirty) putDraft(draftKey, { tab, form, jsonText: tab === 'json' ? jsonText : '' });
     if (keep && dirty && !force && host.view.visible(draftKey)) { setParked(draftKey, true); host.view.hide(draftKey); return; }
     setParked(draftKey, false); // teljes bezárás: a fül nem jön vissza (a piszkozat igen, az Új alkatrész folytatja)
+    if (circ && isFull(circ.el)) circ.el.remove(); // teljes képernyős diagram is bezárul
     ro.disconnect(); OPEN.delete(draftKey); host.view.close(draftKey); document.removeEventListener('keydown', onDocKey, true); window.removeEventListener('pagehide', onPageHide);
     if (prevFocus && document.contains(prevFocus)) prevFocus.focus?.();
   };
@@ -722,11 +724,13 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       syncLogic(form); refresh(); circ?.refresh(); return null;
     },
     onSelect(id) { circSel = id; drawPreview(); },
+    reattach() { render(); },
   };
   /** A diagram a helyére (a Működés fül újrarajzolásakor a komponens megmarad, csak visszakerül). */
   function placeCirc(): void {
     const slot = left.querySelector('[data-circ]'); if (!slot || !form) return;
     if (!circ) circ = mountCircEditor(circHost);
+    if (isFull(circ.el)) { slot.remove(); return; } // teljes képernyőn marad; kilépéskor a gazda újrarajzol
     slot.replaceWith(circ.el); circ.refresh();
     if (circSel && form.graph?.nodes.some(n => n.id === circSel)) circ.select(circSel);
   }

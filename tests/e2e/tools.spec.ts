@@ -177,12 +177,20 @@ test('nézetváltó 1 / 2 / 3, rövid vezeték Shift+W; tulajdonságok: fő műv
 });
 
 test('programszerkesztő: teljes képernyő gombbal, Esc-re vissza', async ({ page }) => {
-  await pcb(page, `pcb.program({ nodes: [{ id: 'n1', type: 'blink', x: 40, y: 40, props: {} }], edges: [] }); pcb.work('prog');`);
-  await page.click('[data-pg="full"]');
+  await pcb(page, `pcb.preset(); pcb.program({ nodes: [{ id: 'n1', type: 'blink', x: 40, y: 40, props: {} }], edges: [] }); pcb.work('split'); pcb.select(['K1']);`);
+  await page.locator('[data-pg="full"]').dispatchEvent('click'); // a lebegő tulajdonságablak takarhatja
+  // semmilyen réteg (nézetsáv, nagyítás, eszközsáv, tulajdonságablak, alsó panel) nem marad fölötte
+  for (const sel of ['#workSw', '.zoomctl', '#toolstrip', '#bpanel']) {
+    const b = await page.locator(sel).boundingBox(); if (!b) continue;
+    expect(await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('.pg'), [b.x + b.width / 2, b.y + b.height / 2])).toBe(true);
+  }
+  await page.keyboard.press('v'); // a panel billentyűi nem élnek
+  expect(await pcb(page, `return pcb.work();`)).toBe('split');
   const vp = page.viewportSize()!, box = (await page.locator('.pg.pg-full').boundingBox())!;
   expect(box.width).toBeGreaterThan(vp.width - 2);
   await page.locator('.pg .pg-canvas').click({ position: { x: 5, y: 5 } });
   await page.keyboard.press('Escape');
   await expect(page.locator('.pg.pg-full')).toHaveCount(0);
-  expect(await pcb(page, `return pcb.work();`)).toBe('prog');
+  await expect(page.locator('#progView .pg')).toBeVisible(); // visszakerült a helyére
+  expect(await pcb(page, `return pcb.work();`)).toBe('split');
 });
