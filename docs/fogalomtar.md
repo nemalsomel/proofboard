@@ -31,6 +31,7 @@ Egy dologra egy szó: a felületen, a súgóban, a példák jegyzeteiben és a h
 | **külső alkatrész** | a panel mellé kerülő alkatrész (motor, kijelző), kábellel csatlakozik | panelen kívüli elem |
 | **csatlakozó** | tüskesor vagy modulcsatlakozó a panelon, ebbe dugható a külső alkatrész kábele | aljzat, header |
 | **saját alkatrész** | a felhasználó által leírt alkatrész | egyedi alkatrész |
+| **belső kapcsolás** | a saját alkatrész működése diagramon (Működés fül): bemeneti láb, kapu, tároló, állandó és kimenet elemek, élekkel | belső logika, séma |
 | **saját könyvtár** | a saját alkatrészek gyűjteménye a böngészőben, tervtől függetlenül | könyvtáram |
 | **projekt** (alkatrészcsoport) | a tervvel érkező saját alkatrészek | — |
 

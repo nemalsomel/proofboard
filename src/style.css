@@ -730,3 +730,16 @@ input:disabled::placeholder{color:var(--muted)}
 /* sok alkatrészfül: görgetés helyett a nézetváltók alá, új sorba törnek */
 .vbar.pt-wrap{flex-wrap:wrap;row-gap:6px}
 .vbar.pt-wrap .ptabs{order:99;flex:1 0 100%;flex-wrap:wrap;overflow:visible}
+
+/* Belső kapcsolás (Alkatrész-szerkesztő, Működés › Logika): a programszerkesztő elemeivel; a kijelölt elem beállításai a vászon alatt */
+.cg{position:relative;display:flex;flex-direction:column;margin-top:10px;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--panel)}
+.cg>.pg-canvas{flex:0 0 auto;height:360px}
+.cg .pg-bar .btn.icon{padding:4px;min-width:28px}
+.cg .pg-props{position:static;width:auto;max-height:none;border:0;border-top:1px solid var(--line);border-radius:0;box-shadow:none;display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 10px;align-items:center;padding:10px 12px}
+.cg .pg-props[hidden]{display:none}
+.cg .pg-props>.h,.cg .pg-props>.help,.cg .pg-props>.pg-err,.cg .pg-props>.row{grid-column:1/-1;margin:0}
+.cg .pg-props label{margin:0}
+.cg .pg-node{font-size:12px}
+.cg .pg-port.opt{background:var(--panel2);box-shadow:0 0 0 1px #868e96}
+.cg .pg-sum{margin-top:4px;padding-bottom:6px}
+@media (max-width:820px){.cg>.pg-canvas{height:320px}}

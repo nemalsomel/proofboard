@@ -54,7 +54,7 @@ test('74HC00 NAND: táp nélkül nem hajt; a kimenet egy LED-et kapcsol', async 
   expect(r.iss).toEqual([]); // a GND-re kötött, nem használt bemenetek nem hibák
 });
 
-test('Logika fül: kifejezés → igazságtábla → kapuk, kétirányú; a JSON-ban logic elem', async ({ page }) => {
+test('Logika fül: belső kapcsolás diagramon, kifejezésből építve, igazságtáblával; a JSON-ban logic elem', async ({ page }) => {
   await page.click('[data-ltab="lib"]');
   await page.click('#bNewPart');
   await page.fill('#pe_name', 'Saját kapu');
@@ -64,38 +64,37 @@ test('Logika fül: kifejezés → igazságtábla → kapuk, kétirányú; a JSON
   await page.click('[data-act="lgstart"]');
   await expect(page.locator('#pe_lvcc')).toHaveValue('2');
   await expect(page.locator('#pe_lgnd')).toHaveValue('1');
-  await expect(page.locator('#pe_lp_0 option:checked')).toHaveText('Y (azon. 5)');
-  await page.fill('#pe_lx_0', 'A &');
-  await expect(page.locator('[data-lmsg="0"]')).toContainText('Hiányzó tag');
-  await page.fill('#pe_lx_0', 'not (A and B)');
-  await expect(page.locator('[data-lmsg="0"]')).toContainText('!(A & B)');
-  // igazságtábla: NAND, az utolsó sor (A=1 B=1) 0; átbillentve mindenhol 1 → a kifejezés "1"
+  await expect(page.locator('#cg_pin option:checked')).toHaveText('Y (azon. 5)'); // a kimenet kijelölve
+  // kifejezésből a diagram épül
+  await page.fill('#cg_expr', 'A &'); await page.press('#cg_expr', 'Enter');
+  await expect(page.locator('[data-cgmsg="v"]')).toContainText('Hiányzó tag');
+  await page.fill('#cg_expr', 'not (A and B)'); await page.press('#cg_expr', 'Enter');
+  await expect(page.locator('.cg [data-k="gate"]')).toHaveText([/NEM-ÉS/]);
+  await expect(page.locator('.cg [data-k="in"]')).toHaveCount(2);
+  await expect(page.locator('#cg_expr')).toHaveValue('!(A & B)');
+  // igazságtábla: NAND, az utolsó sor (A=1 B=1) 0; átbillentve → A ^ B kapukkal
   await page.click('[data-act="lgview"][data-v="table"]');
   const cells = page.locator('.lg-cell');
   await expect(cells).toHaveText(['1', '1', '1', '0']);
   await cells.nth(0).click();
-  await expect(cells).toHaveText(['0', '1', '1', '0']); // A ^ B
-  await page.click('[data-act="lgview"][data-v="expr"]');
-  await expect(page.locator('#pe_lx_0')).toHaveValue('A & !B | !A & B');
-  // kapuk: a gyökér VAGY → KIZÁRÓ VAGY-ra cserélve
-  await page.fill('#pe_lx_0', 'A | B');
-  await page.click('[data-act="lgview"][data-v="gates"]');
-  await expect(page.locator('.lgv')).toHaveCount(1);
-  await page.selectOption('[data-gk="op"][data-gp=""]', 'nor');
-  await page.click('[data-act="lgview"][data-v="expr"]');
-  await expect(page.locator('#pe_lx_0')).toHaveValue('!(A | B)');
+  await expect(cells).toHaveText(['0', '1', '1', '0']);
+  await page.click('[data-act="lgview"][data-v="graph"]');
+  await page.locator('.cg [data-k="out"] .pg-head').click();
+  await expect(page.locator('#cg_expr')).toHaveValue('A & !B | !A & B');
+  // a kapu típusa a diagramon cserélhető
+  await page.fill('#cg_expr', 'A | B'); await page.press('#cg_expr', 'Enter');
+  await page.locator('.cg [data-k="gate"] .pg-head').click();
+  await page.selectOption('#cg_g', 'nor');
   await page.click('.pe [data-tab="json"]');
   const j = JSON.parse(await page.locator('#pe_json').inputValue());
   expect(j.model).toEqual([{ el: 'logic', vcc: '2', gnd: '1', outs: [{ pin: '5', expr: '!(A | B)' }] }]);
   // vissza: a logika megmarad
   await page.click('.pe [data-tab="func"]');
-  await expect(page.locator('#pe_lx_0')).toHaveValue('!(A | B)');
-  // átnevezés a Lábak fülön: a kifejezés követi
+  await expect(page.locator('.cg [data-k="gate"]')).toHaveText([/NEM-VAGY/]);
+  // átnevezés a Lábak fülön: a diagram lábra hivatkozik, a kifejezés követi
   await page.click('.pe [data-tab="pins"]');
   await page.fill('.pe-pins input[data-pin="2"][data-k="name"]', 'IN1');
   await page.locator('.pe-pins input[data-pin="2"][data-k="name"]').blur();
-  await page.click('.pe [data-tab="func"]');
-  await expect(page.locator('#pe_lx_0')).toHaveValue('!(IN1 | B)');
   await page.click('[data-act="save"]');
   expect(await pcb(page, `return Object.values(pcb.customParts())[0].model[0].outs[0].expr;`)).toBe('!(IN1 | B)');
 });
@@ -133,7 +132,7 @@ test('74HC74 hullámos számláló: Qn → D és a második órajele, kaszkád �
   expect(r.seq).toEqual(['00', '01', '10', '11', '00']); // 2Q 1Q: 0, 1, 2, 3, 0
 });
 
-test('Logika fül: tároló hozzáadása, kimenet a tárolóra, átnevezés követése', async ({ page }) => {
+test('Logika fül: tároló a diagramon, élek húzással, kimenet a tárolóra; bekötetlen kapu hibát ad', async ({ page }) => {
   await page.click('[data-ltab="lib"]');
   await page.click('#bNewPart');
   await page.fill('#pe_name', 'Saját D tároló');
@@ -141,17 +140,36 @@ test('Logika fül: tároló hozzáadása, kimenet a tárolóra, átnevezés köv
   await page.click('[data-act="gen"]');
   await page.click('.pe [data-tab="func"]');
   await page.click('[data-act="lgstart"]');
-  await page.fill('#pe_lx_0', 'F1');
-  await expect(page.locator('[data-lmsg="0"]')).toContainText('Nincs ilyen');
-  await page.click('[data-act="lgaddreg"]');
-  await expect(page.locator('#pe_rname_0')).toHaveValue('F1');
-  await expect(page.locator('#pe_rclk_0')).toHaveValue('CLK');
-  await page.fill('#pe_rd_0', 'D');
-  await expect(page.locator('[data-rmsg="0"]')).toContainText('F1 ← D a(z) CLK felfutó élén');
-  await page.fill('#pe_rname_0', 'MEM');
-  await page.locator('#pe_rname_0').blur();
-  await expect(page.locator('#pe_lx_0')).toHaveValue('MEM');
+  await page.fill('#cg_expr', 'D & CLK'); await page.press('#cg_expr', 'Enter'); // a két bemeneti láb a diagramra kerül
+  await page.click('.cg [data-cg="add"]');
+  await page.click('.cg [data-add="reg"]');
+  await page.fill('#cg_name', 'MEM'); await page.locator('#cg_name').press('Enter');
+  await page.click('.cg [data-cg="fit"]');
+  const id = async (k: string, text: string) => page.locator(`.cg [data-k="${k}"]`, { hasText: text }).getAttribute('data-cnode');
+  const reg = (await id('reg', 'MEM'))!, inD = (await id('in', 'Be: D'))!, inC = (await id('in', 'Be: CLK'))!;
+  const wire = async (from: string, to: string) => {
+    const a = (await page.locator(`[data-cout="${from}"]`).boundingBox())!, b = (await page.locator(`[data-cport="${to}"]`).boundingBox())!;
+    await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await page.mouse.down();
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 }); await page.mouse.up();
+  };
+  await wire(inD, `${reg}.d`);
+  await wire(inC, `${reg}.clk`);
+  // a kimenet a tárolóra (kifejezéssel, a tároló nevével)
+  await page.locator('.cg [data-k="out"] .pg-head').click();
+  await page.fill('#cg_expr', 'MEM'); await page.press('#cg_expr', 'Enter');
+  await expect(page.locator('.cg [data-k="gate"]')).toHaveCount(0); // a régi ÉS kapu már nem hat semmire: eltűnt
   await expect(page.locator('.pe [data-ref="probs"]')).toContainText('rendben');
+  // bekötetlen kapu: hiba, a problémára kattintva a diagramon kijelölődik
+  await page.click('.cg [data-cg="add"]');
+  await page.click('.cg [data-add="g:and"]');
+  await page.locator('.cg [data-k="gate"] .pg-head').click();
+  await page.selectOption('#cg_g', 'not');
+  await expect(page.locator('.pe [data-vtab="probs"] .badge')).toHaveText('2'); // bekötetlen bemenet (hiba) és hatástalan kapu (figyelmeztetés)
+  await expect(page.locator('[data-act="save"]')).toBeDisabled();
+  await page.click('.pe [data-vtab="probs"]');
+  await page.locator('.pe-probs li', { hasText: 'nincs bekötve' }).click();
+  await expect(page.locator('.cg .pg-node.sel')).toHaveAttribute('data-k', 'gate');
+  await page.click('.cg [data-cg="del"]');
   await page.click('.pe [data-tab="json"]');
   const j = JSON.parse(await page.locator('#pe_json').inputValue());
   expect(j.model[0].regs).toEqual([{ name: 'MEM', clk: 'CLK', d: 'D' }]);

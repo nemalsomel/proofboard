@@ -4,8 +4,10 @@
  * használ, mint a beépített alkatrészeket.
  */
 import { pinLabelPositions } from '../core/labels';
-import { GATE_LABEL, LogicError, parseExpr, pinRef, printExpr, renameVars, toGates, varsOf, type GateKind, type GateNode } from '../core/logic';
-import { gateSvg, gatesToText, tableVars, toggleCell, truthTable, TABLE_MAX_VARS } from './logicview';
+import { parseExpr, pinRef, renameVars, varsOf } from '../core/logic';
+import { emptyGraph, graphToLogic, logicToGraph, nextNodeId, nodeTitle, setPortExpr, type CGraph, type GraphProblem } from '../core/circuit';
+import { mountCircEditor, type CircEditor, type CircHost } from './circedit';
+import { tableVars, toggleCell, truthTable, TABLE_MAX_VARS } from './logicview';
 import { fmtSI, parseSI } from '../core/expr';
 import { BUS_FNS, hasErrors, validatePartDef, type Problem } from '../core/validate';
 import type { ModelEl, PartDef, Prim } from '../core/schema';
@@ -95,8 +97,10 @@ export interface LogicForm {
   vcc: string; gnd: string; outs: LogicOutRow[];
   /** Tárolók (órajeles állapotbitek). */
   regs?: LogicRegRow[];
-  /** A szerkesztő nézete: kifejezés, igazságtábla vagy kapuk. */
-  view?: 'expr' | 'table' | 'gates';
+  /** A szerkesztő nézete: kapcsolás (diagram) vagy igazságtábla; a régi 'expr' / 'gates' a kapcsolás. */
+  view?: 'graph' | 'table' | 'expr' | 'gates';
+  /** A belső kapcsolás diagramja: ez a forrás, az `outs` és a `regs` belőle számolt kifejezések. */
+  graph?: CGraph;
   /** Az igazságtábla bemenetei (lábnevek) a kifejezésekben szereplőkön felül. */
   tableVars?: string[];
   vih?: number; vil?: number; rout?: number;
@@ -350,8 +354,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   let drag: { i: number; moved: boolean; frame: { r0: number; r1: number; c0: number; c1: number } } | null = null, dragEnd = 0;
   /** A lábtáblázat minden oszloppal (különben a kijelölt láb további adatai a sora alatt). */
   let wide = false;
-  let sel = -1, selModel = -1, selOut = -1, nameBefore: string | null = null;
-  const regBefore = new Map<number, string>();
+  let sel = -1, selModel = -1, nameBefore: string | null = null;
   let jsonText = '';
   let jsonErr = '';
   let confirmDel = 0, confirmDiscard = 0;
@@ -421,11 +424,12 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (!d) return [{ level: 'error', path: '', msg: 'Nincs leírás.' }];
     const ps = validatePartDef(d);
     if (form && tab !== 'json' && !form.pins.length) return [{ level: 'error', path: 'pins', msg: 'Adj hozzá lábakat: kattints az előnézetre, vagy használd a lábsor-generátort.' }];
+    if (form && tab !== 'json') return [...graphProblems.map(p => ({ level: p.warn ? 'warn' as const : 'error' as const, path: 'graph.' + p.node, msg: p.msg })), ...ps];
     return ps;
   };
 
   /** Hol van a hiba az űrlapon: rövid hely („Lábak › VCC”), a fül és az ugrás célja. */
-  function whereOf(p: Problem): { at: string; tab?: Tab; sel?: string; msg: string } {
+  function whereOf(p: Problem): { at: string; tab?: Tab; sel?: string; node?: string; msg: string } {
     const f = form, msg = p.msg;
     if (!f || tab === 'json') return { at: '', msg };
     const m = /^(\w+)(?:\[(\d+)\])?(?:\.(\w+))?(?:\[(\d+)\])?/.exec(p.path) || [];
@@ -441,21 +445,29 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       if (pj >= 0) return { at: what, tab: 'func', sel: `[data-model="${i}"][data-k="pin${pj}"]`, msg: /^(Hiányzik|Nincs ilyen láb: ?$)/.test(msg) ? `${ui.pins[pj][1]}: válassz lábat.` : `${ui.pins[pj][1]}: ${msg}` };
       return { at: what, tab: 'func', sel: `[data-model="${i}"][data-k="el"]`, msg };
     }
+    if (key === 'graph') {
+      const id = p.path.slice(6), n = f.logic?.graph?.nodes.find(x => x.id === id);
+      return { at: `Működés › Logika${n ? ' › ' + nodeTitle(n, pinList(f)) : ''}`, tab: 'func', sel: '#pe_s_logic', node: id, msg };
+    }
     if (key === 'model') {
       if (sub === 'vcc' || sub === 'gnd') return { at: 'Működés › Logika', tab: 'func', sel: `#pe_l${sub}`, msg: `${sub === 'vcc' ? 'Táp (VCC)' : 'Föld (GND)'}: válassz lábat.` };
+      const G = f.logic?.graph?.nodes || [];
+      if (sub === 'regs' && j >= 0) { const r = G.filter(n => n.k === 'reg')[j]; return { at: `Működés › Logika › Tároló ${r?.name || ''}`.trim(), tab: 'func', sel: '#pe_s_logic', node: r?.id, msg }; }
       const o = sub === 'outs' && j >= 0 ? f.logic?.outs[j] : null;
       if (!o) return { at: 'Működés › Logika', tab: 'func', sel: '#pe_s_logic', msg };
       const pn = f.pins.find(q => q.id === o.pin), name = pn ? pn.name || pn.id : '';
-      const tail = name && msg.startsWith(name + ': ') ? msg.slice(name.length + 2) : msg; // a láb neve már a helyben szerepel
-      return { at: `Működés › Logika › ${j + 1}. kimenet${name ? ` (${name})` : ''}`, tab: 'func', sel: `#pe_lx_${j}`, msg: tail.charAt(0).toUpperCase() + tail.slice(1) };
+      let tail = name && msg.startsWith(name + ': ') ? msg.slice(name.length + 2) : msg; // a láb neve már a helyben szerepel
+      if (/^hiányzik a kifejezés/.test(tail)) tail = 'az érték bemenete nincs bekötve.';
+      return { at: `Működés › Logika › Kimenet ${name || '–'}`, tab: 'func', sel: '#pe_s_logic', node: G.filter(n => n.k === 'out')[j]?.id, msg: tail.charAt(0).toUpperCase() + tail.slice(1) };
     }
     if (key === 'controls') return { at: 'Működés › Vezérlő', tab: 'func', sel: '#pe_s_ctl', msg };
     if (key === 'graphics' || key === 'bounds') return { at: 'Megjelenés', sel: '#pe_s_look', msg };
     return { at: '', msg };
   }
   /** Ugrás a hibás mezőhöz: fülváltás, görgetés, fókusz. */
-  function goTo(w: { tab?: Tab; sel?: string }): void {
+  function goTo(w: { tab?: Tab; sel?: string; node?: string }): void {
     if (w.tab && w.tab !== tab) switchTab(w.tab);
+    if (w.node && form?.logic) { if (form.logic.view === 'table') { form.logic.view = 'graph'; render(); } circ?.select(w.node); circ?.el.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
     const pane = w.sel ? back.querySelector(w.sel)?.closest<HTMLElement>('[data-vpane]') : null;
     if (pane && pane.dataset.vpane !== vtab) { vtab = pane.dataset.vpane as typeof vtab; showVtab(); }
     const el = w.sel ? back.querySelector<HTMLElement>(w.sel) || (w.sel.startsWith('#pe_lx_') ? back.querySelector<HTMLElement>('#pe_s_logic') : null) : null;
@@ -490,6 +502,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (e.key !== 'Escape' || !host.view.visible(draftKey)) return;
     const t = e.target as HTMLElement | null;
     if (t && t !== document.body && !back.contains(t)) return;
+    if (t && t.closest && t.closest('.cg')) return; // a diagram saját Esc-je (kijelölés megszüntetése)
     e.preventDefault(); e.stopPropagation(); close();
   };
   document.addEventListener('keydown', onDocKey, true);
@@ -518,7 +531,9 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       b.classList.toggle('on', b.dataset.tab === tab);
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
     });
+    syncLogic(tab !== 'json' ? form : null);
     left.innerHTML = tab === 'pins' && form ? pinsHtml(form) : tab === 'func' && form ? funcHtml(form) : jsonHtml();
+    if (tab === 'func') placeCirc();
     $('basic').innerHTML = form && tab !== 'json' ? basicHtml(form) : '<p class="help pe-sec" data-vpane="basic">JSON-nézetben az alapadatok a leírásban szerkeszthetők.</p><p class="help pe-sec" data-vpane="look">JSON-nézetben a megjelenés a leírásban szerkeszthető.</p>'
     if (existing) $('basic').insertAdjacentHTML('beforeend', `<div class="pe-sec pe-danger" data-vpane="basic"><button class="btn danger" data-act="delete" title="Az alkatrész törlése a saját könyvtárból">${icon('trash')}Alkatrész törlése</button><p class="help">A tervben már lerakott példányok megmaradnak (a terv saját leírásával).</p></div>`);
     showVtab();
@@ -530,6 +545,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     back.querySelectorAll<HTMLElement>('[data-vpane]').forEach(e => { e.hidden = e.dataset.vpane !== vtab; });
   }
   function refresh(): void {
+    syncLogic(tab !== 'json' ? form : null);
     drawPreview();
     const ps = problems(), err = hasErrors(ps);
     probsEl.innerHTML = ps.length
@@ -665,189 +681,113 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       </section>`;
   }
 
-  // ---------- Logika fül ----------
+  // ---------- Logika (Működés fül): belső kapcsolás diagramon (ui/circedit.ts), mellette igazságtábla ----------
   const pinName = (f: Form, id: string) => { const p = f.pins.find(x => x.id === id); return p ? p.name || p.id : id; };
   const pinList = (f: Form) => f.pins.map(p => ({ id: p.id, name: p.name || p.id }));
+  /** A diagram hibái (bekötetlen kapubemenet, kör, láb nélküli bemenet) az utolsó szinkron szerint. */
+  let graphProblems: GraphProblem[] = [];
+  /** A diagramon kijelölt csomópont (az előnézet kiemeléséhez). */
+  let circSel: string | null = null;
   function ensureLogic(f: Form): LogicForm {
-    if (!f.logic) f.logic = { vcc: f.pins.find(p => p.role === 'vin')?.id || '', gnd: f.pins.find(p => p.role === 'gnd')?.id || '', outs: [], view: 'expr' };
+    if (!f.logic) f.logic = { vcc: f.pins.find(p => p.role === 'vin')?.id || '', gnd: f.pins.find(p => p.role === 'gnd')?.id || '', outs: [], view: 'graph', graph: emptyGraph() };
     return f.logic;
   }
-  /** Bemenetnek választható lábnevek: nem táp, nem GND, nem kimenet. */
-  const inputNames = (f: Form) => [...f.pins.filter(p => p.id !== f.logic?.vcc && p.id !== f.logic?.gnd && !f.logic?.outs.some(o => o.pin === p.id)).map(p => p.name || p.id), ...(f.logic?.regs || []).map(r => r.name).filter(Boolean)];
-  /** A kijelölt kimenet és a kifejezésében szereplő bemenetek lábai (előnézeti kiemeléshez). */
-  function logicPins(f: Form, i: number): string[] {
-    const o = f.logic?.outs[i]; if (!o) return [];
-    const ids = [o.pin];
-    try { for (const v of varsOf(parseExpr(o.expr))) { const id = pinRef(v, pinList(f)); if (id && !ids.includes(id)) ids.push(id); } } catch { /* hibás kifejezés */ }
+  /** A diagram a forrás: belőle a kimenetek és tárolók kifejezései. Régi (diagram nélküli) leírásnál a kifejezésekből épül. */
+  function syncLogic(f: Form | null): void {
+    graphProblems = [];
+    const L = f?.logic; if (!f || !L) return;
+    if (L.view !== 'table') L.view = 'graph';
+    if (!L.graph) L.graph = logicToGraph({ outs: L.outs, regs: L.regs }, pinList(f));
+    const r = graphToLogic(L.graph, pinList(f));
+    L.outs = r.outs; L.regs = r.regs.length ? r.regs : undefined; graphProblems = r.problems;
+  }
+  const outNodes = (f: Form) => (f.logic?.graph?.nodes || []).filter(n => n.k === 'out');
+  /** A kijelölt csomópont lábai, kimenetnél a kifejezésében szereplő bemenetekkel (előnézeti kiemeléshez). */
+  function logicPins(f: Form): string[] {
+    const n = f.logic?.graph?.nodes.find(x => x.id === circSel); if (!n || !n.pin) return [];
+    const ids = [n.pin];
+    if (n.k === 'out') {
+      const o = f.logic!.outs[outNodes(f).indexOf(n)];
+      try { if (o) for (const v of varsOf(parseExpr(o.expr))) { const id = pinRef(v, pinList(f)); if (id && !ids.includes(id)) ids.push(id); } } catch { /* üres vagy hibás */ }
+    }
     return ids;
   }
   function addOut(f: Form): void {
-    const L = ensureLogic(f), used = new Set([L.vcc, L.gnd, ...L.outs.map(o => o.pin)]);
+    const L = ensureLogic(f), G = L.graph!, used = new Set([L.vcc, L.gnd, ...G.nodes.filter(n => n.k === 'out').map(n => n.pin)]);
     const p = f.pins.find(x => x.role === 'out' && !used.has(x.id)) || [...f.pins].reverse().find(x => !used.has(x.id));
-    L.outs.push({ pin: p ? p.id : '', expr: '', oe: '', type: 'pp' });
-    selOut = L.outs.length - 1;
+    const n = { id: nextNodeId(G, 'o'), k: 'out' as const, pin: p ? p.id : '', x: 420, y: 20 + G.nodes.filter(m => m.k === 'out').length * 96 };
+    L.graph = { nodes: [...G.nodes, n], edges: G.edges }; circSel = n.id;
   }
-  function exprMsg(f: Form, src: string): string {
-    if (!src.trim()) return '<span class="muted">Írd be, mikor legyen a kimenet 1, pl. <code>!(A &amp; B)</code>.</span>';
-    try {
-      const regs = new Set((f.logic?.regs || []).map(r => r.name)), e = parseExpr(src), bad = varsOf(e).filter(v => !regs.has(v) && !pinRef(v, pinList(f)));
-      if (bad.length) return `<span class="c-err">Nincs ilyen (vagy nem egyértelmű) láb vagy tároló: ${esc(bad.join(', '))}</span>`;
-      return `<span class="c-ok">✓</span> ${esc(printExpr(e))}`;
-    } catch (x) { return `<span class="c-err">${esc(x instanceof LogicError ? x.message : String(x))}</span>`; }
-  }
-  const GATES: GateKind[] = ['and', 'nand', 'or', 'nor', 'xor', 'xnor', 'not', 'buf'];
-  function treeHtml(f: Form, n: GateNode, i: number, path: string): string {
-    if ('g' in n) {
-      const many = n.g !== 'not' && n.g !== 'buf';
-      return `<div class="lg-g"><select data-lo="${i}" data-gp="${path}" data-gk="op" aria-label="kapu">${GATES.map(g => opt(g, GATE_LABEL[g], n.g)).join('')}<option value="__del">— kapu törlése (helyette az 1. bemenete)</option></select>
-        <div class="lg-ins">${n.ins.map((k, j) => treeHtml(f, k, i, path === '' ? String(j) : `${path}.${j}`)).join('')}${many ? `<button class="btn lg-add" data-act="lgin" data-i="${i}" data-gp="${path}">+ bemenet</button>` : ''}</div></div>`;
-    }
-    const cur = 'v' in n ? n.v : String(n.c), names = inputNames(f);
-    if ('v' in n && !names.includes(n.v)) names.unshift(n.v);
-    return `<div class="lg-leaf"><select data-lo="${i}" data-gp="${path}" data-gk="leaf" aria-label="bemenet">${names.map(v => opt(v, v, cur)).join('')}${opt('0', '0 (mindig 0)', cur)}${opt('1', '1 (mindig 1)', cur)}<option value="__gate">⊕ helyette kapu…</option></select>${path !== '' ? `<button class="btn" data-act="lgrm" data-i="${i}" data-gp="${path}" title="Bemenet törlése" aria-label="Bemenet törlése">×</button>` : ''}</div>`;
+  let circ: CircEditor | null = null;
+  const circHost: CircHost = {
+    get: () => form?.logic?.graph || emptyGraph(),
+    set(g, layoutOnly) { if (!form?.logic) return; form.logic.graph = g; if (layoutOnly) { refresh(); return; } syncLogic(form); refresh(); circ?.refresh(); },
+    pins: () => (form ? pinList(form) : []),
+    problems: () => new Map(graphProblems.map(p => [p.node, p.msg])),
+    exprOf(id) { if (!form?.logic) return null; const i = outNodes(form).findIndex(n => n.id === id), o = form.logic.outs[i]; return o ? { v: o.expr, oe: o.oe } : null; },
+    setExpr(id, which, src) {
+      if (!form?.logic?.graph) return null;
+      try { form.logic.graph = setPortExpr(form.logic.graph, id, which, src, pinList(form)); }
+      catch (x) { return x instanceof Error ? x.message : String(x); }
+      syncLogic(form); refresh(); circ?.refresh(); return null;
+    },
+    onSelect(id) { circSel = id; drawPreview(); },
+  };
+  /** A diagram a helyére (a Működés fül újrarajzolásakor a komponens megmarad, csak visszakerül). */
+  function placeCirc(): void {
+    const slot = left.querySelector('[data-circ]'); if (!slot || !form?.logic) return;
+    if (!circ) circ = mountCircEditor(circHost);
+    slot.replaceWith(circ.el); circ.refresh();
+    if (circSel && form.logic.graph?.nodes.some(n => n.id === circSel)) circ.select(circSel);
   }
   function logicHtml(f: Form): string {
     if (!f.pins.length) return '<p class="help">Előbb adj lábakat az alkatrészhez a Lábak fülön.</p>';
     const L = f.logic;
-    const intro = `<p class="help">Digitális viselkedés: minden kimenethez egy logikai kifejezés tartozik a bemeneti lábak nevével. A szimuláció a bemenetek feszültségéből (a táp 70 %-a felett 1, 30 %-a alatt 0) kiszámolja a kimeneteket, és a táp felé vagy a föld felé hajtja őket. Három, egymásba váltható nézet: <b>Kifejezés</b>, <b>Igazságtábla</b>, <b>Kapuk</b>.</p>`;
-    if (!L || !L.outs.length) return `<section class="pe-sec">${intro}<button class="btn on" data-act="lgstart">+ Logika hozzáadása</button></section>`;
-    const view = L.view || 'expr';
-    const seg = (['expr', 'table', 'gates'] as const).map(v => `<button class="btn ${v === view ? 'on' : ''}" data-act="lgview" data-v="${v}" role="tab" aria-selected="${v === view}">${{ expr: 'Kifejezés', table: 'Igazságtábla', gates: 'Kapuk' }[v]}</button>`).join('');
+    const intro = `<p class="help">Digitális viselkedés: a bemeneti lábak jele kapukon és tárolókon át a kimeneti lábakra jut. A szimuláció a bemenetek feszültségéből (a táp 70 %-a felett 1, 30 %-a alatt 0) számol, és a kimenetet a táp vagy a föld felé hajtja.</p>`;
+    if (!L || !L.graph || !L.graph.nodes.length) return `${intro}<button class="btn on" data-act="lgstart">+ Logika hozzáadása</button>`;
+    const view = L.view === 'table' ? 'table' : 'graph';
+    const seg = (['graph', 'table'] as const).map(v => `<button class="btn ${v === view ? 'on' : ''}" data-act="lgview" data-v="${v}" role="tab" aria-selected="${v === view}">${{ graph: 'Kapcsolás', table: 'Igazságtábla' }[v]}</button>`).join('');
     const head = `<div class="pe-grid"><label for="pe_lvcc">Táp (VCC)</label><select id="pe_lvcc" data-lsup="vcc">${pinOpts(f, L.vcc)}</select>
       <label for="pe_lgnd">Föld (GND)</label><select id="pe_lgnd" data-lsup="gnd">${pinOpts(f, L.gnd)}</select></div>
       <div class="pe-seg" role="tablist" aria-label="Logika nézete">${seg}</div>`;
-    const card = (o: LogicOutRow, i: number, inner: string) => `<div class="lg-out ${i === selOut ? 'on' : ''}" data-lo="${i}">
-        <div class="lg-head"><label class="small" for="pe_lp_${i}">Kimenet</label><select id="pe_lp_${i}" data-lo="${i}" data-lk="pin">${pinOpts(f, o.pin)}</select>
-          <select data-lo="${i}" data-lk="type" aria-label="kimenet típusa" title="Push-pull: 1-nél a táp felé, 0-nál a föld felé hajt. Nyitott drain: csak a föld felé (felhúzó ellenállás kell).">${opt('pp', 'push-pull', o.type)}${opt('od', 'nyitott drain', o.type)}</select>
-          <span style="flex:1"></span><button class="btn" data-act="lgdel" data-i="${i}" title="Kimenet törlése" aria-label="Kimenet törlése">×</button></div>${inner}</div>`;
-    let body = '';
-    if (view === 'expr') {
-      body = `<p class="help">Jelek: <code>!</code> NEM, <code>&amp;</code> ÉS, <code>|</code> VAGY, <code>^</code> KIZÁRÓ VAGY, zárójel, <code>0</code>/<code>1</code>; szóval is írható (NOT, AND, OR, XOR). Példa: <code>!(A &amp; B)</code> = NAND.</p>` +
-        L.outs.map((o, i) => card(o, i, `<input type="text" class="lg-expr" id="pe_lx_${i}" data-lo="${i}" data-lk="expr" value="${esc(o.expr)}" placeholder="pl. !(A & B)" spellcheck="false" aria-label="${esc(pinName(f, o.pin))} kifejezése">
-          <div class="lg-msg" data-lmsg="${i}">${exprMsg(f, o.expr)}</div>
-          <div class="lg-oe"><label class="small" for="pe_lo_${i}">Engedélyezés</label><input type="text" id="pe_lo_${i}" data-lo="${i}" data-lk="oe" value="${esc(o.oe)}" placeholder="üres = mindig hajt; pl. !OE" spellcheck="false"></div>`)).join('') + regsHtml(f);
-    } else if (view === 'gates') {
-      body = `<p class="help">Kapukból is összerakható: a legördülőkkel választható a kapu típusa és a bemenetei; a „⊕ helyette kapu” egy bemenetet újabb kapura cserél. A rajz és a kifejezés ugyanaz az adat.</p>` +
-        L.outs.map((o, i) => {
-          let inner: string;
-          if (!o.expr.trim()) inner = `<button class="btn" data-act="lgnewgate" data-i="${i}">+ Kapu</button>`;
-          else {
-            try { const t = toGates(parseExpr(o.expr)); inner = `<div class="lgv-wrap">${gateSvg(t, pinName(f, o.pin))}</div><div class="lg-tree">${treeHtml(f, t, i, '')}</div><div class="lg-msg">${exprMsg(f, o.expr)}</div>`; }
-            catch (x) { inner = `<div class="lg-msg"><span class="c-err">A kifejezés hibás (${esc(x instanceof Error ? x.message : String(x))}); javítsd a Kifejezés nézetben.</span></div>`; }
-          }
-          return card(o, i, inner);
-        }).join('');
-    } else {
-      const outsT = L.outs.map(o => ({ name: pinName(f, o.pin), expr: o.expr, oe: o.oe }));
-      const order = f.pins.map(p => p.name || p.id), vars = tableVars(outsT, (L.tableVars || []).filter(v => order.includes(v)), order);
-      const used = tableVars(outsT, [], order);
-      const chips = inputNames(f).map(v => `<label class="lg-chip"><input type="checkbox" data-lvar="${esc(v)}" ${vars.includes(v) ? 'checked' : ''} ${used.includes(v) ? 'disabled title="Szerepel egy kifejezésben"' : ''}> ${esc(v)}</label>`).join('');
-      const data = truthTable(outsT, vars);
-      let tbl = '';
-      if (data.tooMany) tbl = `<p class="c-err small">Legfeljebb ${TABLE_MAX_VARS} bemenet fér a táblázatba (most ${vars.length}); ennél több bemenetnél a Kifejezés nézetet használd.</p>`;
-      else tbl = `<div class="tablewrap"><table class="tbl lg-tt"><thead><tr>${vars.map(v => `<th>${esc(v)}</th>`).join('')}<th class="sep"></th>${outsT.map(o => `<th class="o">${esc(o.name)}</th>`).join('')}</tr></thead><tbody>` +
-        data.cells.map((row, r) => `<tr>${vars.map((_, j) => `<td>${(r >> (vars.length - 1 - j)) & 1}</td>`).join('')}<td class="sep"></td>${row.map((v, oi) => `<td><button class="lg-cell v${v}" data-act="lgcell" data-i="${oi}" data-r="${r}" ${v === 'Z' ? 'disabled title="Itt az engedélyezés 0: a kimenet nem hajt"' : ''} aria-label="${esc(outsT[oi].name)} a(z) ${r + 1}. sorban: ${v}">${v === 'X' ? '?' : v}</button></td>`).join('')}</tr>`).join('') + '</tbody></table></div>';
-      body = `<p class="help">Kattints egy kimeneti cellára: 0 ↔ 1. A program a táblázatból a legrövidebb kifejezést írja vissza (az ÉS-ek VAGY-a); a <b>Z</b> sorokban az engedélyezés 0, ott mindegy. A kifejezés eredeti alakja ilyenkor átíródik.</p>
-        <div class="lg-chips"><span class="small muted">Bemenetek a táblázatban:</span> ${chips || '<span class="small muted">–</span>'}</div>${data.errors.map(e => `<p class="c-err small">${esc(e)}</p>`).join('')}${tbl}`;
-    }
-    return `<section class="pe-sec">${intro}${head}${body}<button class="btn" data-act="lgaddout" style="margin-top:8px">+ Kimenet</button></section>`;
+    if (view === 'graph') return `${intro}${head}<div data-circ></div>`;
+    const outsT = L.outs.map(o => ({ name: pinName(f, o.pin), expr: o.expr, oe: o.oe }));
+    const ins = f.pins.filter(p => p.id !== L.vcc && p.id !== L.gnd && !L.outs.some(o => o.pin === p.id)).map(p => p.name || p.id);
+    const order = f.pins.map(p => p.name || p.id), vars = tableVars(outsT, (L.tableVars || []).filter(v => order.includes(v)), order);
+    const used = tableVars(outsT, [], order);
+    const chips = ins.map(v => `<label class="lg-chip"><input type="checkbox" data-lvar="${esc(v)}" ${vars.includes(v) ? 'checked' : ''} ${used.includes(v) ? 'disabled title="Szerepel a kapcsolásban"' : ''}> ${esc(v)}</label>`).join('');
+    const data = truthTable(outsT, vars);
+    let tbl = '';
+    if ((L.regs || []).length) tbl = '<p class="help">Tárolós (sorrendi) logikánál a táblázat a tárolók pillanatnyi értékét is bemenetnek veszi.</p>';
+    if (data.tooMany) tbl += `<p class="c-err small">Legfeljebb ${TABLE_MAX_VARS} bemenet fér a táblázatba (most ${vars.length}); ennél többnél a Kapcsolás nézetet használd.</p>`;
+    else tbl += `<div class="tablewrap"><table class="tbl lg-tt"><thead><tr>${vars.map(v => `<th>${esc(v)}</th>`).join('')}<th class="sep"></th>${outsT.map(o => `<th class="o">${esc(o.name)}</th>`).join('')}</tr></thead><tbody>` +
+      data.cells.map((row, r) => `<tr>${vars.map((_, j) => `<td>${(r >> (vars.length - 1 - j)) & 1}</td>`).join('')}<td class="sep"></td>${row.map((v, oi) => `<td><button class="lg-cell v${v}" data-act="lgcell" data-i="${oi}" data-r="${r}" ${v === 'Z' ? 'disabled title="Itt az engedélyezés 0: a kimenet nem hajt"' : ''}>${v}</button></td>`).join('')}</tr>`).join('') + '</tbody></table></div>';
+    return `${intro}${head}<p class="help">Kattints egy kimeneti cellára: 0 ↔ 1. A kimenet előtti kapuk a táblázatból a legrövidebb alakban (az ÉS-ek VAGY-a) újraépülnek; a <b>Z</b> sorokban az engedélyezés 0, ott mindegy.</p>
+      <div class="lg-chips"><span class="small muted">Bemenetek a táblázatban:</span> ${chips || '<span class="small muted">–</span>'}</div>${data.errors.map(e => `<p class="c-err small">${esc(e)}</p>`).join('')}${tbl}`;
   }
-  /** Tárolók: név, órajel (él), következő érték, aszinkron törlés/beállítás. */
-  function regsHtml(f: Form): string {
-    const R = f.logic?.regs || [];
-    const fld = (i: number, k: keyof LogicRegRow, label: string, ph: string) => `<label class="small" for="pe_r${k}_${i}">${label}</label><input type="text" id="pe_r${k}_${i}" data-rg="${i}" data-rk="${k}" value="${esc(String(R[i][k]))}" placeholder="${esc(ph)}" spellcheck="false">`;
-    return `<div class="lg-regs"><p class="h" style="margin:14px 0 4px">Tárolók (órajeles állapot)</p>
-      <p class="help">Egy tároló egy megjegyzett bit: az órajel élén felveszi a következő érték kifejezését, egyébként megtartja. A nevére a kimenetek és más tárolók is hivatkozhatnak (pl. kimenet <code>Q</code> = <code>F1</code>). A törlés/beállítás azonnali, amíg a kifejezése 1. Számláló: <code>D = !F1</code>; léptetőregiszter: <code>D = </code> az előző tároló.</p>
-      ${R.map((r, i) => `<div class="lg-out lg-reg" data-rgc="${i}"><div class="lg-head"><label class="small" for="pe_rname_${i}">Név</label><input type="text" id="pe_rname_${i}" data-rg="${i}" data-rk="name" value="${esc(r.name)}" style="width:80px" spellcheck="false">
-          <select data-rg="${i}" data-rk="edge" aria-label="él">${opt('rise', 'felfutó él ↑', r.edge)}${opt('fall', 'lefutó él ↓', r.edge)}</select><span style="flex:1"></span><button class="btn" data-act="lgdelreg" data-i="${i}" title="Tároló törlése" aria-label="Tároló törlése">×</button></div>
-        <div class="lg-rgrid">${fld(i, 'clk', 'Órajel', 'pl. CLK')}${fld(i, 'd', 'Következő (D)', 'pl. D vagy !F1')}${fld(i, 'reset', 'Törlés', 'üres = nincs; pl. !CLR')}${fld(i, 'set', 'Beállítás', 'üres = nincs; pl. !PRE')}</div>
-        <div class="lg-msg" data-rmsg="${i}">${regMsg(f, i)}</div></div>`).join('')}
-      <button class="btn" data-act="lgaddreg" style="margin-top:6px">+ Tároló</button></div>`;
-  }
-  function regMsg(f: Form, i: number): string {
-    const r = f.logic!.regs![i], parts = [['órajel', r.clk], ['következő', r.d], ['törlés', r.reset], ['beállítás', r.set]] as const;
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(r.name)) return '<span class="c-err">A név betűvel kezdődő azonosító legyen.</span>';
-    for (const [l, src] of parts) { if (!src.trim()) { if (l === 'órajel' || l === 'következő') return `<span class="muted">Add meg: ${l}.</span>`; continue; } const m = exprMsg(f, src); if (m.includes('c-err')) return m.replace('<span class="c-err">', `<span class="c-err">${l}: `); }
-    return `<span class="c-ok">✓</span> ${esc(r.name)} ← ${esc(r.d)} a(z) ${esc(r.clk)} ${r.edge === 'fall' ? 'lefutó' : 'felfutó'} élén${r.reset.trim() ? `, törlés: ${esc(r.reset)}` : ''}${r.set.trim() ? `, beállítás: ${esc(r.set)}` : ''}`;
-  }
-  /** Kapufa-útvonal: '' a gyökér, '0.1' az első bemenet második bemenete. */
-  function treeEdit(i: number, path: string, fn: (n: GateNode) => GateNode): void {
-    const o = form!.logic!.outs[i];
-    const root = toGates(parseExpr(o.expr));
-    const rec = (n: GateNode, ps: number[]): GateNode => {
-      if (!ps.length) return fn(n);
-      if (!('g' in n)) return n;
-      const [h, ...t] = ps;
-      return { g: n.g, ins: n.ins.map((k, j) => (j === h ? rec(k, t) : k)) };
-    };
-    o.expr = gatesToText(rec(root, path === '' ? [] : path.split('.').map(Number)));
-  }
-  function removeAt(i: number, path: string): void {
-    const ps = path.split('.').map(Number), last = ps.pop()!;
-    treeEdit(i, ps.join('.'), n => ('g' in n ? { g: n.g, ins: n.ins.filter((_, j) => j !== last) } : n));
-  }
-  /** A Logika fül eseményei; true, ha kezelte. */
+  /** A Logika eseményei (a diagramé a komponensben); true, ha kezelte. */
   function logicEvent(kind: 'input' | 'change' | 'click', t: HTMLElement & { value?: string; checked?: boolean }): boolean {
     if (!form || tab !== 'func') return false;
     const f = form, act = t.dataset.act;
     if (kind === 'click') {
-      if (act === 'lgstart') { ensureLogic(f); addOut(f); render(); return true; }
-      if (act === 'lgaddout') { addOut(f); render(); return true; }
-      if (act === 'lgdel') { f.logic!.outs.splice(+t.dataset.i!, 1); selOut = -1; render(); return true; }
-      if (act === 'lgview') { ensureLogic(f).view = t.dataset.v as LogicForm['view']; render(); return true; }
+      if (act === 'lgstart') { ensureLogic(f); addOut(f); syncLogic(f); render(); return true; }
+      if (act === 'lgview') { ensureLogic(f).view = t.dataset.v === 'table' ? 'table' : 'graph'; render(); return true; }
       if (act === 'lgcell') {
         const L = f.logic!, outsT = L.outs.map(o => ({ name: pinName(f, o.pin), expr: o.expr, oe: o.oe }));
         const order = f.pins.map(p => p.name || p.id), data = truthTable(outsT, tableVars(outsT, (L.tableVars || []).filter(v => order.includes(v)), order));
-        const i = +t.dataset.i!; L.outs[i].expr = toggleCell(data, i, +t.dataset.r!);
+        const i = +t.dataset.i!, on = outNodes(f)[i];
+        if (on && L.graph) { try { L.graph = setPortExpr(L.graph, on.id, 'v', toggleCell(data, i, +t.dataset.r!), pinList(f)); } catch { /* a táblázat kifejezése mindig érvényes */ } }
         // a táblázat oszlopai ne tűnjenek el, ha egy bemenet kiesik a kifejezésből
         L.tableVars = [...new Set([...(L.tableVars || []), ...data.vars])];
-        render(); return true;
+        syncLogic(f); render(); return true;
       }
-      if (act === 'lgaddreg') { const L = ensureLogic(f); L.regs = L.regs || []; let k = 1; while (L.regs.some(r => r.name === 'F' + k) || f.pins.some(p => p.name === 'F' + k)) k++; const ns = inputNames(f); L.regs.push({ name: 'F' + k, clk: f.pins.find(p => /CLK|CLOCK/i.test(p.name))?.name || ns[0] || '', d: '', edge: 'rise', reset: '', set: '' }); render(); return true; }
-      if (act === 'lgdelreg') { f.logic!.regs!.splice(+t.dataset.i!, 1); render(); return true; }
-      if (act === 'lgnewgate') { const ns = inputNames(f); f.logic!.outs[+t.dataset.i!].expr = `${ns[0] || '0'} & ${ns[1] || ns[0] || '1'}`; render(); return true; }
-      if (act === 'lgin') { const ns = inputNames(f); treeEdit(+t.dataset.i!, t.dataset.gp!, n => ('g' in n ? { g: n.g, ins: [...n.ins, { v: ns[0] || '0' }] } : n)); render(); return true; }
-      if (act === 'lgrm') { removeAt(+t.dataset.i!, t.dataset.gp!); render(); return true; }
       return false;
-    }
-    if (t.dataset.rg != null && t.dataset.rk) {
-      const i = +t.dataset.rg, r = f.logic!.regs![i], k = t.dataset.rk as keyof LogicRegRow;
-      if (k === 'edge') { r.edge = t.value === 'fall' ? 'fall' : 'rise'; }
-      else if (k === 'name') {
-        if (kind === 'input') { const old = r.name; r.name = (t.value || '').trim(); regBefore.set(i, regBefore.get(i) ?? old); }
-        else { const old = regBefore.get(i); regBefore.delete(i); if (old && old !== r.name && /^[A-Za-z_][A-Za-z0-9_]*$/.test(r.name)) { // átnevezés a kifejezésekben is
-            const L = f.logic!; for (const o of L.outs) { o.expr = renameVars(o.expr, old, r.name); o.oe = renameVars(o.oe, old, r.name); }
-            for (const x of L.regs!) for (const kk of ['clk', 'd', 'reset', 'set'] as const) x[kk] = renameVars(x[kk], old, r.name);
-            render(); return true; } }
-      } else r[k] = t.value || '';
-      const m = left.querySelector(`[data-rmsg="${i}"]`); if (m) m.innerHTML = regMsg(f, i);
-      refresh(); return true;
     }
     if (t.dataset.lsup) { const L = ensureLogic(f); L[t.dataset.lsup as 'vcc' | 'gnd'] = t.value || ''; if (kind === 'change') render(); else refresh(); return true; }
     if (t.dataset.lvar != null && kind === 'change') {
       const L = ensureLogic(f), v = t.dataset.lvar, cur = new Set(L.tableVars || []);
       if (t.checked) cur.add(v); else cur.delete(v);
       L.tableVars = [...cur]; render(); return true;
-    }
-    if (t.dataset.gk && kind === 'change') {
-      const i = +t.dataset.lo!, path = t.dataset.gp!, v = t.value || '';
-      if (t.dataset.gk === 'op') treeEdit(i, path, n => {
-        if (!('g' in n)) return n;
-        if (v === '__del') return n.ins[0] || { c: 0 };
-        const g = v as GateKind, one = g === 'not' || g === 'buf';
-        const ins = one ? n.ins.slice(0, 1) : n.ins.length >= 2 ? n.ins : [...n.ins, { v: inputNames(f)[0] || '0' }];
-        return { g, ins };
-      });
-      else treeEdit(i, path, n => (v === '__gate' ? { g: 'and', ins: [n, { v: inputNames(f).find(x => !('v' in n) || x !== n.v) || '0' }] } : v === '0' || v === '1' ? { c: +v as 0 | 1 } : { v }));
-      selOut = i; render(); return true;
-    }
-    if (t.dataset.lo != null && t.dataset.lk) {
-      const i = +t.dataset.lo, o = f.logic!.outs[i], k = t.dataset.lk as 'pin' | 'type' | 'expr' | 'oe';
-      if (k === 'type') o.type = t.value === 'od' ? 'od' : 'pp'; else o[k] = t.value || '';
-      selOut = i;
-      if (k === 'expr' && kind === 'input') { const m = left.querySelector(`[data-lmsg="${i}"]`); if (m) m.innerHTML = exprMsg(f, o.expr); refresh(); return true; }
-      if (kind === 'change' && (k === 'pin' || k === 'type')) { render(); return true; }
-      refresh(); return true;
     }
     return false;
   }
@@ -890,7 +830,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         ctx.fillStyle = lightText(fill) ? '#f1f3f5' : '#1d231f'; ctx.font = `600 ${Math.max(9, S * 0.5)}px ui-monospace,monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(body.text, X((B.c0 + B.c1) / 2), Y(tr)); }
     }
     // lábak (a kijelölt modellelem kivezetései lilával, sorszámmal: 1. vég, 2. vég…)
-    const modelPins = form && tab === 'func' && selModel >= 0 && form.model[selModel] ? form.model[selModel].pins : form && tab === 'func' ? logicPins(form, selOut) : [];
+    const modelPins = form && tab === 'func' && selModel >= 0 && form.model[selModel] ? form.model[selModel].pins : form && tab === 'func' ? logicPins(form) : [];
     ctx.font = `600 ${Math.max(8, S * 0.36)}px ui-monospace,monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const nm = form && tab !== 'json' ? form.names : 'below';
     const Bc = pts.length ? bodyRect(form && tab !== 'json' ? form : { pad: 0.6, ext: { t: 0, b: 0, l: 0, r: 0 }, bodyText: '' }, pts) : { r0: 0, r1: 0, c0: 0, c1: 0 };
@@ -1002,7 +942,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         const old = p.id; p.id = t.value.trim();
         for (const m of form.model) m.pins = m.pins.map(x => (x === old ? p.id : x));
         if (form.press) form.press = form.press.map(x => (x === old ? p.id : x)) as [string, string];
-        if (form.logic) { const L = form.logic; if (L.vcc === old) L.vcc = p.id; if (L.gnd === old) L.gnd = p.id; for (const o of L.outs) if (o.pin === old) o.pin = p.id; }
+        if (form.logic) { const L = form.logic; if (L.vcc === old) L.vcc = p.id; if (L.gnd === old) L.gnd = p.id; for (const o of L.outs) if (o.pin === old) o.pin = p.id; for (const n of L.graph?.nodes || []) if (n.pin === old) n.pin = p.id; }
       } else p[k] = t.value;
       sel = +t.dataset.pin; refresh(); return;
     }
@@ -1044,7 +984,6 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   back.addEventListener('focusin', e => {
     const t = e.target as HTMLElement;
     if (t.dataset.pin != null && t.dataset.k === 'name' && form) nameBefore = form.pins[+t.dataset.pin]?.name ?? null;
-    if (t.dataset.lo != null && tab === 'func' && +t.dataset.lo !== selOut) { selOut = +t.dataset.lo; left.querySelectorAll('.lg-out').forEach(el => el.classList.toggle('on', (el as HTMLElement).dataset.lo === String(selOut))); drawPreview(); }
     const mi = t.dataset.model != null ? +t.dataset.model : -1;
     if (mi !== selModel) { selModel = mi; drawPreview(); }
     if (t.dataset.pin != null && +t.dataset.pin !== sel) {
@@ -1091,7 +1030,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       const i = +b.dataset.i!, id = form.pins[i].id; form.pins.splice(i, 1); sel = -1;
       for (const m of form.model) m.pins = m.pins.map(x => (x === id ? '' : x));
       if (form.press) form.press = form.press.map(x => (x === id ? '' : x)) as [string, string];
-      if (form.logic) { const L = form.logic; if (L.vcc === id) L.vcc = ''; if (L.gnd === id) L.gnd = ''; for (const o of L.outs) if (o.pin === id) o.pin = ''; }
+      if (form.logic) { const L = form.logic; if (L.vcc === id) L.vcc = ''; if (L.gnd === id) L.gnd = ''; for (const o of L.outs) if (o.pin === id) o.pin = ''; for (const n of L.graph?.nodes || []) if (n.pin === id) n.pin = ''; }
       render(); return;
     }
     if (act === 'addmodel' && form) { form.model.push({ el: 'resistor', pins: [form.pins[0]?.id || '', form.pins[1]?.id || ''], vals: ['1k'] }); render(); return; }
