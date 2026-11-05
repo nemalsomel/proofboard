@@ -35,7 +35,7 @@ test('saját modul: lábsor-generátorral felvéve, mentve, lerakva, visszavonha
   await page.fill('#pe_ext_t', '4');
   await page.fill('#pe_btext', 'NOKIA 5110');
   await expect(page.locator('.pe [data-ref="probs"]')).toContainText('rendben');
-  await page.click('[data-act="saveplace"]');
+  await page.click('[data-act="save"]'); // új alkatrész: mentés után rögtön lerakható
   await expect(page.locator('.pe')).toHaveCount(0);
   await expect(page.locator('#lib')).toContainText('Nokia 5110 kijelző');
   const pt = await pcb<{ x: number; y: number }>(page, `return pcb.reveal(60, 6);`);
@@ -152,4 +152,43 @@ test('Űrlap ↔ JSON: a beállítások mindkét irányban átkerülnek; amit az
   await page.click('.pe [data-tab="form"]');
   await page.click('[data-act="toform"]');
   await expect(page.locator('#pe_name')).toHaveValue('JSON-ból');
+});
+
+test('5.6: a szerkesztő középső nézet, fül a nézetsávban; háttérbe tehető, × bezárja', async ({ page }) => {
+  await pcb(page, `pcb.preset();`);
+  await page.click('#bNewPart');
+  await expect(page.locator('#partView .pe')).toBeVisible();
+  await expect(page.locator('#partGo')).toHaveText(/^Alkatrész: Új modul/);
+  await expect(page.locator('#partGo')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#workSw .btn.on')).toHaveCount(0);
+  await page.fill('#pe_name', 'Szenzor');
+  await expect(page.locator('#partGo')).toHaveText('Alkatrész: Szenzor •'); // a pont: nem mentett módosítás
+  await expect(page.locator('[data-act="discard"]')).toBeVisible();
+  // a Panel gomb háttérbe teszi, a fül marad, és visszahoz
+  await page.click('#workSw [data-work="board"]');
+  await expect(page.locator('#partView')).toBeHidden();
+  await expect(page.locator('#partTab')).toBeVisible();
+  await page.click('#partGo');
+  await expect(page.locator('#pe_name')).toHaveValue('Szenzor');
+  // egyetlen fő gomb; a lábtáblázat keskeny, a kijelölt láb további adatai a sora alatt
+  await expect(page.locator('.pe .btn.primary')).toHaveText('Mentés');
+  await page.fill('#pe_gnames', 'OUT,GND');
+  await page.click('[data-act="gen"]');
+  await expect(page.locator('.pe-pins th')).toHaveCount(6);
+  await page.click('.pe-pins input[data-pin="0"][data-k="name"]');
+  await expect(page.locator('.pe-det[data-det="0"] [data-k="group"]')).toBeVisible();
+  await expect(page.locator('.pe-det [data-k="volt"]')).toHaveCount(0);
+  await page.selectOption('.pe-pins select[data-pin="0"][data-k="role"]', 'vin');
+  await expect(page.locator('.pe-det[data-det="0"] [data-k="volt"]')).toBeEnabled(); // tápbemenetnél a Táp is
+  await page.check('#pe_wide');
+  await expect(page.locator('.pe-pins th', { hasText: 'Táp' })).toHaveCount(1); // minden oszlop: a Táp csak, ha van tápbemenet
+  await expect(page.locator('.pe-det')).toHaveCount(0);
+  // szakaszugrás
+  await page.click('.pe-nav [data-jump="model"]');
+  await expect(page.locator('#pe_s_model')).toBeInViewport();
+  await page.click('#partX');
+  await expect(page.locator('#partTab')).toBeHidden();
+  await expect(page.locator('.pe')).toHaveCount(0);
+  await page.click('#bNewPart'); // piszkozatként megmaradt
+  await expect(page.locator('#pe_name')).toHaveValue('Szenzor');
 });

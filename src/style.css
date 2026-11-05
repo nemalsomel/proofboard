@@ -638,3 +638,35 @@ input:disabled::placeholder{color:var(--muted)}
 .lk-edit{display:flex;gap:8px;align-items:center;padding:2px 6px 8px 22px}
 .lk-edit select{flex:1;min-width:0;font-size:12px}
 .c-info{color:var(--secondary)}
+
+/* ---------- 5.6 Alkatrész-szerkesztő: középső nézet (fül a nézetsávban) ---------- */
+.partview{position:absolute;inset:0;z-index:12;background:var(--panel);display:flex;min-height:0}
+.partview[hidden]{display:none}
+.app.work-part #vModes,.app.work-part #splitDir{visibility:hidden}
+.ptab #partGo{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.ptab #partX{min-width:26px;padding:4px}
+.pe-view{flex:1;display:flex;min-width:0;min-height:0}
+.pe-view .pe{width:100%;height:100%;border:0;border-radius:0;box-shadow:none;grid-template-rows:auto minmax(0,1fr)}
+.pe-view .pe-head{padding:8px var(--sp-3);gap:var(--sp-2)}
+.pe-view .pe-head .sp{flex:1}
+.pe-view .pe-tabs{margin-left:0}
+.pe-view .pe-tabs .btn{padding:4px 12px;font-size:12.5px}
+.pe-view .pe-body{grid-template-columns:minmax(0,1.15fr) minmax(300px,1fr)}
+.pe-view .pe-right{display:flex;flex-direction:column}
+.pe-nav{position:sticky;top:-14px;z-index:2;display:flex;flex-wrap:wrap;gap:2px;margin:-14px -16px 12px;padding:6px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.pe-nav .btn{padding:3px 9px;font-size:12px;color:var(--muted)}
+.pe-nav .btn.on{color:var(--primary);background:var(--primary-soft)}
+.pe-sec{scroll-margin-top:44px}
+@media (max-width:820px){
+  .pe-view .pe-body{display:flex;flex-direction:column;overflow:auto}
+  .pe-view .pe-right{order:-1;overflow:visible;border-top:0;border-bottom:1px solid var(--line)}
+  .pe-view .pe-left{overflow:visible}
+  .pe-nav{top:0;margin-top:-14px}
+  .pe-view .pe-head{flex-wrap:wrap}
+  .pe-view .pe-sub{display:none}
+}
+.pe-tblbar{display:flex;align-items:center;gap:var(--sp-2);justify-content:space-between;margin:2px 0 4px}
+.pe-det td{background:var(--secondary-soft);padding-top:0}
+.pe-pins tr.on:not(.pe-det) td{border-bottom-color:transparent}
+.pe-detrow{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:2px 2px 6px}
+.pe-detrow label{display:flex;align-items:center;gap:6px;color:var(--muted)}

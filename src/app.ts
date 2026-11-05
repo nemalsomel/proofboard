@@ -533,7 +533,7 @@ function panStart(ev,el){ev.preventDefault();const sc=$('#scroll');let x=ev.clie
   const up=()=>{sc.classList.remove('panning');el.removeEventListener('pointermove',mv);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',up);};
   el.addEventListener('pointermove',mv);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);}
 $('#scroll').addEventListener('pointerdown',ev=>{if(ev.pointerType==='touch')return;if(ev.target===$('#scroll')&&ev.button===0||ev.button===1)panStart(ev,$('#scroll'));},true);
-document.addEventListener('keydown',ev=>{if(ev.code!=='Space'||ev.repeat)return;const t=ev.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.tagName==='BUTTON'||t.closest&&t.closest('#progView,dialog')))return;ev.preventDefault();ui.space=true;$('.app').classList.add('space');});
+document.addEventListener('keydown',ev=>{if(ev.code!=='Space'||ev.repeat)return;const t=ev.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.tagName==='BUTTON'||t.closest&&t.closest('#progView,#partView,dialog'))||ui.part)return;ev.preventDefault();ui.space=true;$('.app').classList.add('space');});
 document.addEventListener('keyup',ev=>{if(ev.code==='Space'){ui.space=false;$('.app').classList.remove('space');}});
 window.addEventListener('blur',()=>{ui.space=false;$('.app').classList.remove('space');});
 
@@ -625,7 +625,7 @@ const codeHost={
   setLang(l){uiPrefSet({codeLang:l});},
 };
 function progLive(){if(!PE||!ui.work||ui.work==='board')return;const n=performance.now();if(n-progLiveAt<100)return;progLiveAt=n;PE.live();}
-function setWork(v,remember=true){if(!['board','prog','split'].includes(v))v='board';ui.work=v;const a=$('.app').classList;
+function setWork(v,remember=true){if(ui.part)partShow(false);if(!['board','prog','split'].includes(v))v='board';ui.work=v;const a=$('.app').classList;
   a.toggle('work-prog',v==='prog');a.toggle('work-split',v==='split');$('#progView').hidden=v==='board';
   document.querySelectorAll('[data-work]').forEach(b=>{const on=b.dataset.work===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});
   if(v!=='board'){progMount();progRefresh();}else{ui.progHi=null;}
@@ -667,7 +667,8 @@ document.addEventListener('keydown',ev=>{
   if((ev.ctrlKey||ev.metaKey)&&k==='o'){ev.preventDefault();$('#bOpenFile').click();return;}
   if(ev.altKey&&k==='n'){ev.preventDefault();openNew();return;}
   if(ev.altKey&&!ev.ctrlKey&&['1','2','3'].includes(ev.key)){ev.preventDefault();applyLayout(LAYOUTS[+ev.key-1].id);return;}
-  if(t&&t.closest&&t.closest('#progView,dialog'))return; // a programszerkesztő és a párbeszédablakok saját billentyűi
+  if(t&&t.closest&&t.closest('#progView,#partView,dialog'))return; // a program- és az alkatrész-szerkesztő, valamint a párbeszédablakok saját billentyűi
+  if(ui.part&&!['1','2','3'].includes(ev.key)&&!(ev.ctrlKey||ev.metaKey))return; // az Alkatrész-szerkesztő látszik: a panel billentyűi nem élnek
   if((ev.ctrlKey||ev.metaKey)&&k==='a'&&!ui.sim){ev.preventDefault();ui.sel=grp(D.parts.map(p=>p.id),D.bridges.map((b,i)=>i),D.wires.map((w,i)=>i));setTool('select');return;}
   if(ev.ctrlKey||ev.metaKey||ev.altKey)return;
   if(k==='escape'){ui.placing=null;ui.wireStart=null;ui.sel=null;if(ui.selLink){ui.selLink=null;renderLinks();}renderLeft();draw();status();return;}
@@ -1331,6 +1332,20 @@ const editorHost={
   place(t){if(!DEFS[t])return;ui.placing=t;ui.ghost={rot:0,mir:false};ui.sel=null;ui.wireStart=null;renderLeft();draw();flashMsg('Kattints a panelra a lerakáshoz');},
   roleColor:r=>ROLEC[r]||'#868e96'
 };
+/* 5.6: az Alkatrész-szerkesztő középső nézet; fül a nézetsávban (Alkatrész: Név ×), a Panel / Program gombjai háttérbe teszik. */
+let partClose=null;
+function partShow(on){on=!!on&&!!partClose;ui.part=on;$('#partView').hidden=!on;$('.app').classList.toggle('work-part',on);
+  $('#partGo').classList.toggle('on',on);$('#partGo').setAttribute('aria-pressed',String(on));
+  document.querySelectorAll('[data-work]').forEach(b=>{const o=!on&&b.dataset.work===ui.work;b.classList.toggle('on',o);b.setAttribute('aria-pressed',String(o));});
+  if(!on){resize();draw();}}
+editorHost.view={
+  open(el,title,onClose){$('#partView').replaceChildren(el);partClose=onClose;$('#partTab').hidden=false;$('#partGo').textContent=title;partShow(true);if(MOB.matches)sheet('');log('Alkatrész-szerkesztő: '+title.replace(/^Alkatrész: /,''));},
+  title(t){$('#partGo').textContent=t;},
+  close(){$('#partView').replaceChildren();$('#partTab').hidden=true;partClose=null;partShow(false);},
+  visible:()=>!!ui.part,
+};
+$('#partGo').onclick=()=>partShow(true);
+$('#partX').onclick=()=>{if(partClose)partClose();};
 function libMsg(t){const e=$('#libMsg');if(e)e.textContent=t;toast(t);}
 $('#bNewPart').onclick=()=>openEditor(editorHost,{});
 $('#bLibExp').onclick=()=>{const n=Object.keys(LIB).length;if(!n){libMsg('A saját könyvtárad még üres.');return;}

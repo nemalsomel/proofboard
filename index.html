@@ -93,6 +93,7 @@
         <button class="btn desk-only" data-work="split" data-kbd="3" aria-pressed="false" title="A panel és a program egymás mellett (3)">Mindkettő</button>
       </div>
       <button class="btn icon ghost desk-only" id="splitDir" data-icon="sideR" aria-label="Felosztás iránya" title="Mindkettő: egymás mellett vagy egymás alatt" hidden></button>
+      <div class="grp seg ptab" id="partTab" hidden><button class="btn" id="partGo" aria-pressed="false" title="Vissza az Alkatrész-szerkesztőre"></button><button class="btn icon" id="partX" data-icon="close" aria-label="Az Alkatrész-szerkesztő bezárása" title="Bezárás (Esc); a nem mentett módosítások piszkozatként megmaradnak"></button></div>
       <span class="sp"></span>
       <div class="grp vmodes" role="group" aria-label="A panel megjelenítése" id="vModes">
         <div class="grp seg" role="group" aria-label="Oldal">
@@ -130,6 +131,7 @@
         </div>
       </section>
       <section class="progview" id="progView" aria-label="Program" hidden></section>
+      <section class="partview" id="partView" aria-label="Alkatrész-szerkesztő" hidden></section>
       <div class="toolstrip" id="toolstrip" role="toolbar" aria-label="Eszközök">
         <button class="btn icon ghost ts-tog" id="tsTog" aria-label="Eszközsáv összecsukása" aria-expanded="true" title="Eszközsáv összecsukása / kinyitása" data-icon="left"></button>
         <div class="tools" id="tools"></div>
