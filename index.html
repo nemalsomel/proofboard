@@ -2,6 +2,8 @@
 <html lang="hu">
 <head>
 <meta charset="utf-8">
+<meta name="theme-color" content="#0f5c66">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Próbanyák-tervező és -szimulátor: szekciós, pontraszteres és csíkos panelek, hidak, vezetékek, útvonalkereső, egyenáramú szimuláció.">
 <title>Proofboard</title>
@@ -28,6 +30,9 @@
         <button class="menu-item" role="menuitem" data-adv id="bLibImp" data-icon="load" title="Alkatrészek betöltése fájlból a saját könyvtárba">Könyvtár importálása…</button>
         <div class="menu-sep" role="separator" data-adv></div>
         <button class="menu-item" role="menuitem" data-adv id="bJson" data-icon="code">JSON export / import…</button>
+        <div class="menu-sep" role="separator"></div>
+        <button class="menu-item" role="menuitem" id="bInstall" data-icon="install" title="Önálló ablakban fut, és internet nélkül is működik" hidden>Telepítés alkalmazásként…</button>
+        <button class="menu-item" role="menuitem" id="bAbout" data-icon="info">Névjegy…</button>
         <div class="menu-sep" role="separator"></div>
         <p class="menu-h">Téma</p>
         <div class="seg menu-seg" role="group" aria-label="Téma">
@@ -266,6 +271,21 @@
 </div>
 <input type="file" id="planFile" accept=".json,application/json" hidden>
 <input type="file" id="libFile" accept=".json,application/json" hidden>
+<dialog class="dlg dlg-sm" id="dlgAbout" aria-labelledby="dlgAboutT">
+  <header class="dlg-head"><h2 id="dlgAboutT">Névjegy</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <div class="dlg-body about">
+    <div class="about-id"><svg width="56" height="56" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="#ead6a8"/><g fill="#4a3c24"><circle cx="4" cy="4" r="1.3"/><circle cx="8" cy="4" r="1.3"/><circle cx="12" cy="4" r="1.3"/><circle cx="4" cy="8" r="1.3"/><circle cx="12" cy="8" r="1.3"/><circle cx="4" cy="12" r="1.3"/><circle cx="8" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/></g><circle cx="8" cy="8" r="2" fill="#a8571f"/></svg><div><b class="about-name">Proofboard</b><span class="small muted" id="aboutVer"></span></div></div>
+    <p>Próbanyák-tervező és -szimulátor: pontraszteres, szekciós és csíkos panelek, hidak és vezetékek, útvonalkereső, egyenáramú szimuláció, blokkos program és kódgenerálás Pico és ESP32 vezérlőlapokhoz.</p>
+    <p class="small muted">A tervek és a saját alkatrészek csak ebben a böngészőben vannak mentve; fájlba a Fájl → Mentés fájlba menti őket.</p>
+    <p class="small" id="aboutOffline"></p>
+    <div class="about-links">
+      <a class="btn primary" href="https://github.com/nemalsomel/proofboard" target="_blank" rel="noopener" data-icon="ext">Forráskód a GitHubon</a>
+      <a class="btn" href="https://github.com/nemalsomel/proofboard/issues" target="_blank" rel="noopener" data-icon="ext">Hibajelzés, ötlet</a>
+      <button class="btn" id="bInstall2" data-icon="install" hidden>Telepítés</button>
+    </div>
+  </div>
+</dialog>
+<div class="toast upd" id="updToast" role="status" aria-live="polite" hidden><span>Új verzió érhető el.</span><button class="btn primary" id="bUpd">Frissítés</button><button class="btn icon ghost" id="bUpdX" data-icon="close" aria-label="Később" title="Később (a következő megnyitáskor frissül)"></button></div>
 <dialog class="dlg dlg-lg" id="dlgEx" aria-labelledby="dlgExT">
   <header class="dlg-head"><h2 id="dlgExT">Példák</h2><input type="search" id="exSearch" class="ex-search" placeholder="Keresés a példák között" aria-label="Keresés a példák között" autocomplete="off"><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
   <div class="dlg-body ex-body"><div id="examples" class="examples"></div></div>

@@ -264,7 +264,7 @@ export function simulate1(D: Design, A: Netlist, high: Set<string> | null): SimR
     }
   }
 
-  let V = new Float64Array(n), els: El[] = [];
+  let V: Float64Array = new Float64Array(n), els: El[] = [];
   for (let it = 0; it < 60; it++) {
     els = [];
     const add = (a: number, b: number, g: number, E: number, kind: string, ref?: unknown, cp?: number, cn?: number) =>

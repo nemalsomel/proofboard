@@ -16,6 +16,7 @@ import { applyRotation, fromScreen as vpFrom, toScreen as vpTo } from './ui/view
 import { EventLog } from './ui/log';
 import { favToggled, libPref, libPrefSet, libraryHtml, recentWith } from './ui/library';
 import { EXAMPLES, EX_CATS } from './ui/examples';
+import { canInstall, install, offlineReady, registerPwa, standalone } from './ui/pwa';
 import { editorHistory, formToDef, openEditor, restoreParked } from './ui/editor';
 import { LEDC, PARTS, PICO_NAMES, picoRole } from './parts/builtin';
 import { solve } from './engine/solve';
@@ -951,6 +952,22 @@ menu.addEventListener('keydown',e=>{const it=[...menu.querySelectorAll('.menu-it
   if(e.key==='Escape'){closeMenu();menuBtn.focus();e.preventDefault();}
   else if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();it[(i+(e.key==='ArrowDown'?1:it.length-1))%it.length].focus();}});
 $('#bExamples').onclick=()=>{renderExamples();openDlg('#dlgEx');};
+/* Névjegy; telepítés alkalmazásként (PWA); új verzió értesítése */
+function aboutUI(){$('#aboutVer').textContent=`Verzió: ${__APP_VERSION__} · ${__BUILD_DATE__}`;
+  $('#aboutOffline').textContent=standalone()?'Telepített alkalmazásként fut; internet nélkül is működik.':offlineReady()?'Internet nélkül is működik (a böngésző eltárolta). Telepíthető is önálló alkalmazásként.':'';
+  $('#aboutOffline').hidden=!$('#aboutOffline').textContent;installUI();}
+function installUI(){const c=canInstall();$('#bInstall').hidden=!c;$('#bInstall2').hidden=!c;}
+$('#bAbout').onclick=()=>{aboutUI();openDlg('#dlgAbout');};
+const doInstall=async()=>{const ok=await install();installUI();if(ok)toast('Telepítve: a Proofboard önálló alkalmazásként is elindítható.');};
+$('#bInstall').onclick=doInstall;$('#bInstall2').onclick=doInstall;
+let updApply=null;
+$('#bUpd').onclick=()=>{save();if(updApply)updApply();};
+$('#bUpdX').onclick=()=>{$('#updToast').hidden=true;};
+registerPwa({
+  onUpdate(apply){updApply=apply;$('#updToast').hidden=false;log('Új verzió érhető el.');},
+  onOfflineReady(){log('A Proofboard eltárolva: internet nélkül is működik.');},
+  onInstallable(){installUI();},
+});
 $('#bJson').onclick=()=>openDlg('#dlgJson');
 $('#bSimple').onclick=()=>{setSimple(!isSimple());};
 $('#simpleBadge').onclick=()=>setSimple(false);
