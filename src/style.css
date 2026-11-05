@@ -777,3 +777,34 @@ html.simple [data-adv]{display:none!important}
 .toolstrip .cutkind .seg .btn{padding:3px 9px;font-size:12px}
 .toolstrip.col:not(.peek) .cutkind .btn:not(.on){display:none}
 .toolstrip.col:not(.peek) .cutkind .btn.on{border-radius:var(--r-md)}
+
+/* Eszközsáv csak ikonokkal, ha a nevekkel nem fér ki (a név a súgóban) */
+.toolstrip.icons .tools .btn .tl{display:none}
+.toolstrip.icons .tools .btn{padding:6px 8px}
+
+/* Példák: nagy ablak, balra kategóriák, jobbra kártyák */
+.dlg.dlg-lg{width:min(1040px,calc(100vw - 32px));height:min(80vh,780px)}
+.dlg-lg .dlg-head{gap:var(--sp-3)}
+.ex-search{flex:0 1 280px;margin-left:auto;padding:6px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel2);color:var(--fg);font:inherit;font-size:13px}
+.ex-body{padding:0!important;overflow:hidden;display:flex;min-height:0}
+.examples{display:grid;grid-template-columns:200px minmax(0,1fr);flex:1;min-height:0}
+.examples .ex-cats{display:flex;flex-direction:column;gap:2px;margin:0;padding:12px 10px;border-right:1px solid var(--line);background:var(--panel2);overflow:auto}
+.examples .ex-cat{display:flex;justify-content:space-between;align-items:center;gap:8px;border:0;border-radius:var(--r-md);background:transparent;font-size:13px;padding:7px 10px;text-align:left}
+.examples .ex-cat:hover{background:var(--panel)}
+.examples .ex-cat.on{background:var(--primary);color:var(--primary-fg)}
+.examples .ex-cat:disabled{opacity:.4;cursor:default}
+.ex-n{font:600 11px var(--mono);opacity:.75}
+.ex-main{overflow:auto;padding:14px 16px}
+.ex-q{margin:0 0 8px}
+.examples .ex-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.examples .ex-item{height:100%;justify-content:flex-start;gap:6px;padding:12px 14px;border-radius:var(--r-lg);background:var(--panel)}
+.examples .ex-item b{font-size:14px}
+.ex-desc{font-size:12.5px;color:var(--muted)}
+.ex-tags{display:flex;gap:4px;flex-wrap:wrap}
+.ex-tag{font:600 10.5px var(--mono);letter-spacing:.03em;padding:1px 7px;border-radius:var(--r-pill);background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+.ex-tag.lv-beg{color:#2b8a3e;border-color:color-mix(in srgb,#2b8a3e 40%,var(--line))}
+.ex-tag.lv-adv{color:var(--secondary);border-color:color-mix(in srgb,var(--secondary) 40%,var(--line))}
+.ex-tag.prog{color:var(--primary);border-color:color-mix(in srgb,var(--primary) 40%,var(--line))}
+.ex-learn{font-size:12px}
+.ex-learn ul{margin:2px 0 0;padding-left:16px}
+@media (max-width:700px){.examples{grid-template-columns:1fr}.examples .ex-cats{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--line)}.ex-search{flex-basis:140px}}

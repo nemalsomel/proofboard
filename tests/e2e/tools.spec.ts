@@ -240,3 +240,16 @@ test('csíkvágás „Hely szerint”: a szaggatott előnézet a lyukon belül i
   const s2 = await shot();
   expect(s1.equals(s2)).toBe(false); // az előnézet újrarajzolódott
 });
+
+test('eszközsáv: ha a nevekkel nem fér ki (Mindkettő), csak ikonok, de minden eszköz látszik; szélesen újra nevekkel', async ({ page }) => {
+  await pcb(page, `pcb.preset();`);
+  await expect(page.locator('#toolstrip')).not.toHaveClass(/icons/);
+  await page.keyboard.press('3'); // Mindkettő: a vászon fele
+  await expect(page.locator('#toolstrip')).toHaveClass(/icons/);
+  await expect(page.locator('#tools [data-tool] .tl').first()).toBeHidden();
+  const t = page.locator('#tools');
+  expect(await t.evaluate(e => e.scrollWidth <= e.clientWidth + 1)).toBe(true); // nem kell görgetni
+  await expect(page.locator('#tools [data-tool="pan"]')).toBeInViewport();
+  await page.keyboard.press('1');
+  await expect(page.locator('#toolstrip')).not.toHaveClass(/icons/);
+});

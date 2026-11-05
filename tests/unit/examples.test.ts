@@ -7,7 +7,7 @@ describe('példatár', () => {
     expect(new Set(EXAMPLES.map(e => e.id)).size).toBe(EXAMPLES.length);
     for (const e of EXAMPLES) {
       expect(EX_CATS as readonly string[]).toContain(e.cat);
-      for (const p of e.design.parts) expect(PARTS, `${e.id}: ${p.type}`).toHaveProperty(p.type);
+      for (const p of e.design.parts) if (!e.design.customForms?.[p.type]) expect(PARTS, `${e.id}: ${p.type}`).toHaveProperty(p.type); // saját alkatrész: az űrlapjából
       expect(new Set(e.design.parts.map(p => p.id)).size, e.id).toBe(e.design.parts.length);
     }
   });

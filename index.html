@@ -266,9 +266,9 @@
 </div>
 <input type="file" id="planFile" accept=".json,application/json" hidden>
 <input type="file" id="libFile" accept=".json,application/json" hidden>
-<dialog class="dlg" id="dlgEx" aria-labelledby="dlgExT">
-  <header class="dlg-head"><h2 id="dlgExT">Példák</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
-  <div class="dlg-body"><div id="examples" class="examples"></div></div>
+<dialog class="dlg dlg-lg" id="dlgEx" aria-labelledby="dlgExT">
+  <header class="dlg-head"><h2 id="dlgExT">Példák</h2><input type="search" id="exSearch" class="ex-search" placeholder="Keresés a példák között" aria-label="Keresés a példák között" autocomplete="off"><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <div class="dlg-body ex-body"><div id="examples" class="examples"></div></div>
   <footer class="dlg-foot"><span class="help">A betöltés visszavonható (Ctrl+Z).</span></footer>
 </dialog>
 <dialog class="dlg dlg-sm" id="dlgBoard" aria-labelledby="dlgBoardT">

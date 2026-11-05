@@ -15,6 +15,8 @@ export interface ExDesign {
   settings?: Record<string, unknown>;
   /** Program (csomópontok, élek; a lábhivatkozások a példa alkatrész-azonosítóival). */
   program?: { nodes: Array<{ id: string; type: string; x: number; y: number; props?: Record<string, unknown> }>; edges: Array<{ id: string; from: string; to: string }> };
+  /** Saját alkatrészek az Alkatrész-szerkesztő űrlapjával leírva (típuskulcs → űrlap); a betöltés készít belőlük leírást. */
+  customForms?: Record<string, unknown>;
 }
 export interface Example {
   id: string;
@@ -27,9 +29,13 @@ export interface Example {
   /** Jelsorozat: a csatornák azok a GPIO-k, amelyekre a megadott lábak kapcsolata került. */
   /** GPIO-módok a kiosztás után: a megadott lábról induló GPIO-kapcsolat GPIO-ja kapja (pl. LED → „out_high”). */
   gpioFrom?: Record<string, string>;
+  /** Nehézség (a kártyán). */
+  level?: 'kezdő' | 'haladó';
+  /** Mit tanulsz belőle (a kártyán, rövid pontok). */
+  learn?: string[];
 }
 
-export const EX_CATS = ['Alapok', 'Vezérlő', 'Bemenet', 'Program', 'Félvezető', 'Passzív', 'Motor', 'Logika', 'Modul'] as const;
+export const EX_CATS = ['Alapok', 'Vezérlő', 'Bemenet', 'Program', 'Félvezető', 'Passzív', 'Motor', 'Logika', 'Saját alkatrész', 'Modul'] as const;
 
 const YEL = '#fff3bf', GRN = '#d3f9d8', BLU = '#d0ebff';
 const PICO: ExPart = { id: 'p1', type: 'pico', label: 'PICO', r: 12, c: 32, rot: 2, props: { span: 6 } };
@@ -306,4 +312,111 @@ export const EXAMPLES: Example[] = [
       note(37, 26, 12, 10, 'Próbáld ki\nKapcsold ki az USB-t a Szimuláció fülön: a Pico az akkuról megy.', GRN),
     ]),
   },
+  /* ---------- Program: további tanító példák ---------- */
+  {
+    id: 'prog-chase', cat: 'Program', title: 'Futófény – Sorozat blokk',
+    desc: 'Ütemadó lépteti a Sorozat blokkot, amely négy LED-en egymás után gyújt fényt.',
+    design: pico([
+      ...[0, 1, 2, 3].map(i => res('p' + (2 + i), 'R' + (1 + i), 18 + 3 * i, 4, 330)),
+      ...[0, 1, 2, 3].map(i => led('p' + (6 + i), 'LED' + (1 + i), 18 + 3 * i, 10, ['red', 'orange', 'yellow', 'green'][i])),
+    ], [...[0, 1, 2, 3].flatMap(i => [['p' + (2 + i) + '.1', 'GPIO'], ['p' + (2 + i) + '.2', 'p' + (6 + i) + '.A'], ['p' + (6 + i) + '.K', 'GND']] as Array<[string, string]>)], [
+      note(32, 2, 17, 9, 'Sorozat\nA Sorozat blokk minden felfutó élre a minta következő sorát adja az A–D kimenetekre. Itt az „egy tekercs” minta: 1000 → 0100 → 0010 → 0001, ez egy futófény.', YEL),
+      note(32, 21, 15, 9, 'Próbáld ki\nIndítsd a szimulációt. A Sorozat blokk Irány beállítását „vissza”-ra állítva a fény visszafelé fut; az Ütemadó periódusával gyorsítható.', GRN, 'p6'),
+    ], { program: { nodes: [
+      { id: 'n1', type: 'blink', x: 40, y: 80, props: { period: 300, duty: 50 } },
+      { id: 'n2', type: 'seq', x: 270, y: 40, props: { preset: 'wave', dir: 'fwd' } },
+      ...[0, 1, 2, 3].map(i => ({ id: 'n' + (3 + i), type: 'out', x: 520, y: 10 + 80 * i, props: { pin: 'p' + (2 + i) + '.1' } })),
+    ], edges: [{ id: 'e1', from: 'n1.v', to: 'n2.a' }, ...[0, 1, 2, 3].map(i => ({ id: 'e' + (2 + i), from: 'n2.c' + i, to: 'n' + (3 + i) + '.a' }))] } }),
+  },
+  {
+    id: 'prog-and', cat: 'Program', title: 'Két gomb együtt – ÉS blokk',
+    desc: 'A LED csak akkor világít, ha mindkét gomb le van nyomva: a döntés a programban, nem a bekötésben.',
+    design: pico([{ id: 'p2', type: 'button', label: 'SW1', r: 20, c: 2 }, { id: 'p3', type: 'button', label: 'SW2', r: 20, c: 9 }, res('p4', 'R1', 20, 26, 330), led('p5', 'LED1', 26, 30)],
+      [['p2.A1', 'GPIO'], ['p2.B1', 'GND'], ['p3.A1', 'GPIO'], ['p3.B1', 'GND'], ['p4.1', 'GPIO'], ['p4.2', 'p5.A'], ['p5.K', 'GND']], [
+        note(31, 2, 17, 9, 'Logika a programban\nA két bemenet blokk a gombokat olvassa (felhúzva, aktív alacsony), az ÉS blokk csak akkor ad igazat, ha mindkettő igaz. Ugyanez kapukkal a Logika kategóriában van.', YEL),
+        note(31, 21, 15, 9, 'Próbáld ki\nSzimulációban állítsd a gombokat Kapcsoló módra (Szimuláció fül), és kapcsold be mindkettőt. Az ÉS blokkot VAGY-ra cserélve bármelyik elég.', GRN, 'p5'),
+      ], { program: { nodes: [
+        { id: 'n1', type: 'in', x: 40, y: 30, props: { pin: 'p2.A1', pull: 'pullup', active: 'low' } },
+        { id: 'n2', type: 'in', x: 40, y: 170, props: { pin: 'p3.A1', pull: 'pullup', active: 'low' } },
+        { id: 'n3', type: 'and', x: 300, y: 100 },
+        { id: 'n4', type: 'out', x: 520, y: 100, props: { pin: 'p4.1' } },
+      ], edges: [{ id: 'e1', from: 'n1.v', to: 'n3.a' }, { id: 'e2', from: 'n2.v', to: 'n3.b' }, { id: 'e3', from: 'n3.v', to: 'n4.a' }] } }),
+  },
+  {
+    id: 'prog-counter', cat: 'Program', title: 'Fényerő lépcsőkben – számláló és PWM',
+    desc: 'Minden gombnyomás eggyel lépteti a számlálót; az aránya (0…1) a LED PWM-kitöltése: ki, halvány, közepes, teljes.',
+    design: pico([{ id: 'p2', type: 'button', label: 'SW1', r: 20, c: 8 }, res('p3', 'R1', 20, 26, 330), led('p4', 'LED1', 26, 30, 'yellow')],
+      [['p2.A1', 'GPIO'], ['p2.B1', 'GND'], ['p3.1', 'GPIO'], ['p3.2', 'p4.A'], ['p4.K', 'GND']], [
+        note(31, 2, 17, 9, 'Számláló\nA számláló felfutó élenként nő, a lépésszámnál (4) elölről kezdi. Két kimenete van: az érték (0–3) és az arány (0…1), ez utóbbi mehet egyenesen a PWM-be.', YEL, 'p2'),
+        note(31, 21, 15, 9, 'Próbáld ki\nSzimulációban nyomogasd a gombot: a LED fényereje lépcsőzetesen nő, majd kialszik.', GRN, 'p4'),
+      ], { program: { nodes: [
+        { id: 'n1', type: 'in', x: 40, y: 60, props: { pin: 'p2.A1', pull: 'pullup', active: 'low' } },
+        { id: 'n2', type: 'counter', x: 290, y: 40, props: { max: 4 } },
+        { id: 'n3', type: 'pwm', x: 540, y: 60, props: { pin: 'p3.1', freq: 1000 } },
+      ], edges: [{ id: 'e1', from: 'n1.v', to: 'n2.a' }, { id: 'e2', from: 'n2.f', to: 'n3.a' }] } }),
+  },
+  {
+    id: 'prog-delay', cat: 'Program', title: 'Lépcsőházi világítás – késleltetés',
+    desc: 'A gomb felkapcsolja a LED-et, és elengedés után még két másodpercig ég: a jel és a késleltetett jel VAGY-a.',
+    design: pico([{ id: 'p2', type: 'button', label: 'SW1', r: 20, c: 8 }, res('p3', 'R1', 20, 26, 330), led('p4', 'LED1', 26, 30, 'yellow')],
+      [['p2.A1', 'GPIO'], ['p2.B1', 'GND'], ['p3.1', 'GPIO'], ['p3.2', 'p4.A'], ['p4.K', 'GND']], [
+        note(31, 2, 17, 9, 'Késleltetés\nA Késleltetés a bemenet minden változását 2000 ms-mal később adja tovább. A VAGY blokk miatt a LED azonnal kigyullad (a gomb jele), és csak a késleltetett elengedéskor alszik ki.', YEL, 'p2'),
+        note(31, 21, 15, 9, 'Próbáld ki\nSzimulációban nyomd meg és engedd el a gombot: a LED még két másodpercig ég. A késést a blokk beállításában módosíthatod.', GRN, 'p4'),
+      ], { program: { nodes: [
+        { id: 'n1', type: 'in', x: 40, y: 60, props: { pin: 'p2.A1', pull: 'pullup', active: 'low' } },
+        { id: 'n2', type: 'delay', x: 280, y: 150, props: { ms: 2000 } },
+        { id: 'n3', type: 'or', x: 500, y: 60 },
+        { id: 'n4', type: 'out', x: 720, y: 60, props: { pin: 'p3.1' } },
+      ], edges: [{ id: 'e1', from: 'n1.v', to: 'n3.a' }, { id: 'e2', from: 'n1.v', to: 'n2.a' }, { id: 'e3', from: 'n2.v', to: 'n3.b' }, { id: 'e4', from: 'n3.v', to: 'n4.a' }] } }),
+  },
+  /* ---------- Saját alkatrész: belső kapcsolás ---------- */
+  {
+    id: 'custom-xor', cat: 'Saját alkatrész', title: 'Saját alkatrész: XOR modul belső kapcsolással',
+    desc: 'Egy saját „XOR modul” két gombbal és egy LED-del. A modul működése az Alkatrész-szerkesztő Működés fülén, diagramon látszik.',
+    design: pico([
+      { id: 'p2', type: 'c_xor_modul', label: 'U1', r: 26, c: 14 },
+      { id: 'p3', type: 'button', label: 'SW1', r: 29, c: 2 }, { id: 'p4', type: 'button', label: 'SW2', r: 29, c: 9 },
+      res('p5', 'R1', 20, 2, 10000), res('p6', 'R2', 20, 8, 10000), res('p7', 'R3', 20, 26, 330), led('p8', 'LED1', 26, 30, 'green'),
+    ], [['p2.1', 'p1.36'], ['p2.2', 'GND'], ['p5.1', 'p1.36'], ['p5.2', 'p2.3'], ['p6.1', 'p1.36'], ['p6.2', 'p2.4'],
+      ['p3.A1', 'p2.3'], ['p3.B1', 'GND'], ['p4.A1', 'p2.4'], ['p4.B1', 'GND'], ['p2.5', 'p7.1'], ['p7.2', 'p8.A'], ['p8.K', 'GND']], [
+      note(38, 2, 17, 9, 'Saját alkatrész\nAz U1 egy saját alkatrész: lábai VCC, GND, A, B, Y. Jelöld ki, és a tulajdonságai közt az „Alkatrész szerkesztése” gombbal nyisd meg: a Működés fülön a belső kapcsolás diagramja (Láb → KIZÁRÓ VAGY → Kimenet).', YEL, 'p2'),
+      note(38, 21, 15, 9, 'Próbáld ki\nSzimulációban a LED akkor világít, ha pontosan az egyik gomb van lenyomva. A szerkesztőben a kaput ÉS-re cserélve és mentve a panelon is úgy működik.', GRN, 'p8'),
+    ], { customForms: { c_xor_modul: {
+      name: 'XOR modul', prefix: 'U', cat: 'Saját', bodyText: 'XOR', pad: 0.6, fill: '#5f3dc4', showLabel: true, names: 'below', ext: { t: 1, b: 0, l: 0, r: 0 },
+      pins: [['1', 'VCC', 'vin'], ['2', 'GND', 'gnd'], ['3', 'A', 'sig'], ['4', 'B', 'sig'], ['5', 'Y', 'out']].map(([id, name, role], i) => ({ id, name, lr: 0, lc: i, role, group: '' })),
+      model: [], press: null,
+      logic: { vcc: '1', gnd: '2', outs: [{ pin: '5', expr: 'A ^ B', oe: '', type: 'pp' }], view: 'graph' },
+    } } }),
+  },
 ];
+
+/* A kártyák adatai: nehézség és mit tanulsz belőle. */
+const META: Record<string, [Example['level'], string[]]> = {
+  'led-manual': ['kezdő', ['előtét-ellenállás a LED-hez', 'forrasztóhíd kézzel', 'a szimuláció feszültségei']],
+  'led-auto': ['kezdő', ['kapcsolat két láb között', 'az útvonalkereső hídjai', 'Rögzítés kézire']],
+  strip: ['kezdő', ['csíkos panel', 'csíkvágás: furat és rés', 'hálózatok szétválasztása']],
+  esp32: ['kezdő', ['az ESP32 lábkiosztása', 'különleges GPIO-k (ADC, indítóláb)', 'gomb, LED, joystick egy lapon']],
+  esp32c3: ['kezdő', ['kis vezérlőlap', 'GPIO kimenet és bemenet']],
+  button: ['kezdő', ['felhúzó ellenállás', 'gomb a szimulációban', 'GPIO bemenet']],
+  joystick: ['kezdő', ['analóg bemenet (ADC)', 'csúszka a szimulációban']],
+  'prog-blink': ['kezdő', ['az első program', 'Ütemadó és Digitális kimenet blokk', 'periódus és kitöltés']],
+  'prog-toggle': ['kezdő', ['élre váltás', 'aktív alacsony bemenet', 'élő értékek az éleken']],
+  'prog-and': ['kezdő', ['logika a programban', 'két bemenet egy döntéshez', 'Kapcsoló mód a szimulációban']],
+  'prog-chase': ['kezdő', ['Sorozat blokk', 'minta és irány', 'négy kimenet egy blokkból']],
+  'prog-counter': ['haladó', ['Számláló blokk', 'arány → PWM-kitöltés', 'állapot a programban']],
+  'prog-delay': ['haladó', ['Késleltetés blokk', 'jel és késleltetett jel VAGY-a', 'időzítés gomb után']],
+  'prog-dimmer': ['haladó', ['analóg érték → PWM', 'összehasonlítás', 'két kimenet egy bemenetről']],
+  npn: ['haladó', ['bázisellenállás', 'tranzisztor kapcsolóként', 'áramerősítés']],
+  'mosfet-pwm': ['haladó', ['MOSFET kapcsoló', 'PWM-kitöltés', 'logikai szintű vezérlés']],
+  rc: ['haladó', ['időállandó', 'kondenzátor töltése']],
+  'dc-motor': ['haladó', ['külső alkatrész kábellel', 'visszacsapó dióda', 'fordulat PWM-mel']],
+  servo: ['haladó', ['szervó impulzusszélesség', '50 Hz-es PWM']],
+  stepper: ['haladó', ['Sorozat blokk', 'ULN2003 meghajtó', 'léptetés iránya']],
+  nand: ['haladó', ['74HC logika', 'felhúzó ellenállások', 'kihasználatlan bemenetek']],
+  decoder: ['haladó', ['dekóder', 'engedélyező bemenet', 'program a logika előtt']],
+  toggle: ['haladó', ['D tároló', 'órajel él', 'osztó']],
+  'custom-xor': ['haladó', ['saját alkatrész', 'belső kapcsolás diagramon', 'logika a szimulációban']],
+  nokia: ['haladó', ['SPI kijelző bekötése', 'tápfeszültség-tartomány']],
+  tp4056: ['haladó', ['akkus táp', 'töltőmodul', 'Schottky-dióda']],
+};
+for (const e of EXAMPLES) { const m = META[e.id]; if (m) { e.level = m[0]; e.learn = m[1]; } }

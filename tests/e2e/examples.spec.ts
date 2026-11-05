@@ -79,3 +79,40 @@ test('példatár a Fájl menüből: kategória, betöltés, visszavonás', async
   await pcb(page, `pcb.undo();`);
   expect(await pcb(page, `return pcb.get().parts.map(p => p.type).sort();`)).toEqual(['elko', 'pico', 'res']);
 });
+
+test('példák ablaka: balra a kategóriák darabszámmal, jobbra kártyák (szint, mit tanulsz); keresés minden kategóriában', async ({ page }) => {
+  await page.click('#bFile');
+  await page.click('#bExamples');
+  const cats = page.locator('#examples .ex-cats .ex-cat');
+  const c0 = (await cats.nth(0).boundingBox())!, c1 = (await cats.nth(1).boundingBox())!;
+  expect(c1.y).toBeGreaterThan(c0.y); // egymás alatt, egy oszlopban
+  await expect(page.locator('.ex-cat[data-excat="Program"] .ex-n')).toHaveText('7');
+  await page.click('.ex-cat[data-excat="Program"]');
+  const card = page.locator('.ex-item[data-ex="prog-chase"]');
+  await expect(card.locator('.ex-tag')).toContainText(['kezdő', 'program']); // a kategória csak keresésnél
+  await expect(card.locator('.ex-learn li')).toHaveCount(3);
+  await page.fill('#exSearch', 'késleltetés');
+  await expect(page.locator('.ex-item')).toHaveCount(1);
+  await expect(page.locator('.ex-item')).toHaveAttribute('data-ex', 'prog-delay');
+});
+
+test('új tanító példák: futófény, ÉS gombokkal, saját XOR modul belső kapcsolással', async ({ page }) => {
+  const led = (l: string) => `return ((pcb.simInfo().leds.find(x => x.label === '${l}') || {}).I || 0) > 2e-4;`; // világít
+  await pcb(page, `pcb.example('prog-and'); pcb.sim(true);`);
+  await expect.poll(() => pcb(page, led('LED1'))).toBe(false);
+  await pcb(page, `pcb.press('SW1', true); pcb.press('SW2', true);`);
+  await expect.poll(() => pcb(page, led('LED1'))).toBe(true);
+  await pcb(page, `pcb.press('SW2', false);`);
+  await expect.poll(() => pcb(page, led('LED1'))).toBe(false);
+  await pcb(page, `pcb.sim(false); pcb.example('custom-xor'); pcb.sim(true);`);
+  await expect.poll(() => pcb(page, led('LED1'))).toBe(false);
+  await pcb(page, `pcb.press('SW1', true);`);
+  await expect.poll(() => pcb(page, led('LED1'))).toBe(true);
+  await pcb(page, `pcb.press('SW2', true);`);
+  await expect.poll(() => pcb(page, led('LED1'))).toBe(false);
+  // a saját alkatrész a szerkesztőben a belső kapcsolás diagramjával nyílik
+  await pcb(page, `pcb.sim(false); pcb.select(['U1']);`);
+  await page.click('#pEditDef');
+  await page.click('.pe [data-tab="func"]');
+  await expect(page.locator('.cg [data-k="gate"]')).toHaveText([/KIZÁRÓ VAGY/]);
+});
