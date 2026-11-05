@@ -711,9 +711,11 @@ input:disabled::placeholder{color:var(--muted)}
 .pe-ptabs{flex:0 0 auto;display:flex;align-items:center;gap:var(--sp-2);padding:8px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .pe-ptabs .btn{padding:4px 12px;font-size:12.5px}
 .pe-parcol>.pe-left{flex:1 1 auto;min-height:0}
-.pe-acts{display:contents}
-.ptab .pe-acts .btn{min-width:28px;padding:4px}
-.ptab .pe-acts .btn.confirm{padding:4px 8px;gap:4px}
+.pe-acts{display:flex;align-items:center;gap:2px;margin-left:auto}
+.pe-ptabs .pe-acts .btn{min-width:28px;padding:4px}
+.pe-ptabs .pe-acts .btn.confirm{padding:4px 8px;gap:4px}
+.pe-acts-sep{width:1px;height:18px;background:var(--line);margin:0 4px}
+.pe-ptabs .pe-sub{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
 .pe-danger{margin-top:12px;border-color:color-mix(in srgb,var(--err) 35%,var(--line))!important}
 .pe-danger .btn{gap:6px}
 .pe-danger .help{margin:6px 0 0}
@@ -722,10 +724,10 @@ input:disabled::placeholder{color:var(--muted)}
 /* A szerkesztő fülének gombjai egy összefüggő gombsorban; a szín az ikoné (kuka piros, mentés primary) */
 .ptab .pe-acts>.btn{border-radius:0;margin-left:-1px;position:relative}
 .ptab .pe-acts>.btn:hover,.ptab .pe-acts>.btn:focus-visible{z-index:2}
-.ptab [data-act="save"]{color:var(--primary)}
-.ptab [data-act="save"]:disabled{color:var(--muted)}
-.ptab [data-act="discard"]{color:var(--err)}
-.ptab [data-act="discard"].confirm{background:color-mix(in srgb,var(--err) 12%,var(--panel))}
+.pe-acts [data-act="save"]{color:var(--primary)}
+.pe-acts [data-act="save"]:disabled{color:var(--muted)}
+.pe-acts [data-act="discard"]{color:var(--err)}
+.pe-acts [data-act="discard"].confirm{background:color-mix(in srgb,var(--err) 12%,var(--panel))}
 .ptab .px{margin-left:-1px}
 /* sok alkatrészfül: görgetés helyett a nézetváltók alá, új sorba törnek */
 .vbar.pt-wrap{flex-wrap:wrap;row-gap:6px}
@@ -822,3 +824,8 @@ html.simple [data-adv]{display:none!important}
 .ex-fclear{font-size:12px;padding:2px 8px}
 .ex-f:disabled{opacity:.4;cursor:default}
 .examples .ex-all{margin-bottom:6px;position:relative}.examples .ex-all::after{content:'';position:absolute;left:10px;right:10px;bottom:-4px;border-bottom:1px solid var(--line)}
+.pe-acts [data-act="discard"]:disabled{color:var(--muted)}
+.pe-ptabs{flex-wrap:nowrap}
+.pe-ptabs .pe-tabs{flex:0 0 auto}
+.pe-ptabs .pe-sub{flex:1 1 0}
+.pe-ptabs .pe-acts{flex:0 0 auto}

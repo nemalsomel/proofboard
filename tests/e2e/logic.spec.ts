@@ -205,8 +205,9 @@ test('Alkatrész-szerkesztő: a fejléc visszavonása az övé, amíg látszik (
   await undo.click(); // a kifejezés előtti állapot: kimenet, kapu nélkül
   await expect(page.locator('.cg [data-k="gate"]')).toHaveCount(0);
   await expect(page.locator('.cg [data-k="out"]')).toHaveCount(1);
-  await redo.click();
+  await page.click('.pe-acts [data-act="redo"]'); // a szerkesztő saját sora ugyanazt teszi
   await expect(page.locator('.cg [data-k="gate"]')).toHaveCount(1);
+  await expect(redo).toBeDisabled();
   // él húzása is egy lépés
   await page.click('.cg [data-cg="add"]');
   await page.click('.cg [data-add="g:not"]');

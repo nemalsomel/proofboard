@@ -174,7 +174,7 @@ test('5.6: a szerkesztő középső nézet, fül a nézetsávban; háttérbe teh
   await expect(page.locator('#workSw .btn.on')).toHaveCount(0);
   await page.fill('#pe_name', 'Szenzor');
   await expect(page.locator('#partTabs .pgo')).toHaveText('Alkatrész: Szenzor •'); // a pont: nem mentett módosítás
-  await expect(page.locator('[data-act="discard"]')).toBeVisible();
+  await expect(page.locator('[data-act="discard"]')).toBeEnabled();
   // a Panel gomb háttérbe teszi, a fül marad, és visszahoz
   await page.click('#workSw [data-work="board"]');
   await expect(page.locator('#partView')).toBeHidden();
@@ -182,9 +182,15 @@ test('5.6: a szerkesztő középső nézet, fül a nézetsávban; háttérbe teh
   await page.click('#partTabs .pgo');
   await expect(page.locator('#pe_name')).toHaveValue('Szenzor');
   // egyetlen fő gomb; a lábtáblázat keskeny, a kijelölt láb további adatai a sora alatt
-  // a mentés és az elvetés a látható szerkesztő fülén (ikongombok); Lábak | Működés | JSON a jobb hasáb tetején
-  await expect(page.locator('#partTabs .ptab.cur [data-act="save"]')).toHaveAttribute('aria-label', 'Mentés');
-  await expect(page.locator('#partTabs .ptab.cur [data-act="discard"]')).toBeVisible();
+  // visszavonás, újra, elvetés, mentés a Lábak | Működés | JSON sor végén (ikongombok); a fülön csak a kicsinyítés
+  const row = page.locator('.pe-parcol .pe-ptabs .pe-acts');
+  await expect(row.locator('[data-act]')).toHaveCount(4);
+  await expect(row.locator('[data-act="save"]')).toHaveAttribute('aria-label', 'Mentés');
+  await expect(row.locator('[data-act="undo"]')).toBeEnabled();
+  await expect(page.locator('#partTabs [data-act]')).toHaveCount(0);
+  const tabsBox = (await page.locator('.pe-ptabs .pe-tabs').boundingBox())!, rowBox = (await row.boundingBox())!;
+  expect(Math.abs(rowBox.y + rowBox.height / 2 - (tabsBox.y + tabsBox.height / 2))).toBeLessThan(4); // egy sorban
+  expect(rowBox.x).toBeGreaterThan(tabsBox.x + tabsBox.width);
   await expect(page.locator('#partTabs .ptab.cur .px')).toHaveAttribute('aria-label', /^Háttérbe/); // nem mentett: kicsinyítés
   await expect(page.locator('.pe-parcol .pe-ptabs [data-tab]')).toHaveCount(3);
   await page.fill('#pe_gnames', 'OUT,GND');
