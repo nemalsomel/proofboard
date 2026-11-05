@@ -16,6 +16,7 @@ import { applyRotation, fromScreen as vpFrom, toScreen as vpTo } from './ui/view
 import { EventLog } from './ui/log';
 import { favToggled, libPref, libPrefSet, libraryHtml, recentWith } from './ui/library';
 import { EXAMPLES, EX_CATS } from './ui/examples';
+import { LANGS, detectLang, getLang, isLang, setLang, t, translateDom } from './i18n/i18n';
 import { canInstall, install, offlineReady, registerPwa, standalone } from './ui/pwa';
 import { editorHistory, formToDef, openEditor, restoreParked } from './ui/editor';
 import { LEDC, PARTS, PICO_NAMES, picoRole } from './parts/builtin';
@@ -953,12 +954,12 @@ menu.addEventListener('keydown',e=>{const it=[...menu.querySelectorAll('.menu-it
   else if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();it[(i+(e.key==='ArrowDown'?1:it.length-1))%it.length].focus();}});
 $('#bExamples').onclick=()=>{renderExamples();openDlg('#dlgEx');};
 /* Névjegy; telepítés alkalmazásként (PWA); új verzió értesítése */
-function aboutUI(){$('#aboutVer').textContent=`Verzió: ${__APP_VERSION__} · ${__BUILD_DATE__}`;
-  $('#aboutOffline').textContent=standalone()?'Telepített alkalmazásként fut; internet nélkül is működik.':offlineReady()?'Internet nélkül is működik (a böngésző eltárolta). Telepíthető is önálló alkalmazásként.':'';
+function aboutUI(){$('#aboutVer').textContent=t('Verzió: {v} · {d}',{v:__APP_VERSION__,d:__BUILD_DATE__});
+  $('#aboutOffline').textContent=standalone()?t('Telepített alkalmazásként fut; internet nélkül is működik.'):offlineReady()?t('Internet nélkül is működik (a böngésző eltárolta). Telepíthető is önálló alkalmazásként.'):'';
   $('#aboutOffline').hidden=!$('#aboutOffline').textContent;installUI();}
 function installUI(){const c=canInstall();$('#bInstall').hidden=!c;$('#bInstall2').hidden=!c;}
 $('#bAbout').onclick=()=>{aboutUI();openDlg('#dlgAbout');};
-const doInstall=async()=>{const ok=await install();installUI();if(ok)toast('Telepítve: a Proofboard önálló alkalmazásként is elindítható.');};
+const doInstall=async()=>{const ok=await install();installUI();if(ok)toast(t('Telepítve: a Proofboard önálló alkalmazásként is elindítható.'));};
 $('#bInstall').onclick=doInstall;$('#bInstall2').onclick=doInstall;
 let updApply=null;
 $('#bUpd').onclick=()=>{save();if(updApply)updApply();};
@@ -978,6 +979,13 @@ function setTheme(v,remember=true){const r=document.documentElement;if(v==='ligh
   if(remember){try{localStorage.setItem(THEMEKEY,v);}catch(e){}}themeUI();draw();}
 function themeUI(){const v=themeGet();document.querySelectorAll('[data-theme-set]').forEach(b=>{const on=b.dataset.themeSet===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});}
 document.querySelectorAll('[data-theme-set]').forEach(b=>b.addEventListener('click',()=>setTheme(b.dataset.themeSet)));
+/* Nyelv (előkészítés): a statikus felület fordítása (i18n/), a választás megmarad. A program által épített részek
+   fokozatosan kapnak t()-t; ami még nincs lefordítva, magyarul marad. */
+const LANGKEY='proofboard.lang';
+function langUI(){const v=getLang();document.querySelectorAll('[data-lang-set]').forEach(b=>{const on=b.dataset.langSet===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});}
+function applyLang(l,remember){if(!isLang(l))return;const was=getLang();setLang(l);document.documentElement.lang=l;translateDom(document.body,l);undoUI();langUI();
+  if(remember){try{localStorage.setItem(LANGKEY,l);}catch(e){}if(l!=='hu'&&l!==was)toast(t('Az angol fordítás készül: a felület egy része még magyar.'));}}
+document.querySelectorAll('[data-lang-set]').forEach(b=>b.addEventListener('click',()=>applyLang(b.dataset.langSet,true)));
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>draw());
 setTheme(themeGet(),false);
 /* új terv és kezdőkép: panelválasztás a beépített méretekből */
@@ -1104,7 +1112,7 @@ window.addEventListener('resize',()=>PW.place());
 /* Visszavonás / újra: csak akkor aktív, ha van mit */
 /** A fejléc visszavonása: ha egy alkatrész-szerkesztő látszik, az övé (a panelé addig érintetlen), egyébként a panelé. */
 function undoUI(){const u=$('#bUndo'),r=$('#bRedo'),E=editorHistory(),cu=E?E.canUndo:HIST.canUndo,cr=E?E.canRedo:HIST.canRedo;
-  if(u){u.disabled=!cu;u.title=E?'Visszavonás az alkatrész-szerkesztőben (Ctrl+Z)':'Visszavonás (Ctrl+Z)';}if(r){r.disabled=!cr;r.title=E?'Újra az alkatrész-szerkesztőben (Ctrl+Y)':'Újra (Ctrl+Y)';}}
+  if(u){u.disabled=!cu;u.title=E?t('Visszavonás az alkatrész-szerkesztőben (Ctrl+Z)'):t('Visszavonás (Ctrl+Z)');}if(r){r.disabled=!cr;r.title=E?t('Újra az alkatrész-szerkesztőben (Ctrl+Y)'):t('Újra (Ctrl+Y)');}}
 /* A kurzor mutatja, mit csinál a kattintás: az eszköz ikonja a célkereszt mellett */
 const CURSORS={};
 function toolCursor(){if(ui.sim||ui.placing||ui.tool==='select')return'';if(ui.tool==='pan')return'grab';const t=TOOLS.find(x=>x[0]===ui.tool);if(!t)return'';
@@ -1488,6 +1496,8 @@ window.pcb={
   pwm(pin,duty,freq){const q=D.parts.flatMap(gpins).find(x=>x.name===pin&&x.role==='gpio');if(!q||!gpioModeOk(q,'pwm'))return false;const k=q.part.id+'.'+q.id;pushUndo();D.gpio[k]='pwm';D.pwm={...(D.pwm||{}),[k]:{...pwmCfg(k),...(duty!=null?{duty}:{}),...(freq!=null?{freq}:{})}};commit();return true;},
   gpio(pin,mode){const q=D.parts.flatMap(gpins).find(x=>x.name===pin&&x.role==='gpio');if(!q||!GPIO_MODES.some(m=>m[0]===mode)||!gpioModeOk(q,mode))return false;D.gpio[q.part.id+'.'+q.id]=mode;commit();return true;},
   slider(label,key,v){const p=D.parts.find(x=>x.label===label);return !!p&&setSlider(p,key,v);},
+  /** Nyelv lekérdezése / váltása (a választás megmarad). */
+  lang:l=>{if(l!==undefined)applyLang(l,true);return getLang();},
   version:__APP_VERSION__
 };
 function statusText(){return $('#status').textContent;}
@@ -1508,4 +1518,5 @@ function statusText(){return $('#status').textContent;}
   applyLayout(LAY_S.cur,false);
   setSimple(!!uiPref().simple,false);
   restoreParked(editorHost); // a háttérben hagyott, nem mentett alkatrész füle
+  {let l=null;try{l=localStorage.getItem(LANGKEY);}catch(e){}applyLang(detectLang(l),false);}
 })();
