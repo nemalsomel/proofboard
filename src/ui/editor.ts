@@ -21,36 +21,48 @@ export interface EditorHost {
   /** Lerakás indítása a panelon. */
   place(type: string): void;
   roleColor(role: string): string;
-  /** A szerkesztő helye (5.6): középső nézet a gazdánál, fül a nézetsávban. `onClose`: a fül × gombja. */
+  /**
+   * A szerkesztők helye (5.6): középső nézet a gazdánál, alkatrészenként egy fül a nézetsávban (`id`: a piszkozatkulcs).
+   * `onClose`: a fül × gombja.
+   */
   view: {
-    open(el: HTMLElement, title: string, onClose: () => void, show?: boolean): void;
-    title(t: string): void;
-    close(): void;
+    open(id: string, el: HTMLElement, title: string, onClose: () => void, show?: boolean): void;
+    title(id: string, t: string): void;
+    close(id: string): void;
     /** Háttérbe tétel: a nézet eltűnik, a fül marad (mint a Panel gombra váltva). */
-    hide(): void;
-    /** Látszik-e most (a nézetsávban másik nézetre váltva háttérben marad). */
-    visible(): boolean;
+    hide(id: string): void;
+    /** Előtérbe hozás (a fülre kattintva, vagy ha a már nyitott alkatrészt nyitnák meg újra). */
+    show(id: string): void;
+    /** Ez a szerkesztő látszik-e most. */
+    visible(id: string): boolean;
   };
 }
 
-/** A nyitott szerkesztő (egyszerre egy); új megnyitáskor az előző piszkozatként bezárul. */
-let active: { close(keep?: boolean, force?: boolean): void } | null = null;
-/** Nyitva van-e az Alkatrész-szerkesztő (akár háttérben). */
-export const editorOpen = (): boolean => !!active;
-export function closeEditor(): void { active?.close(true, true); }
-/** A háttérben hagyott, nem mentett szerkesztés piszkozatkulcsa: újratöltés után a fül visszajön. */
+/** A nyitott szerkesztők piszkozatkulcs szerint: több alkatrész is szerkeszthető egyszerre, mindegyik saját füllel. */
+const OPEN = new Map<string, { close(keep?: boolean, force?: boolean): void }>();
+/** Nyitva van-e Alkatrész-szerkesztő (akár háttérben). */
+export const editorOpen = (): boolean => OPEN.size > 0;
+export function closeEditor(): void { for (const e of [...OPEN.values()]) e.close(true, true); }
+/** A háttérben hagyott, nem mentett szerkesztések piszkozatkulcsai: újratöltés után a fülük visszajön. */
 const PARKED_KEY = 'proofboard.editor.parked';
-const parked = (): string | null => { try { return localStorage.getItem(PARKED_KEY); } catch { return null; } };
-function setParked(k: string | null): void { try { if (k) localStorage.setItem(PARKED_KEY, k); else localStorage.removeItem(PARKED_KEY); } catch { /* tárhely nélkül */ } }
-/** Induláskor: a háttérben hagyott, nem mentett szerkesztés füle visszakerül a nézetsávba (a szerkesztő háttérben nyílik). */
+function parkedList(): string[] {
+  try { const v = localStorage.getItem(PARKED_KEY); if (!v) return []; const a = v.startsWith('[') ? JSON.parse(v) : [v]; return Array.isArray(a) ? a.filter(x => typeof x === 'string') : []; } catch { return []; }
+}
+function setParked(k: string, on: boolean): void {
+  const a = parkedList().filter(x => x !== k); if (on) a.push(k);
+  try { if (a.length) localStorage.setItem(PARKED_KEY, JSON.stringify(a)); else localStorage.removeItem(PARKED_KEY); } catch { /* tárhely nélkül */ }
+}
+/** Induláskor: a háttérben hagyott, nem mentett szerkesztések fülei visszakerülnek a nézetsávba (háttérben nyílnak). */
 export function restoreParked(host: EditorHost): void {
-  const k = parked(); if (!k || active) return;
-  if (!drafts()[k]) { setParked(null); return; }
-  let opts: { type?: string; from?: PartDef } | null = null;
-  if (k === 'new') opts = {};
-  else if (k.startsWith('type:') && host.custom()[k.slice(5)]) opts = { type: k.slice(5) };
-  else if (k.startsWith('from:')) { const d = Object.values(host.builtin).find(x => x.name === k.slice(5)); if (d) opts = { from: d }; }
-  if (opts) openEditor(host, opts, false); else setParked(null);
+  for (const k of parkedList()) {
+    if (OPEN.has(k)) continue;
+    if (!drafts()[k]) { setParked(k, false); continue; }
+    let opts: { type?: string; from?: PartDef } | null = null;
+    if (k === 'new') opts = {};
+    else if (k.startsWith('type:') && host.custom()[k.slice(5)]) opts = { type: k.slice(5) };
+    else if (k.startsWith('from:')) { const d = Object.values(host.builtin).find(x => x.name === k.slice(5)); if (d) opts = { from: d }; }
+    if (opts) openEditor(host, opts, false); else setParked(k, false);
+  }
 }
 
 /** Saját alkatrészeknél választható lábszerepek. */
@@ -315,10 +327,10 @@ const SECTIONS: Array<[string, string]> = [['model', 'Villamos modell'], ['logic
 
 /** A szerkesztő megnyitása. `type`: meglévő saját alkatrész; `from`: kiindulási leírás (pl. beépített másolata). */
 export function openEditor(host: EditorHost, opts: { type?: string; from?: PartDef } = {}, show = true): void {
-  active?.close(true, true);
+  const draftKey = opts.type ? 'type:' + opts.type : opts.from ? 'from:' + opts.from.name : 'new';
+  if (OPEN.has(draftKey)) { if (show) host.view.show(draftKey); return; } // már nyitva: csak előre jön
   const existing = opts.type ? host.custom()[opts.type] : undefined;
   const start = existing || opts.from;
-  const draftKey = opts.type ? 'type:' + opts.type : opts.from ? 'from:' + opts.from.name : 'new';
   let form: Form | null = null, jsonDef: PartDef | null = null, tab: Tab = 'pins';
   /** Kiinduló állapot: űrlap, ha a leírás veszteség nélkül megjeleníthető rajta, különben JSON. */
   const initial = (): void => {
@@ -371,7 +383,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       </div>
     </div>`;
   const titleOf = () => 'Alkatrész: ' + ((form && tab !== 'json' ? form.name : jsonDef?.name) || (existing ? existing.name : 'új'));
-  host.view.open(back, titleOf(), () => close(), show);
+  host.view.open(draftKey, back, titleOf(), () => close(), show);
   const $ = <T extends HTMLElement = HTMLElement>(ref: string) => back.querySelector(`[data-ref="${ref}"]`) as T;
   const left = $('left'), cv = $<HTMLCanvasElement>('cv'), probsEl = $('probs');
   const prevFocus = document.activeElement as HTMLElement | null;
@@ -446,21 +458,21 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (tab === 'json') { const ta = left.querySelector<HTMLTextAreaElement>('#pe_json'); if (ta) jsonText = ta.value; }
     const dirty = snapshot() !== clean;
     if (keep && dirty) putDraft(draftKey, { tab, form, jsonText: tab === 'json' ? jsonText : '' });
-    if (keep && dirty && !force && host.view.visible()) { setParked(draftKey); host.view.hide(); return; }
-    if (parked() === draftKey) setParked(null); // teljes bezárás: a fül nem jön vissza (a piszkozat igen, az Új alkatrész folytatja)
-    ro.disconnect(); host.view.close(); document.removeEventListener('keydown', onDocKey, true); window.removeEventListener('pagehide', onPageHide); active = null;
+    if (keep && dirty && !force && host.view.visible(draftKey)) { setParked(draftKey, true); host.view.hide(draftKey); return; }
+    setParked(draftKey, false); // teljes bezárás: a fül nem jön vissza (a piszkozat igen, az Új alkatrész folytatja)
+    ro.disconnect(); OPEN.delete(draftKey); host.view.close(draftKey); document.removeEventListener('keydown', onDocKey, true); window.removeEventListener('pagehide', onPageHide);
     if (prevFocus && document.contains(prevFocus)) prevFocus.focus?.();
   };
-  active = { close };
+  OPEN.set(draftKey, { close });
   /** Oldalelhagyáskor (újratöltés, bezárás) a nem mentett szerkesztés piszkozat lesz, és a füle legközelebb visszajön. */
   const onPageHide = () => {
     if (tab === 'json') { const ta = left.querySelector<HTMLTextAreaElement>('#pe_json'); if (ta) jsonText = ta.value; }
-    if (snapshot() !== clean) { putDraft(draftKey, { tab, form, jsonText: tab === 'json' ? jsonText : '' }); setParked(draftKey); }
+    if (snapshot() !== clean) { putDraft(draftKey, { tab, form, jsonText: tab === 'json' ? jsonText : '' }); setParked(draftKey, true); }
   };
   window.addEventListener('pagehide', onPageHide);
   /** Esc: bezárás, ha a szerkesztő látszik, és nem egy párbeszédablakban vagy menüben vagyunk. */
   const onDocKey = (e: KeyboardEvent) => {
-    if (e.key !== 'Escape' || !host.view.visible()) return;
+    if (e.key !== 'Escape' || !host.view.visible(draftKey)) return;
     const t = e.target as HTMLElement | null;
     if (t && t !== document.body && !back.contains(t)) return;
     e.preventDefault(); e.stopPropagation(); close();
@@ -504,7 +516,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     back.querySelectorAll<HTMLButtonElement>('[data-act="save"]').forEach(b => { b.disabled = err; });
     const dirty = snapshot() !== clean, dis = back.querySelector<HTMLButtonElement>('[data-act="discard"]')!;
     if (!dirty && !confirmDiscard) dis.hidden = true; else dis.hidden = false;
-    host.view.title(titleOf() + (dirty ? ' •' : ''));
+    host.view.title(draftKey, titleOf() + (dirty ? ' •' : ''));
   }
   const opt = (v: string, l: string, cur: string) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
   /** A láb a lábneve szerint (ahogy az előnézeten látszik), ha eltér, zárójelben az azonosító. */
@@ -1008,7 +1020,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (act === 'stayjson') { pending = null; render(); return; }
     if (act === 'discard') {
       if (Date.now() - confirmDiscard > 3000) { confirmDiscard = Date.now(); b.textContent = 'Biztos? Kattints újra'; setTimeout(() => { b.textContent = 'Elvetés'; }, 3000); return; }
-      confirmDiscard = 0; b.textContent = 'Elvetés'; b.hidden = true; putDraft(draftKey, null); if (parked() === draftKey) setParked(null); initial(); sel = -1; selModel = -1; clean = snapshot(); render(); return;
+      confirmDiscard = 0; b.textContent = 'Elvetés'; b.hidden = true; putDraft(draftKey, null); setParked(draftKey, false); initial(); sel = -1; selModel = -1; clean = snapshot(); render(); return;
     }
     if (act === 'gen' && form) {
       const n = Math.max(1, Math.min(40, +(left.querySelector<HTMLInputElement>('#pe_gn')!.value) || 1));
@@ -1048,5 +1060,6 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   });
 
   render();
+  if (!restored && snapshot() !== clean) { clean = snapshot(); refresh(); } // a JSON-szöveg az első megjelenítéskor áll elő: az még nem módosítás
   (back.querySelector('#pe_name') as HTMLInputElement | null)?.focus();
 }

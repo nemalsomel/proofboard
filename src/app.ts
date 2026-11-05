@@ -625,7 +625,7 @@ const codeHost={
   setLang(l){uiPrefSet({codeLang:l});},
 };
 function progLive(){if(!PE||!ui.work||ui.work==='board')return;const n=performance.now();if(n-progLiveAt<100)return;progLiveAt=n;PE.live();}
-function setWork(v,remember=true){if(ui.part)partShow(false);if(!['board','prog','split'].includes(v))v='board';ui.work=v;const a=$('.app').classList;
+function setWork(v,remember=true){if(ui.part)partShow(null);if(!['board','prog','split'].includes(v))v='board';ui.work=v;const a=$('.app').classList;
   a.toggle('work-prog',v==='prog');a.toggle('work-split',v==='split');$('#progView').hidden=v==='board';
   document.querySelectorAll('[data-work]').forEach(b=>{const on=b.dataset.work===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});
   if(v!=='board'){progMount();progRefresh();}else{ui.progHi=null;}
@@ -1333,20 +1333,26 @@ const editorHost={
   roleColor:r=>ROLEC[r]||'#868e96'
 };
 /* 5.6: az Alkatrész-szerkesztő középső nézet; fül a nézetsávban (Alkatrész: Név ×), a Panel / Program gombjai háttérbe teszik. */
-let partClose=null;
-function partShow(on){on=!!on&&!!partClose;ui.part=on;$('#partView').hidden=!on;$('.app').classList.toggle('work-part',on);
-  $('#partGo').classList.toggle('on',on);$('#partGo').setAttribute('aria-pressed',String(on));
+const PT=new Map();let partCur=null; // nyitott szerkesztők: azonosító → {el, title, onClose}; partCur: a látható
+function partTabs(){const c=$('#partTabs');c.hidden=!PT.size;
+  c.innerHTML=[...PT].map(([id,t])=>{const on=ui.part&&partCur===id;return `<div class="grp seg ptab" data-pt="${esc(id)}"><button class="btn pgo${on?' on':''}" aria-pressed="${on}" title="Az alkatrész szerkesztése">${esc(t.title)}</button><button class="btn icon px" aria-label="Bezárás: ${esc(t.title)}" title="Bezárás (Esc). Nem mentett módosításnál előbb csak háttérbe kerül, a fül marad; háttérből bezárva a piszkozat akkor is megmarad">${icon('close')}</button></div>`;}).join('');}
+/** A látható szerkesztő váltása (null: egyik sem, a Panel / Program látszik). Csak a látható van a DOM-ban. */
+function partShow(id){const on=id!=null&&PT.has(id);if(on)partCur=id;ui.part=on;const v=$('#partView');v.hidden=!on;
+  if(on){const el=PT.get(id).el;if(v.firstChild!==el)v.replaceChildren(el);}else v.replaceChildren();
+  $('.app').classList.toggle('work-part',on);
   document.querySelectorAll('[data-work]').forEach(b=>{const o=!on&&b.dataset.work===ui.work;b.classList.toggle('on',o);b.setAttribute('aria-pressed',String(o));});
-  if(!on){resize();draw();}}
+  partTabs();if(!on){resize();draw();}}
 editorHost.view={
-  open(el,title,onClose,show=true){$('#partView').replaceChildren(el);partClose=onClose;$('#partTab').hidden=false;$('#partGo').textContent=title;partShow(show);if(!show)return;if(MOB.matches)sheet('');log('Alkatrész-szerkesztő: '+title.replace(/^Alkatrész: /,''));},
-  title(t){$('#partGo').textContent=t;},
-  close(){$('#partView').replaceChildren();$('#partTab').hidden=true;partClose=null;partShow(false);},
-  hide(){partShow(false);toast('A nem mentett alkatrész a fülén vár: kattints rá a folytatáshoz.');},
-  visible:()=>!!ui.part,
+  open(id,el,title,onClose,show=true){PT.set(id,{el,title,onClose});if(!show){partTabs();return;}partShow(id);if(MOB.matches)sheet('');log('Alkatrész-szerkesztő: '+title.replace(/^Alkatrész: /,''));},
+  title(id,t){const x=PT.get(id);if(!x||x.title===t)return;x.title=t;const g=[...document.querySelectorAll('#partTabs [data-pt]')].find(e=>e.dataset.pt===id);if(g){g.querySelector('.pgo').textContent=t;g.querySelector('.px').setAttribute('aria-label','Bezárás: '+t);}},
+  close(id){if(!PT.has(id))return;const was=ui.part&&partCur===id;PT.delete(id);if(partCur===id)partCur=null;
+    if(was){const next=[...PT.keys()].pop();partShow(next??null);}else partTabs();},
+  hide(id){if(ui.part&&partCur===id)partShow(null);toast('A nem mentett alkatrész a fülén vár: kattints rá a folytatáshoz.');},
+  show(id){partShow(id);if(MOB.matches)sheet('');},
+  visible:id=>!!ui.part&&partCur===id,
 };
-$('#partGo').onclick=()=>partShow(true);
-$('#partX').onclick=()=>{if(partClose)partClose();};
+$('#partTabs').addEventListener('click',e=>{const g=e.target.closest('[data-pt]');if(!g)return;const id=g.dataset.pt;
+  if(e.target.closest('.px')){const x=PT.get(id);if(x)x.onClose();}else partShow(id);});
 function libMsg(t){const e=$('#libMsg');if(e)e.textContent=t;toast(t);}
 $('#bNewPart').onclick=()=>openEditor(editorHost,{});
 $('#bLibExp').onclick=()=>{const n=Object.keys(LIB).length;if(!n){libMsg('A saját könyvtárad még üres.');return;}

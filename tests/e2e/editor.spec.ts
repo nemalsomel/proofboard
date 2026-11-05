@@ -65,8 +65,8 @@ test('hibás leírás nem menthető, a hibát érthetően jelzi', async ({ page 
   await expect(probs).toContainText('Hibás JSON');
   await page.keyboard.press('Escape'); // nem mentett: háttérbe kerül, a fül marad
   await expect(page.locator('#partView')).toBeHidden();
-  await expect(page.locator('#partTab')).toBeVisible();
-  await page.click('#partX'); // háttérből bezárva eltűnik
+  await expect(page.locator('#partTabs')).toBeVisible();
+  await page.click('#partTabs .px'); // háttérből bezárva eltűnik
   await expect(page.locator('.pe')).toHaveCount(0);
 });
 
@@ -111,7 +111,7 @@ test('Esc nem dobja el a szerkesztést; az Elvetés visszaállítja a kiinduló 
   await page.click('[data-act="gen"]');
   await page.keyboard.press('Escape');
   await expect(page.locator('#partView')).toBeHidden();
-  await page.click('#partX');
+  await page.click('#partTabs .px');
   await expect(page.locator('.pe')).toHaveCount(0);
   await page.click('#bNewPart');
   await expect(page.locator('#pe_name')).toHaveValue('Piszkozat modul');
@@ -164,17 +164,17 @@ test('5.6: a szerkesztő középső nézet, fül a nézetsávban; háttérbe teh
   await pcb(page, `pcb.preset();`);
   await page.click('#bNewPart');
   await expect(page.locator('#partView .pe')).toBeVisible();
-  await expect(page.locator('#partGo')).toHaveText(/^Alkatrész: Új modul/);
-  await expect(page.locator('#partGo')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#partTabs .pgo')).toHaveText(/^Alkatrész: Új modul/);
+  await expect(page.locator('#partTabs .pgo')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#workSw .btn.on')).toHaveCount(0);
   await page.fill('#pe_name', 'Szenzor');
-  await expect(page.locator('#partGo')).toHaveText('Alkatrész: Szenzor •'); // a pont: nem mentett módosítás
+  await expect(page.locator('#partTabs .pgo')).toHaveText('Alkatrész: Szenzor •'); // a pont: nem mentett módosítás
   await expect(page.locator('[data-act="discard"]')).toBeVisible();
   // a Panel gomb háttérbe teszi, a fül marad, és visszahoz
   await page.click('#workSw [data-work="board"]');
   await expect(page.locator('#partView')).toBeHidden();
-  await expect(page.locator('#partTab')).toBeVisible();
-  await page.click('#partGo');
+  await expect(page.locator('#partTabs')).toBeVisible();
+  await page.click('#partTabs .pgo');
   await expect(page.locator('#pe_name')).toHaveValue('Szenzor');
   // egyetlen fő gomb; a lábtáblázat keskeny, a kijelölt láb további adatai a sora alatt
   await expect(page.locator('.pe .btn.primary')).toHaveText('Mentés');
@@ -196,20 +196,20 @@ test('5.6: a szerkesztő középső nézet, fül a nézetsávban; háttérbe teh
   await page.click('.pe [data-tab="pins"]');
   // fejlécben nincs külön bezáró; a fül × nem mentett módosításnál csak háttérbe tesz, a fül marad
   await expect(page.locator('.pe [data-act="close"]')).toHaveCount(0);
-  await page.click('#partX');
+  await page.click('#partTabs .px');
   await expect(page.locator('#partView')).toBeHidden();
-  await expect(page.locator('#partTab')).toBeVisible();
+  await expect(page.locator('#partTabs')).toBeVisible();
   // újratöltés után is visszajön a fül (háttérben), és onnan folytatható
   await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
-  await expect(page.locator('#partTab')).toBeVisible();
+  await expect(page.locator('#partTabs')).toBeVisible();
   await expect(page.locator('#partView')).toBeHidden();
-  await page.click('#partGo');
+  await page.click('#partTabs .pgo');
   await expect(page.locator('#pe_name')).toHaveValue('Szenzor');
   await page.click('#workSw [data-work="board"]');
-  await page.click('#partX'); // háttérből: bezárja, a piszkozat megmarad
-  await expect(page.locator('#partTab')).toBeHidden();
+  await page.click('#partTabs .px'); // háttérből: bezárja, a piszkozat megmarad
+  await expect(page.locator('#partTabs')).toBeHidden();
   await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
-  await expect(page.locator('#partTab')).toBeHidden();
+  await expect(page.locator('#partTabs')).toBeHidden();
   await page.click('[data-ltab="lib"]');
   await page.click('#bNewPart');
   await expect(page.locator('#pe_name')).toHaveValue('Szenzor');
@@ -236,4 +236,28 @@ test('5.6b: balra az előnézet és az alapadatok, jobbra Lábak | Működés | 
   await expect(page.locator('[data-model="0"][data-k="pin1"]')).toBeFocused();
   // a nyomógomb (Vezérlő) is a Működés fülön
   await expect(page.locator('#pe_s_ctl [data-press="on"]')).toBeVisible();
+});
+
+test('több alkatrész egyszerre: mindegyik saját fület kap, a másik megnyitása nem zárja be az előzőt', async ({ page }) => {
+  const own = await pcb<string>(page, `return pcb.addPart(${JSON.stringify(nokia)}).type;`);
+  await page.click('#bNewPart');
+  await page.fill('#pe_name', 'Félkész modul');
+  // közben megnézem a saját könyvtár egy alkatrészét
+  await page.click('[data-ltab="lib"]');
+  await page.click(`[data-edit="${own}"]`);
+  await expect(page.locator('#partTabs .ptab')).toHaveCount(2);
+  await expect(page.locator('.pe')).toHaveCount(1); // csak a látható szerkesztő van a DOM-ban
+  await expect(page.locator('#pe_json')).toHaveValue(/Nokia 5110 kijelző/); // saját rajzzal: JSON-ban nyílik
+  await expect(page.locator('#partTabs .pgo.on')).toHaveText('Alkatrész: Nokia 5110 kijelző');
+  // vissza az elsőre: a beírt név megvan
+  await page.locator('#partTabs .pgo', { hasText: 'Félkész modul' }).click();
+  await expect(page.locator('#pe_name')).toHaveValue('Félkész modul');
+  // ugyanazt újra megnyitva nem lesz új fül
+  await page.click('[data-ltab="lib"]');
+  await page.click(`[data-edit="${own}"]`);
+  await expect(page.locator('#partTabs .ptab')).toHaveCount(2);
+  // a látható (módosítás nélküli) bezárva a másik jön előre
+  await page.locator('#partTabs .ptab', { hasText: 'Nokia' }).locator('.px').click();
+  await expect(page.locator('#partTabs .ptab')).toHaveCount(1);
+  await expect(page.locator('#pe_name')).toHaveValue('Félkész modul');
 });
