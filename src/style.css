@@ -765,3 +765,10 @@ input:disabled::placeholder{color:var(--muted)}
 #partSplit.on{background:var(--primary-soft);color:var(--primary)}
 .app.part-split .pe-view .pe-vis,.app.part-split .pe-view .pe-parcol{flex:0 0 auto;min-height:auto}
 .app.part-split .pe-view .pe-vis{max-height:none}
+
+/* Egyszerű mód: a haladó részek rejtve */
+html.simple [data-adv]{display:none!important}
+.simple-badge{margin-left:8px;border:1px solid var(--primary);color:var(--primary);background:var(--primary-soft);border-radius:var(--r-pill);font:600 11px var(--display);padding:2px 9px;cursor:pointer}
+.simple-badge[hidden]{display:none}
+#bSimple .ic{visibility:hidden}
+#bSimple.on .ic{visibility:visible;color:var(--primary)}

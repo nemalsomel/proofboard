@@ -38,7 +38,7 @@ export function mountCodeView(root: HTMLElement, host: CodeHost): CodeView {
       <span class="pg-sp"></span>
       <button class="btn" data-pc="copy">Másolás</button>
       <button class="btn" data-pc="dl"></button>
-      <button class="btn" data-pc="pio" title="platformio.ini és src/main.cpp egy zip-ben (VS Code + PlatformIO)">PlatformIO-projekt</button>
+      <button class="btn" data-adv data-pc="pio" title="platformio.ini és src/main.cpp egy zip-ben (VS Code + PlatformIO)">PlatformIO-projekt</button>
     </div>
     <div class="pc-info"></div>
     <div class="pc-scroll"><pre class="pc-code" tabindex="0" aria-label="Generált kód"></pre></div>`;

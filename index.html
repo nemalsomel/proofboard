@@ -12,7 +12,7 @@
 <body>
 <div class="app">
   <header class="top">
-    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Proofboard<button class="board-info" id="boardInfo" title="Panel beállításai"></button></div>
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Proofboard<button class="board-info" id="boardInfo" title="Panel beállításai"></button><button class="simple-badge" id="simpleBadge" title="Egyszerű mód: a haladó részek rejtve. Kattintásra kikapcsol." hidden>Egyszerű mód</button></div>
     <div class="menuwrap">
       <button class="btn ghost" id="bFile" aria-haspopup="menu" aria-expanded="false" aria-controls="fileMenu">Fájl<span data-icon="down" class="caret"></span></button>
       <div class="menu" id="fileMenu" role="menu" aria-label="Fájl" hidden>
@@ -21,12 +21,13 @@
         <button class="menu-item" role="menuitem" id="bSaveFile" data-icon="save" title="A teljes terv (a benne használt saját alkatrészekkel együtt) fájlba">Mentés fájlba<kbd>Ctrl+S</kbd></button>
         <button class="menu-item" role="menuitem" id="bExamples" data-icon="book">Példák…</button>
         <button class="menu-item" role="menuitem" id="bBoard" data-icon="board">Panel beállításai…</button>
-        <div class="menu-sep" role="separator"></div>
-        <p class="menu-h">Saját alkatrészkönyvtár</p>
-        <button class="menu-item" role="menuitem" id="bLibExp" data-icon="save" title="A saját könyvtár mentése fájlba (a tervtől függetlenül)">Könyvtár exportálása</button>
-        <button class="menu-item" role="menuitem" id="bLibImp" data-icon="load" title="Alkatrészek betöltése fájlból a saját könyvtárba">Könyvtár importálása…</button>
-        <div class="menu-sep" role="separator"></div>
-        <button class="menu-item" role="menuitem" id="bJson" data-icon="code">JSON export / import…</button>
+        <button class="menu-item" role="menuitemcheckbox" aria-checked="false" id="bSimple" data-icon="check" title="A haladó részek elrejtése: csíkvágás, kézi ↔ automatikus bekötés, JSON, PlatformIO, saját alkatrész szerkesztése; a Problémák közül csak a hibák">Egyszerű mód</button>
+        <div class="menu-sep" role="separator" data-adv></div>
+        <p class="menu-h" data-adv>Saját alkatrészkönyvtár</p>
+        <button class="menu-item" role="menuitem" data-adv id="bLibExp" data-icon="save" title="A saját könyvtár mentése fájlba (a tervtől függetlenül)">Könyvtár exportálása</button>
+        <button class="menu-item" role="menuitem" data-adv id="bLibImp" data-icon="load" title="Alkatrészek betöltése fájlból a saját könyvtárba">Könyvtár importálása…</button>
+        <div class="menu-sep" role="separator" data-adv></div>
+        <button class="menu-item" role="menuitem" data-adv id="bJson" data-icon="code">JSON export / import…</button>
         <div class="menu-sep" role="separator"></div>
         <p class="menu-h">Téma</p>
         <div class="seg menu-seg" role="group" aria-label="Téma">
@@ -73,7 +74,7 @@
       <section>
       <div class="lib-search"><input type="search" id="libSearch" placeholder="Keresés: név, láb, funkció (pl. i2c, adc, motor)" aria-label="Alkatrész keresése" autocomplete="off"></div>
       <div class="lib-bar">
-        <button class="btn" id="bNewPart" data-icon="plus" title="Saját alkatrész leírása az Alkatrész-szerkesztőben">Új alkatrész</button>
+        <button class="btn" data-adv id="bNewPart" data-icon="plus" title="Saját alkatrész leírása az Alkatrész-szerkesztőben">Új alkatrész</button>
         <span class="sp"></span>
         <div class="grp seg" role="group" aria-label="Csoportok">
           <button class="btn icon" id="libOpenAll" data-icon="expandAll" aria-label="Minden csoport kinyitása" title="Minden csoport kinyitása"></button>
@@ -212,12 +213,12 @@
       <details class="acc" id="accLinks" open>
         <summary><span class="h">Kapcsolatok</span><span id="linkSum"></span></summary>
       <label class="check" style="margin-bottom:8px"><input type="checkbox" id="autoR"> Automatikus útvonaltervezés</label>
-      <label class="check" style="margin-bottom:8px" title="Csíkos panelen a kapcsolatok szerint elvágja a csíkokat az eltérő hálózatú lábak között"><input type="checkbox" id="autoCut"> Automatikus csíkvágás</label>
+      <label class="check" data-adv style="margin-bottom:8px" title="Csíkos panelen a kapcsolatok szerint elvágja a csíkokat az eltérő hálózatú lábak között"><input type="checkbox" id="autoCut"> Automatikus csíkvágás</label>
       <div class="grp" style="margin-bottom:8px">
         <button class="btn" id="bRoute" title="Az automatikus hidak újratervezése">Útvonalak keresése</button>
-        <button class="btn" id="bFreeze" title="Az automatikus hidakat kézi hidakká alakítja">Rögzítés kézire</button>
-        <button class="btn" id="bToAuto" title="A kézi bekötésből kapcsolatokat készít, és automatikusan újrahúzza">Kézi → automatikus</button>
-        <button class="btn" id="bUnroute">Auto hidak törlése</button>
+        <button class="btn" data-adv id="bFreeze" title="Az automatikus hidakat kézi hidakká alakítja">Rögzítés kézire</button>
+        <button class="btn" data-adv id="bToAuto" title="A kézi bekötésből kapcsolatokat készít, és automatikusan újrahúzza">Kézi → automatikus</button>
+        <button class="btn" data-adv id="bUnroute">Auto hidak törlése</button>
       </div>
       <ul class="issues" id="links"></ul>
       <div class="lk" id="linkTotal" style="border-top:1px solid var(--line);margin-top:4px;padding-top:8px;justify-content:space-between;flex-wrap:wrap;gap:4px 10px"></div>

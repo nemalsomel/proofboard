@@ -49,6 +49,8 @@ const ROLEC={out:'#e8590c',c:'#868e96',cp:'#e03131',cn:'#1f2328',col:'#5c666e',b
 const WCOL=[['#1c7ed6','kék'],['#e03131','piros'],['#212529','fekete'],['#f59f00','sárga'],['#2f9e44','zöld'],['#f1f3f5','fehér'],['#e8590c','narancs']];
 /** Eszközök: azonosító, név, gyorsbillentyű, ikon, súgó. */
 const TOOLS=[['select','Kijelölés','V','tSelect','Kijelölés és mozgatás; Shift+kattintás vagy keret: több elem'],['bridge','Híd','B','tBridge','Forrasztóhíd szomszédos lyukak között (húzással több is)'],['wire','Vezeték','W','tWire','Huzal két tetszőleges lyuk között'],['link','Kapcsolat','C','tLink','Két láb összekötése; az útvonalat a program keresi meg'],['cut','Csíkvágás','K','tCut','A réz megszakítása két lyuk között, vagy egy lyuk kifúrása'],['note','Jegyzet','J','tNote','Szöveges cédula a panelon'],['erase','Törlés','E','tErase','Kattintásra vagy húzással töröl'],['pan','Mozgatás','H','tHand','A nézet mozgatása (Szóköz + húzás is)']];
+/** Egyszerű módban rejtett eszközök. */
+const ADV_TOOLS=new Set(['cut']);
 /** Szimulációban is használható eszközök. */
 const SIM_TOOLS=new Set(['select','pan']);
 
@@ -578,6 +580,14 @@ function zoom(dz){zoomTo(ui.zoom+dz);}
 const UIKEY='proofboard.ui.right';
 const uiPref=()=>{try{return JSON.parse(localStorage.getItem(UIKEY)||'{}')||{};}catch(e){return{};}};
 const uiPrefSet=o=>{try{localStorage.setItem(UIKEY,JSON.stringify({...uiPref(),...o}));}catch(e){}};
+/* ---------- Egyszerű mód (5.5): a haladó részek rejtve ([data-adv] elemek, csíkvágás, ritkább kategóriák), a Problémák közül csak a hibák ---------- */
+const SIMPLE_HIDE_CATS=new Set(['Logika','Csatlakozó']);
+const isSimple=()=>document.documentElement.classList.contains('simple');
+function setSimple(on,remember=true){on=!!on;document.documentElement.classList.toggle('simple',on);if(remember)uiPrefSet({simple:on});
+  const b=$('#bSimple');b.setAttribute('aria-checked',String(on));b.classList.toggle('on',on);$('#simpleBadge').hidden=!on;
+  if(on&&ADV_TOOLS.has(ui.tool))setTool('select');
+  if(D){renderLib();renderLeft();renderRight();sbUpdate();codeRefresh();}
+  if(remember)log(on?'Egyszerű mód: a haladó részek rejtve.':'Egyszerű mód kikapcsolva.');}
 function rtab(name,remember=true){if(name==='code'){if(ui.rtab!=='code')ui.rtabBeforeCode=ui.rtab;codeMount();}ui.rtab=name;
   document.querySelectorAll('[data-rtab]').forEach(b=>{const on=b.dataset.rtab===name;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
   document.querySelectorAll('[data-rpane]').forEach(p=>{p.hidden=p.dataset.rpane!==name;});
@@ -681,7 +691,7 @@ document.addEventListener('keydown',ev=>{
   if(['1','2','3'].includes(ev.key)&&!ev.shiftKey){const w=['board','prog','split'][+ev.key-1];if(w!=='split'||!MOB.matches)setWork(w);return;}
   if(k==='p'){bottomPanel();return;}
   if(ui.sim){const tool=TOOLS.find(x=>x[2].toLowerCase()===k&&SIM_TOOLS.has(x[0]));if(tool)setTool(tool[0]);return;}
-  const tool=TOOLS.find(x=>x[2].toLowerCase()===k);if(tool){setTool(tool[0]);return;}
+  const tool=TOOLS.find(x=>x[2].toLowerCase()===k&&!(isSimple()&&ADV_TOOLS.has(x[0])));if(tool){setTool(tool[0]);return;}
   if(k==='r')rotate();else if(k==='m')mirror();else if(k==='delete'||k==='backspace')delSel();else if(k==='d'){const p=selPart();if(p)duplicate(p);}else if(k==='x'){toggleXray();}
 });
 
@@ -756,7 +766,7 @@ function bindPins(pr){const d=pr.querySelector('#pinsSec');if(d)d.addEventListen
 /** Tulajdonság-művelet gomb: ikon + név, a gyorsbillentyű súgóban és Ctrl-címkén. */
 const ACT=(id,ic,l,k,t='',cls='')=>`<button class="btn${cls}" id="${id}" data-kbd="${k}" title="${t?t+' ':''}(${k})">${icon(ic)}${l}</button>`;
 function renderLeft0(){
-  $('#tools').innerHTML=TOOLS.map(([id,l,k,ic,h])=>`<button class="btn tool ${ui.tool===id&&!ui.placing?'on':''}" data-tool="${id}" title="${l} (${k}) – ${h}" aria-label="${l}" aria-keyshortcuts="${k}" ${ui.sim&&!SIM_TOOLS.has(id)?'disabled':''}><span class="ti">${icon(ic)}<kbd>${k}</kbd></span><span class="tl">${l}</span></button>`).join('');
+  $('#tools').innerHTML=TOOLS.filter(x=>!(isSimple()&&ADV_TOOLS.has(x[0]))).map(([id,l,k,ic,h])=>`<button class="btn tool ${ui.tool===id&&!ui.placing?'on':''}" data-tool="${id}" title="${l} (${k}) – ${h}" aria-label="${l}" aria-keyshortcuts="${k}" ${ui.sim&&!SIM_TOOLS.has(id)?'disabled':''}><span class="ti">${icon(ic)}<kbd>${k}</kbd></span><span class="tl">${l}</span></button>`).join('');
   renderLib();
   $('#wireColorRow').hidden=ui.tool!=='wire'||!!ui.placing;
   {const g=isGroup()?ui.sel:null,sp=selPart();$('#selSumm').textContent=sp?sp.label:g&&gSize(g)?`${gSize(g)} elem`:ui.sel&&ui.sel.kind==='wire'?'vezeték':ui.sel&&ui.sel.kind==='bridge'?'híd':ui.sel&&ui.sel.kind==='note'?'jegyzet':'';}
@@ -775,7 +785,7 @@ function renderLeft0(){
     $('#pRot').onclick=rotate;$('#pMir').onclick=mirror;$('#pDel').onclick=delSel;
     const more=$('#pMore');
     {$('#pDup').onclick=()=>duplicate(p);$('#pXray').onchange=e=>{pushUndo();if(e.target.checked)p.xray=true;else delete p.xray;commit(true);};}
-    {const row=more;const own=!(p.type in PARTS);row.innerHTML=own?'<button class="btn" id="pEditDef">✎ Alkatrész szerkesztése</button>':'<button class="btn" id="pCopyDef" title="A beépített leírásból saját, szerkeszthető alkatrész">Másolat saját alkatrészként</button>';pr.appendChild(row);
+    {const row=more;const own=!(p.type in PARTS);row.innerHTML=own?'<button class="btn" data-adv id="pEditDef">✎ Alkatrész szerkesztése</button>':'<button class="btn" data-adv id="pCopyDef" title="A beépített leírásból saját, szerkeszthető alkatrész">Másolat saját alkatrészként</button>';pr.appendChild(row);
       if(own)$('#pEditDef').onclick=()=>openEditor(editorHost,{type:p.type});else $('#pCopyDef').onclick=()=>openEditor(editorHost,{from:PARTS[p.type]});}
     {more.insertAdjacentHTML('beforeend','<button class="btn" id="pToAuto" title="Az alkatrész kézi bekötését kapcsolatokká alakítja, így mozgatáskor követi">Bekötés automatikusra</button>');
       $('#pToAuto').onclick=()=>{if(!manualToAuto(p.id))flashMsg('Ennek az alkatrésznek nincs kézi bekötése');};}
@@ -836,10 +846,10 @@ $('#swatches').addEventListener('click',e=>{const b=e.target.closest('[data-col]
 
 function renderRight(){const fk=focusKey();renderRight0();restoreFocus(fk);}
 function renderRight0(){
-  const ne=ISSUES.filter(i=>i.sev==='err').length,nw=ISSUES.filter(i=>i.sev==='warn').length,np=ne+nw;
+  const ne=ISSUES.filter(i=>i.sev==='err').length,nw=isSimple()?0:ISSUES.filter(i=>i.sev==='warn').length,np=ne+nw;
   for(const t of [$('#tabIss'),$('#bpIssN')]){t.textContent=np?String(np):'';t.classList.toggle('err',ne>0);}
-  const SO={err:0,warn:1,info:2};
-  $('#issues').innerHTML=ISSUES.length?ISSUES.map((x,i)=>[x,i]).sort((a,b)=>SO[a[0].sev]-SO[b[0].sev]).map(([x,i])=>`<li data-i="${i}" class="c-${x.sev}"><span class="dot"></span><span style="color:var(--fg)">${esc(x.msg)}</span></li>`).join(''):'<li class="muted" style="cursor:default">Nincs zárlat vagy bekötési hiba.</li>';
+  const SO={err:0,warn:1,info:2},SHOWN=ISSUES.map((x,i)=>[x,i]).filter(([x])=>!isSimple()||x.sev==='err'); // egyszerű módban csak a hibák
+  $('#issues').innerHTML=SHOWN.length?SHOWN.sort((a,b)=>SO[a[0].sev]-SO[b[0].sev]).map(([x,i])=>`<li data-i="${i}" class="c-${x.sev}"><span class="dot"></span><span style="color:var(--fg)">${esc(x.msg)}</span></li>`).join(''):'<li class="muted" style="cursor:default">Nincs zárlat vagy bekötési hiba.</li>';
   $('#usb').checked=!!D.settings.usb;
   $('#mHold').classList.toggle('on',D.settings.btnMode!=='toggle');$('#mToggle').classList.toggle('on',D.settings.btnMode==='toggle');
   let h='';
@@ -994,6 +1004,8 @@ menu.addEventListener('keydown',e=>{const it=[...menu.querySelectorAll('.menu-it
   else if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();it[(i+(e.key==='ArrowDown'?1:it.length-1))%it.length].focus();}});
 $('#bExamples').onclick=()=>{renderExamples();openDlg('#dlgEx');};
 $('#bJson').onclick=()=>openDlg('#dlgJson');
+$('#bSimple').onclick=()=>{setSimple(!isSimple());};
+$('#simpleBadge').onclick=()=>setSimple(false);
 /* téma: automatikus (a rendszer szerint), világos, sötét; a választás megmarad */
 const THEMEKEY='proofboard.ui.theme';
 const themeGet=()=>{try{const v=localStorage.getItem(THEMEKEY);return v==='light'||v==='dark'?v:'auto';}catch(e){return'auto';}};
@@ -1023,7 +1035,7 @@ function sbUpdate(){const tl=$('#sbTool');if(!tl||!D)return;const T=TOOLS.find(x
   tl.innerHTML=ui.sim?'':ui.placing?`Lerakás: <b>${esc(DEFS[ui.placing]?DEFS[ui.placing].name:ui.placing)}</b>`:`Eszköz: <b>${T?T[1]:esc(ui.tool)}</b>`;
   let sel='';if(ui.sel){if(ui.sel.kind==='group'){const p=selPart(),n=gSize(ui.sel);sel=p?p.label:n?`${n} elem`:'';}else sel={wire:'vezeték',bridge:'híd',note:'jegyzet'}[ui.sel.kind]||'';}
   $('#sbSel').innerHTML=sel?`Kijelölve: <b>${esc(sel)}</b>`:'';
-  const ne=ISSUES.filter(i=>i.sev==='err').length,nw=ISSUES.filter(i=>i.sev==='warn').length,ni=ISSUES.length-ne-nw,b=$('#sbIss');
+  const ne=ISSUES.filter(i=>i.sev==='err').length,nw=isSimple()?0:ISSUES.filter(i=>i.sev==='warn').length,ni=isSimple()?0:ISSUES.length-ne-ISSUES.filter(i=>i.sev==='warn').length,b=$('#sbIss');
   b.className='sb-item sb-btn '+(ne?'err':nw?'warn':'ok');
   b.innerHTML=ne||nw?icon(ne?'error':'warn')+[ne?`${ne} hiba`:'',nw?`${nw} figyelmeztetés`:''].filter(Boolean).join(' · '):ni?icon('info')+`${ni} megjegyzés`:icon('check')+'Nincs probléma';
   const sm=$('#sbSim');sm.className='sb-item'+(ui.sim?' run':'');sm.innerHTML=`<i class="sb-dot"></i>${ui.sim?'Szimuláció fut':'Szimuláció áll'}`;}
@@ -1303,7 +1315,7 @@ function renderLib(){const q=(ui.libQ||'').trim(),pref=libPref(),fav=new Set(pre
       `<button class="btn libfav ${fav.has(t)?'on':''}" data-fav="${t}" title="${fav.has(t)?'Kedvenc (kattintásra kiveszi)':'Kedvencekhez'}" aria-label="${esc(d.name)} kedvenc" aria-pressed="${fav.has(t)}">${fav.has(t)?'★':'☆'}</button>`+
       `<button class="btn ${ui.placing===t?'on':''}" data-lib="${t}" ${ui.sim?'disabled':''}>${esc(d.name)}<span>${esc(d.fp)}</span></button>`+
       (projOnly?`<button class="btn" data-tolib="${t}" title="Hozzáadás a saját könyvtárhoz (más tervekben is elérhető lesz)" aria-label="${esc(d.name)} a könyvtárba" ${ui.sim?'disabled':''}>＋</button>`:'')+
-      (own?`<button class="btn" data-edit="${t}" title="Szerkesztés" aria-label="${esc(d.name)} szerkesztése" ${ui.sim?'disabled':''}>✎</button>`:'')+`</div>`;};
+      (own?`<button class="btn" data-adv data-edit="${t}" title="Szerkesztés" aria-label="${esc(d.name)} szerkesztése" ${ui.sim?'disabled':''}>✎</button>`:'')+`</div>`;};
   const group=(id,title,ts,hint)=>{ts=ts.filter(ok);if(!ts.length)return'';const open=q||!closed.has(id);
     return `<details class="libgrp" data-grp="${esc(id)}" ${open?'open':''}><summary><span>${esc(title)}</span><span class="muted small">${ts.length}</span></summary>${hint?`<p class="help" style="margin:2px 0 4px">${hint}</p>`:''}${ts.map(item).join('')}</details>`;};
   const all=Object.keys(DEFS),proj=Object.keys(D.customParts||{}).filter(t=>!(t in LIB)),libT=Object.keys(LIB),cats=[...new Set(all.filter(t=>t in PARTS).map(t=>DEFS[t].cat))];
@@ -1311,7 +1323,7 @@ function renderLib(){const q=(ui.libQ||'').trim(),pref=libPref(),fav=new Set(pre
   if(!q){h+=group('fav','Kedvencek',[...fav].filter(t=>DEFS[t]));h+=group('recent','Legutóbb használt',(pref.recent||[]).filter(t=>DEFS[t]));}
   h+=group('proj','Projekt',proj,'A megnyitott terv saját alkatrészei, amelyek nincsenek a könyvtáradban. ＋: hozzáadás a saját könyvtárhoz.');
   h+=group('lib','Saját könyvtár',libT);
-  for(const c of cats)h+=group('cat:'+c,c,all.filter(t=>t in PARTS&&DEFS[t].cat===c));
+  for(const c of cats)if(!(isSimple()&&SIMPLE_HIDE_CATS.has(c)))h+=group('cat:'+c,c,all.filter(t=>t in PARTS&&DEFS[t].cat===c));
   $('#lib').innerHTML=h||'<p class="help">Nincs találat.</p>';}
 $('#libSearch').addEventListener('input',e=>{ui.libQ=e.target.value;renderLib();libBar();});
 /** Minden csoport kinyitása / becsukása (keresés közben minden találati csoport nyitva, ezért ott nem élnek). */
@@ -1482,6 +1494,8 @@ window.pcb={
   press(label,down=true){const p=D.parts.find(x=>x.label===label&&hasPress(x));if(!p)return false;if(!ui.sim)setSim(true);ui.pressed[p.id]=!!down;recompute();return true;},
   read(){return SIM?SIM.gpios.map(g=>({pin:g.q.name,mode:g.mode,V:+g.V.toFixed(3),level:logic(g)})):[];},
   /** Problémák (hiba, figyelmeztetés); all: a megjegyzésekkel (info) együtt. */
+  /** Egyszerű mód lekérdezése / állítása. */
+  simple(on){if(on!==undefined)setSimple(on);return isSimple();},
   issues(all){return ISSUES.filter(i=>all||i.sev!=='info').map(i=>({sev:i.sev,msg:i.msg,holes:i.holes}));},
   /** Az alkatrész lábai bekötöttséggel (a tulajdonságok Lábak táblázata). */
   pinRows(label){const p=D.parts.find(x=>x.label===label);return p?pinRows(D,A0,p).map(r=>({ref:r.ref,label:r.label,name:r.name,role:r.role,target:r.target,net:r.net,floating:r.floating})):null;},
@@ -1538,5 +1552,6 @@ function statusText(){return $('#status').textContent;}
   window.addEventListener('resize',()=>draw());
   splitDir(!!uiPref().splitV);
   applyLayout(LAY_S.cur,false);
+  setSimple(!!uiPref().simple,false);
   restoreParked(editorHost); // a háttérben hagyott, nem mentett alkatrész füle
 })();

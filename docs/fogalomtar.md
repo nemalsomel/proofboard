@@ -64,4 +64,5 @@ Egy dologra egy szó: a felületen, a súgóban, a példák jegyzeteiben és a h
 | **tulajdonságablak** | a kijelölés beállításai; lebeg a vászon fölött, vagy a jobb sávba rögzítve *Tulajdonságok* szakasz |
 | **alsó panel** | a vászon alatti, összecsukható sáv: Problémák és Napló |
 | **állapotsor** | a vászon alatti sor: rámutatott lyuk, eszköz, kijelölés, problémák, szimuláció |
+| **egyszerű mód** | a haladó részek elrejtése kezdőknek (Fájl menü); a Problémák közül csak a hibák látszanak |
 | **Fájl menü** | új terv, megnyitás, mentés, példák, saját könyvtár export/import, JSON, téma |
