@@ -569,7 +569,7 @@ input:disabled::placeholder{color:var(--muted)}
 .pg-head>span{overflow:hidden;text-overflow:ellipsis}
 .pg-grip{width:14px;height:14px;opacity:.75;flex:none}
 /* Program és Szimuláció elrendezésben az eszközsávon csak a Kijelölés és a Mozgatás */
-.app.lay-prog .toolstrip .btn.tool:not([data-tool="select"]):not([data-tool="pan"]),.app.lay-sim .toolstrip .btn.tool:not([data-tool="select"]):not([data-tool="pan"]){display:none}
+.app.lay-sim .toolstrip .btn.tool:not([data-tool="select"]):not([data-tool="pan"]){display:none}
 @media (max-width:1250px){.board-info{display:none}}
 /* gyorsbillentyű-címkék (Ctrl nyomva tartva) */
 .app.keys [data-kbd]{position:relative;overflow:visible}

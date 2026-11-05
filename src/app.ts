@@ -312,8 +312,8 @@ function onDown(ev,hAt){
   if(ui.tool==='erase'){pushUndo();ui.drag={kind:'erase',any:false};cv.setPointerCapture(ev.pointerId);eraseAt(h,true);return;}
 }
 /** A kattintás helye szerinti vágás: lyuk közepén kifúrt lyuk, két sor között rés. */
-/** A csíkvágás típusa: automatikus (a kattintás helye dönt: lyuk közepén furat, két lyuk között rés), furat vagy rés. */
-const CUT_KINDS=[['auto','Automatikus','A kattintás helye dönt: lyuk közepén furat, két lyuk között rés'],['hole','Furat','A lyuk kifúrása: a csík ott megszakad'],['gap','Rés','Szakadás két lyuk között: a csík a két lyuk között megszakad']];
+/** A csíkvágás típusa: hely szerint (a kattintás helye dönt: lyuk közepén furat, két lyuk között rés), furat vagy rés. */
+const CUT_KINDS=[['auto','Hely szerint','A kattintás helye dönt: lyuk közepén furat, két lyuk között rés'],['hole','Furat','A lyuk kifúrása: a csík ott megszakad'],['gap','Rés','Szakadás két lyuk között: a csík a két lyuk között megszakad']];
 const cutKind=()=>{const k=uiPref().cutKind;return k==='hole'||k==='gap'?k:'auto';};
 function cutAt(h){const k=cutKind(),gap=()=>{const r=Math.floor(h.rf);return[Math.max(0,Math.min(D.board.rows-2,r)),h.c,0];};
   if(k==='hole')return[h.r,h.c,1];if(k==='gap')return gap();
@@ -377,7 +377,7 @@ function onMove(ev,hAt){
     if(nr!==d.p.r||nc!==d.p.c){const t={...d.p,r:nr,c:nc};if(partFits(t)){if(!d.pushed){pushUndo();d.pushed=true;if(D.settings.autoRoute&&D.links.length)ui.hideAuto=movedLinks(d.p);}d.p.r=nr;d.p.c=nc;recompute();renderLeft();}}}
   if(d&&d.kind==='bridge'&&inb(h.r,h.c)){let[r,c]=d.last;let guard=0;while((r!==h.r||c!==h.c)&&guard++<200){let nr=r,nc=c;if(r!==h.r)nr+=Math.sign(h.r-r);else nc+=Math.sign(h.c-c);if(addBridge(r,c,nr,nc))d.n++;r=nr;c=nc;}d.last=[r,c];if(d.n)recompute();}
   if(d&&d.kind==='erase')eraseAt(h,false);
-  if(!prev||prev.r!==h.r||prev.c!==h.c||ui.placing||ui.wireStart){status();draw();}
+  if(!prev||prev.r!==h.r||prev.c!==h.c||ui.placing||ui.wireStart||(ui.tool==='cut'&&String(cutAt(prev))!==String(cutAt(h)))){status();draw();} // csíkvágásnál a lyukon belül is követi, hová kerül
 }
 function endDrag(ev){
   const pid=ui.holdPtr.get(ev.pointerId);if(pid){ui.pressed[pid]=false;ui.holdPtr.delete(ev.pointerId);recompute();}
@@ -977,7 +977,7 @@ function layPatch(o){if(ui.layApplying)return;LAY_S=layRemember(LAY_S,o);layStor
 function applyLayout(id,store=true,over){if(!isLayout(id))id='design';const r=laySwitch(LAY_S,id);LAY_S=r.store;const st={...r.state,...(over||{})};ui.layApplying=true;
   try{sideCollapse('l',st.l,false);sideCollapse('r',st.r,false);setWork(MOB.matches&&st.work==='split'?'prog':st.work,false);rtab(st.rtab,false);bottomPanel(st.bottom,null,false);}
   finally{ui.layApplying=false;}
-  if(id!=='design'&&!SIM_TOOLS.has(ui.tool))setTool('select'); // a Program és a Szimuláció elrendezésben csak Kijelölés és Mozgatás
+  if(id==='sim'&&!SIM_TOOLS.has(ui.tool))setTool('select'); // a Szimuláció elrendezésben csak Kijelölés és Mozgatás (a Programban a panelen minden eszköz kell)
   if(store)layStore();layUI();return id;}
 document.querySelectorAll('[data-layout]').forEach(b=>b.addEventListener('click',()=>applyLayout(b.dataset.layout)));
 $('#layReset').onclick=()=>{LAY_S=resetLayout(LAY_S);applyLayout(LAY_S.cur);};
@@ -1115,10 +1115,18 @@ function drawPlugs(alpha){ctx.save();ctx.globalAlpha=alpha;ctx.lineCap='round';
     const h0=pr[0][1],h1=pr[pr.length-1][1];let [vx,vy]=pr.length<2?nrm(ax-bx,ay-by):nrm(hy(h1.r)-hy(h0.r),-(hx(h1.c)-hx(h0.c)));
     const side=vx*(ax-bx)+vy*(ay-by);if(side<-P||(Math.abs(side)<=P&&ux*vx+uy*vy<0)){vx=-vx;vy=-vy;} // a csatlakozó a kábel felé néz (egy vonalban: a kábellel egy irányba)
     const Lk=Math.max(P*1.6,Math.hypot(bx-ax,by-ay)*0.35),sel=isSelPart(p)||D.parts.some(h=>h.id===p.plug&&isSelPart(h));
+    const hv=ui.hover,short=ui.stub&&!(hv&&pr.some(([q,h])=>(q.r===hv.r&&q.c===hv.c)||(h.r===hv.r&&h.c===hv.c))); // rámutatva a teljes kábel
     pr.forEach(([q,h],i)=>{const x1=hx(q.c),y1=hy(q.r),x2=hx(h.c),y2=hy(h.r),col=plugColor(q,i);
       const curve=()=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.bezierCurveTo(x1+ux*Lk,y1+uy*Lk,x2+vx*Lk,y2+vy*Lk,x2,y2);ctx.stroke();};
-      if(sel){ctx.strokeStyle=css('--accent');ctx.lineWidth=P*0.42;curve();}
-      ctx.strokeStyle='rgba(0,0,0,.45)';ctx.lineWidth=P*0.26;curve();ctx.strokeStyle=col;ctx.lineWidth=P*0.17;curve();
+      // rövid vezeték nézet: a kábelből csak a két vég csonkja látszik szakadásjellel; kijelölve vagy rámutatva a teljes
+      const B=(t,a,b,c,d)=>{const u=1-t;return u*u*u*a+3*u*u*t*b+3*u*t*t*c+t*t*t*d;},bx=t=>B(t,x1,x1+ux*Lk,x2+vx*Lk,x2),by=t=>B(t,y1,y1+uy*Lk,y2+vy*Lk,y2);
+      const part=(t0,t1)=>{ctx.beginPath();ctx.moveTo(bx(t0),by(t0));for(let k=1;k<=12;k++){const t=t0+(t1-t0)*k/12;ctx.lineTo(bx(t),by(t));}ctx.stroke();};
+      const stub=short&&!sel?Math.min(0.45,(P*1.8)/(Math.hypot(x2-x1,y2-y1)||1)):0;
+      const draw3=f=>{if(sel){ctx.strokeStyle=css('--accent');ctx.lineWidth=P*0.42;f();}ctx.strokeStyle='rgba(0,0,0,.45)';ctx.lineWidth=P*0.26;f();ctx.strokeStyle=col;ctx.lineWidth=P*0.17;f();};
+      if(!stub)draw3(curve);
+      else{draw3(()=>part(0,stub));draw3(()=>part(1-stub,1));
+        for(const [t,s] of [[stub,1],[1-stub,-1]]){const dx=bx(t+0.01*s)-bx(t),dy=by(t+0.01*s)-by(t),l=Math.hypot(dx,dy)||1,tx=dx/l,ty=dy/l,nx=-ty*P*0.3,ny=tx*P*0.3;
+          ctx.strokeStyle=col;ctx.lineWidth=Math.max(1.4,P*0.1);for(const o of [0.2,0.42]){const cx=bx(t)+tx*P*o,cy=by(t)+ty*P*o;line(cx-nx,cy-ny,cx+nx,cy+ny);}}}
       ctx.fillStyle='#1d1d1d';ctx.fillRect(x2-P*0.22,y2-P*0.22,P*0.44,P*0.44);ctx.fillStyle=col;ctx.beginPath();ctx.arc(x2,y2,P*0.12,0,7);ctx.fill();});
     // lábnevek a csatlakozón, a kábellel átellenes oldalon (ahová forrasztasz)
     if(alpha>=1&&P>=12)pr.forEach(([q],i)=>{const h=pr[i][1];stext(hx(h.c)-vx*P*0.85,hy(h.r)-vy*P*0.85,q.name,Math.max(7,P*0.4),q.role==='gnd'?'#212529':plugColor(q,i)==='#c92a2a'?'#c92a2a':'#5c3d0a','rgba(255,252,240,.9)');});}

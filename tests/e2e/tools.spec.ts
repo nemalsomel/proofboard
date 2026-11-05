@@ -43,10 +43,12 @@ test('eszközsáv: ikon és név, súgóban a gyorsbillentyű; Ctrl nyomva tartv
   await expect(sel).toBeHidden();
 });
 
-test('Program és Szimuláció elrendezésben csak Kijelölés és Mozgatás; szimulációban is kijelölhető alkatrész', async ({ page }) => {
+test('Szimuláció elrendezésben csak Kijelölés és Mozgatás (a Programban minden eszköz); szimulációban is kijelölhető alkatrész', async ({ page }) => {
   await pcb(page, `pcb.example('rc');`);
   await page.keyboard.press('k');
-  await page.keyboard.press('Alt+2');
+  await page.keyboard.press('Alt+2'); // Program: a panelen minden eszköz elérhető
+  await expect(page.locator('#tools [data-tool="cut"]')).toHaveClass(/on/);
+  await page.keyboard.press('Alt+3');
   await expect(page.locator('#tools [data-tool="select"]')).toHaveClass(/on/); // a Csíkvágás nem elérhető, Kijelölésre vált
   await expect(page.locator('#tools [data-tool="cut"]')).toBeHidden();
   await expect(page.locator('#tools [data-tool="pan"]')).toBeVisible();
@@ -200,7 +202,7 @@ test('csíkvágás típusa az eszközsáv fölött: automatikus, furat vagy rés
   await page.keyboard.press('k');
   const row = page.locator('#cutKindRow');
   await expect(row).toBeVisible();
-  await expect(row.locator('[data-ck]')).toHaveText(['Automatikus', 'Furat', 'Rés']);
+  await expect(row.locator('[data-ck]')).toHaveText(['Hely szerint', 'Furat', 'Rés']);
   await expect(row.locator('[data-ck="auto"]')).toHaveClass(/on/);
   const ts = (await page.locator('#toolstrip').boundingBox())!, rb = (await row.boundingBox())!;
   expect(rb.y + rb.height).toBeLessThanOrEqual(ts.y); // a sáv fölött, mint a vezeték színe
@@ -224,4 +226,17 @@ test('csíkvágás típusa az eszközsáv fölött: automatikus, furat vagy rés
   await page.mouse.move(5, 300);
   await expect(row.locator('[data-ck]:visible')).toHaveCount(1);
   await expect(row.locator('[data-ck="gap"]')).toBeVisible();
+});
+
+test('csíkvágás „Hely szerint”: a szaggatott előnézet a lyukon belül is követi, hová kerül a vágás', async ({ page }) => {
+  await pcb(page, `pcb.load({ board: { rows: 30, cols: 20, sec: 3 }, parts: [{ id: 'p1', type: 'res', label: 'R1', r: 25, c: 2, rot: 0, mir: false, props: {} }], bridges: [], wires: [], links: [], gpio: {}, settings: { usb: true, btnMode: 'hold', autoRoute: false }, seq: 10 });`);
+  await page.keyboard.press('k');
+  const a = await pcb<any>(page, `return pcb.reveal(10, 5);`);
+  const P = 14 * parseInt((await page.locator('#zLbl').textContent())!, 10) / 100;
+  const shot = async () => page.locator('#cv').screenshot();
+  await page.mouse.move(a.x, a.y); // furat
+  const s1 = await shot();
+  await page.mouse.move(a.x, a.y + P * 0.4); // ugyanaz a lyuk, de már a rés felé
+  const s2 = await shot();
+  expect(s1.equals(s2)).toBe(false); // az előnézet újrarajzolódott
 });
