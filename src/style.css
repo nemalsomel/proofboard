@@ -772,3 +772,8 @@ html.simple [data-adv]{display:none!important}
 .simple-badge[hidden]{display:none}
 #bSimple .ic{visibility:hidden}
 #bSimple.on .ic{visibility:visible;color:var(--primary)}
+
+/* Csíkvágás típusa az eszközsáv fölött (mint a vezeték színe); összecsukva csak a választott */
+.toolstrip .cutkind .seg .btn{padding:3px 9px;font-size:12px}
+.toolstrip.col:not(.peek) .cutkind .btn:not(.on){display:none}
+.toolstrip.col:not(.peek) .cutkind .btn.on{border-radius:var(--r-md)}

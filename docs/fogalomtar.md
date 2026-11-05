@@ -11,7 +11,7 @@ Egy dologra egy szó: a felületen, a súgóban, a példák jegyzeteiben és a h
 | **szekció** | szekciós panelen az egymással összekötött lyukak rézdarabja (pl. 1×3) | sziget, csoport |
 | **csík** | csíkos panelen (stripboard) a teljes hosszú rézcsík vagy annak elvágott darabja | sáv |
 | **pontraszter** | olyan panel, ahol minden lyuk külön rézzel áll | perfboard |
-| **csíkvágás** | a réz megszakítása két lyuk között, vagy egy lyuk kifúrása | vágás, szakítás |
+| **csíkvágás** | a réz megszakítása: **rés** (két lyuk között) vagy **furat** (egy lyuk kifúrása) | vágás, szakítás |
 | **híd** | forrasztással (ónnal) összekötött két szomszédos lyuk; az eszköz neve is *Híd* | forrasztóhíd (csak magyarázatban) |
 | **vezeték** | huzal két tetszőleges lyuk között | drót, jumper |
 | **kapcsolat** | kívánt összeköttetés két láb között; a hidakat és vezetékeket hozzá az útvonalkereső keresi meg | link, net, kötés |

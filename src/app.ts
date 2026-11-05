@@ -312,7 +312,12 @@ function onDown(ev,hAt){
   if(ui.tool==='erase'){pushUndo();ui.drag={kind:'erase',any:false};cv.setPointerCapture(ev.pointerId);eraseAt(h,true);return;}
 }
 /** A kattintás helye szerinti vágás: lyuk közepén kifúrt lyuk, két sor között rés. */
-function cutAt(h){const fr=h.rf-Math.floor(h.rf);if(Math.abs(h.rf-h.r)<0.28)return[h.r,h.c,1];const r=Math.floor(h.rf);return[Math.max(0,Math.min(D.board.rows-2,r)),h.c,0];}
+/** A csíkvágás típusa: automatikus (a kattintás helye dönt: lyuk közepén furat, két lyuk között rés), furat vagy rés. */
+const CUT_KINDS=[['auto','Automatikus','A kattintás helye dönt: lyuk közepén furat, két lyuk között rés'],['hole','Furat','A lyuk kifúrása: a csík ott megszakad'],['gap','Rés','Szakadás két lyuk között: a csík a két lyuk között megszakad']];
+const cutKind=()=>{const k=uiPref().cutKind;return k==='hole'||k==='gap'?k:'auto';};
+function cutAt(h){const k=cutKind(),gap=()=>{const r=Math.floor(h.rf);return[Math.max(0,Math.min(D.board.rows-2,r)),h.c,0];};
+  if(k==='hole')return[h.r,h.c,1];if(k==='gap')return gap();
+  if(Math.abs(h.rf-h.r)<0.28)return[h.r,h.c,1];return gap();}
 function toggleCut(ct){const k=ct.join(','),same=x=>x.join(',')===k;
   if((D.cuts||[]).some(same)){pushUndo();D.cuts=D.cuts.filter(x=>!same(x));commit();return;}
   const L=buildLayout(D.board,[ct]);if(!L.cuts.length){flashMsg(ct[2]?'Ide nem tehető vágás':'Itt nincs mit elvágni (szekcióhatár vagy a csík vége)');return;}
@@ -686,6 +691,8 @@ function renderLeft0(){
   $('#tools').innerHTML=TOOLS.filter(x=>!(isSimple()&&ADV_TOOLS.has(x[0]))).map(([id,l,k,ic,h])=>`<button class="btn tool ${ui.tool===id&&!ui.placing?'on':''}" data-tool="${id}" title="${l} (${k}) – ${h}" aria-label="${l}" aria-keyshortcuts="${k}" ${ui.sim&&!SIM_TOOLS.has(id)?'disabled':''}><span class="ti">${icon(ic)}<kbd>${k}</kbd></span><span class="tl">${l}</span></button>`).join('');
   renderLib();
   $('#wireColorRow').hidden=ui.tool!=='wire'||!!ui.placing;
+  $('#cutKindRow').hidden=ui.tool!=='cut'||!!ui.placing;
+  {const ck=cutKind();$('#cutKinds').innerHTML=CUT_KINDS.map(([k,l,t])=>`<button class="btn ${ck===k?'on':''}" data-ck="${k}" aria-pressed="${ck===k}" title="${t}">${l}</button>`).join('');}
   {const g=isGroup()?ui.sel:null,sp=selPart();$('#selSumm').textContent=sp?sp.label:g&&gSize(g)?`${gSize(g)} elem`:ui.sel&&ui.sel.kind==='wire'?'vezeték':ui.sel&&ui.sel.kind==='bridge'?'híd':ui.sel&&ui.sel.kind==='note'?'jegyzet':'';}
   $('#swatches').innerHTML=WCOL.map(([c,l])=>`<button class="sw ${ui.wireColor===c?'on':''}" data-col="${c}" title="${l}" aria-label="${l}" style="background:${c}"></button>`).join('');
   const pr=$('#props');const p=selPart();
@@ -759,6 +766,7 @@ $('#tools').addEventListener('click',e=>{const b=e.target.closest('[data-tool]')
 $('#lib').addEventListener('click',e=>{const ed=e.target.closest('[data-edit]');if(ed){openEditor(editorHost,{type:ed.dataset.edit});return;}
   const fv=e.target.closest('[data-fav]');if(fv){libFavToggle(fv.dataset.fav);renderLib();return;}
   const tl=e.target.closest('[data-tolib]');if(tl){toLibrary(tl.dataset.tolib);return;}const b=e.target.closest('[data-lib]');if(!b)return;const t=b.dataset.lib;ui.placing=ui.placing===t?null:t;ui.ghost={rot:0,mir:false};ui.sel=null;ui.wireStart=null;renderLeft();draw();if(MOB.matches&&ui.placing){sheet('');flashHint('Érintsd meg a panelt, húzd a helyére, és engedd fel');}});
+$('#cutKinds').addEventListener('click',e=>{const b=e.target.closest('[data-ck]');if(b){uiPrefSet({cutKind:b.dataset.ck});renderLeft();draw();}});
 $('#swatches').addEventListener('click',e=>{const b=e.target.closest('[data-col]');if(b){ui.wireColor=b.dataset.col;renderLeft();}});
 
 function renderRight(){const fk=focusKey();renderRight0();restoreFocus(fk);}
@@ -1389,6 +1397,8 @@ window.pcb={
   read(){return SIM?SIM.gpios.map(g=>({pin:g.q.name,mode:g.mode,V:+g.V.toFixed(3),level:logic(g)})):[];},
   /** Problémák (hiba, figyelmeztetés); all: a megjegyzésekkel (info) együtt. */
   /** Egyszerű mód lekérdezése / állítása. */
+  /** A csíkvágás típusa: 'auto' | 'hole' | 'gap'. */
+  cutKind(k){if(k)uiPrefSet({cutKind:k});renderLeft();return cutKind();},
   simple(on){if(on!==undefined)setSimple(on);return isSimple();},
   issues(all){return ISSUES.filter(i=>all||i.sev!=='info').map(i=>({sev:i.sev,msg:i.msg,holes:i.holes}));},
   /** Az alkatrész lábai bekötöttséggel (a tulajdonságok Lábak táblázata). */

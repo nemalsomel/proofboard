@@ -194,3 +194,34 @@ test('programszerkesztő: teljes képernyő gombbal, Esc-re vissza', async ({ pa
   await expect(page.locator('#progView .pg')).toBeVisible(); // visszakerült a helyére
   expect(await pcb(page, `return pcb.work();`)).toBe('split');
 });
+
+test('csíkvágás típusa az eszközsáv fölött: automatikus, furat vagy rés; összecsukva csak a választott', async ({ page }) => {
+  await pcb(page, `pcb.load({ board: { rows: 30, cols: 20, sec: 3 }, parts: [{ id: 'p1', type: 'res', label: 'R1', r: 25, c: 2, rot: 0, mir: false, props: {} }], bridges: [], wires: [], links: [], gpio: {}, settings: { usb: true, btnMode: 'hold', autoRoute: false }, seq: 10 });`);
+  await page.keyboard.press('k');
+  const row = page.locator('#cutKindRow');
+  await expect(row).toBeVisible();
+  await expect(row.locator('[data-ck]')).toHaveText(['Automatikus', 'Furat', 'Rés']);
+  await expect(row.locator('[data-ck="auto"]')).toHaveClass(/on/);
+  const ts = (await page.locator('#toolstrip').boundingBox())!, rb = (await row.boundingBox())!;
+  expect(rb.y + rb.height).toBeLessThanOrEqual(ts.y); // a sáv fölött, mint a vezeték színe
+  const a = await pcb<any>(page, `return pcb.reveal(10, 5);`);
+  const P = 14 * parseInt((await page.locator('#zLbl').textContent())!, 10) / 100; // lyuktávolság pixelben
+  const b = { x: a.x, y: a.y + P };
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  // furat: két lyuk közé kattintva is a lyuk kifúrása
+  await row.locator('[data-ck="hole"]').click();
+  await page.mouse.click(mid.x, mid.y - (b.y - a.y) * 0.1);
+  // rés: lyuk közepére kattintva is szakadás két lyuk között
+  await row.locator('[data-ck="gap"]').click();
+  await page.mouse.click(a.x + 0, a.y + (b.y - a.y) * 0.05);
+  const cuts = await pcb<any>(page, `return pcb.get().cuts;`);
+  expect(cuts.some((c: number[]) => c[2] === 1)).toBe(true);
+  expect(cuts.some((c: number[]) => c[2] === 0 && c[0] === 10)).toBe(true);
+  expect(await pcb(page, `return pcb.cutKind();`)).toBe('gap');
+  // összecsukva csak a választott látszik
+  await page.mouse.move(5, 300);
+  await page.click('#tsTog');
+  await page.mouse.move(5, 300);
+  await expect(row.locator('[data-ck]:visible')).toHaveCount(1);
+  await expect(row.locator('[data-ck="gap"]')).toBeVisible();
+});
