@@ -65,7 +65,8 @@ const P: Record<string, string> = {
   expandAll: '<path d="m7 15 5 5 5-5M7 9l5-5 5 5"/>',
   collapseAll: '<path d="m7 20 5-5 5 5M7 4l5 5 5-5"/>',
   disk: '<path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M8 3v5h7V3M7 21v-7h10v7"/>',
-  minimize: '<path d="M6 18h12"/>',
+  /** háttérbe tétel: nyíl a felső vonal (a fülsor) felé */
+  minimize: '<path d="M5 5h14M7 16l5-5 5 5"/>',
   pulse: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
 };
 export type IconName = keyof typeof P;
