@@ -39,3 +39,22 @@ test('Fájl → Nyelv: English, majd vissza Magyar; újratöltés után is megma
   await expect(page.locator('#status')).toContainText('0 alkatrész');
   await expect(page.locator('html')).toHaveAttribute('lang', 'hu');
 });
+
+test('angolul a tulajdonságpanel, a kapcsolatok, a szimuláció és a blokkszerkesztő is; vissza magyarra élőben', async ({ page }) => {
+  await page.evaluate(() => { const p = (window as any).pcb; p.lang('en'); p.example('button'); p.select('R1'); });
+  await expect(page.locator('#pDup')).toContainText('Duplicate');
+  await expect(page.locator('#pinsSec summary')).toContainText('Pins and wiring');
+  await expect(page.locator('#links')).toContainText('bridges');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => (window as any).pcb.sim(true));
+  await expect(page.locator('#bSim')).toContainText('Stop simulation');
+  await expect(page.locator('#simOut')).toContainText('powered');
+  await expect(page.locator('#sbSim')).toContainText('Simulation running');
+  await page.evaluate(() => { const p = (window as any).pcb; p.sim(false); p.example('prog-blink'); });
+  await expect(page.locator('#progView .pg-head').first()).toContainText(/Clock|Digital output/);
+  await expect(page.locator('#progView [data-pg="add"]')).toHaveText('+ Block');
+  await page.evaluate(() => (window as any).pcb.lang('hu'));
+  await expect(page.locator('#progView .pg-head').first()).toContainText(/Ütemadó|Digitális kimenet/);
+  await expect(page.locator('#progView [data-pg="add"]')).toHaveText('+ Blokk');
+  await expect(page.locator('#bSim')).toContainText('Szimuláció');
+});

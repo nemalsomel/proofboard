@@ -4,6 +4,7 @@
  * hivatkoznak (pl. K1.A1, R1.1): a hozzá tartozó GPIO-t a netlista adja, így vezérlőcsere vagy új útvonal után
  * is ugyanazt jelentik. A csomóponttípusok adatként vannak leírva (NODE_DEFS), a kiértékelés DOM-mentes.
  */
+import { N_ } from '../i18n/i18n';
 import { isMcu } from './defs';
 import { findPin } from './links';
 import type { Netlist } from './netlist';
@@ -49,7 +50,7 @@ const N = (v: Val | undefined): number => (typeof v === 'boolean' ? (v ? 1 : 0) 
 const num = (x: unknown, d: number): number => { const n = Number(x); return isFinite(n) ? n : d; };
 const bin = (id: string, label: string): PortDef => ({ id, label, kind: 'bool' });
 const nin = (id: string, label: string): PortDef => ({ id, label, kind: 'num' });
-const PIN = (label = 'Láb'): NodeParam => ({ key: 'pin', label, type: 'pin', default: '' });
+const PIN = (label = N_('Láb')): NodeParam => ({ key: 'pin', label, type: 'pin', default: '' });
 /** Sorozat-minták (a csatornák sorrendje A, B, C, D); a léptetőmotor tekercseihez és számlálóhoz. */
 export const SEQ_PRESETS: Record<string, string[]> = {
   half: ['1000', '1100', '0100', '0110', '0010', '0011', '0001', '1001'],
@@ -58,7 +59,7 @@ export const SEQ_PRESETS: Record<string, string[]> = {
   count: Array.from({ length: 16 }, (_, i) => i.toString(2).padStart(4, '0').split('').reverse().join('')),
 };
 export const SEQ_CH = 4;
-const SEQ_OPTS: ReadonlyArray<readonly [string, string]> = [['half', 'félléptetés (8 lépés)'], ['full', 'teljes lépés, két tekercs (4)'], ['wave', 'egy tekercs (4)'], ['count', 'bináris számláló (16)'], ['custom', 'saját minta']];
+const SEQ_OPTS: ReadonlyArray<readonly [string, string]> = [['half', N_('félléptetés (8 lépés)')], ['full', N_('teljes lépés, két tekercs (4)')], ['wave', N_('egy tekercs (4)')], ['count', N_('bináris számláló (16)')], ['custom', N_('saját minta')]];
 /** A minta sorai 4 csatornára igazítva (saját mintánál a 0/1 csoportok, pl. „10 01 11”). */
 export function seqRows(preset: unknown, custom: unknown): string[] {
   let rows = preset === 'custom' ? String(custom || '').split(/[\s,;]+/).filter(x => /^[01]{1,8}$/.test(x)) : SEQ_PRESETS[String(preset)] || SEQ_PRESETS.half;
@@ -66,54 +67,56 @@ export function seqRows(preset: unknown, custom: unknown): string[] {
   return rows.map(r => r.slice(0, SEQ_CH).padEnd(SEQ_CH, '0'));
 }
 /** Felfutó él: az előző ütem óta 0 → 1. */
-export const DELAY_OPTS = [['off', 'Utánfutás (ki késleltetve)'], ['on', 'Bekapcsolási késleltetés'], ['pulse', 'Impulzus'], ['filter', 'Szűrés (mindkét változás)']] as const;
+export const DELAY_OPTS = [['off', N_('Utánfutás (ki késleltetve)')], ['on', N_('Bekapcsolási késleltetés')], ['pulse', N_('Impulzus')], ['filter', N_('Szűrés (mindkét változás)')]] as const;
 const rise = (st: Record<string, unknown>, k: string, v: boolean): boolean => { const was = !!st[k]; st[k] = v; return v && !was; };
 
+/** A blokk-kategóriák neve (azonosító is; a felület fordítja). */
+void [N_('Bemenet'), N_('Logika'), N_('Idő'), N_('Kimenet')];
 export const NODE_DEFS: Record<string, NodeDef> = {
   in: {
-    label: 'Digitális bemenet', cat: 'Bemenet', help: 'Egy láb szintje (pl. nyomógomb). Felhúzással a lenyomott gomb alacsony szintet ad, ezért az „aktív” alapból az alacsony.',
-    ins: [], outs: [bin('v', 'aktív')],
-    params: [PIN(), { key: 'pull', label: 'Felhúzás', type: 'select', default: 'pullup', options: [['pullup', 'fel (3,3 V)'], ['pulldown', 'le (GND)'], ['float', 'nincs']] },
-      { key: 'active', label: 'Aktív', type: 'select', default: 'low', options: [['low', 'alacsony szinten'], ['high', 'magas szinten']] }],
+    label: N_('Digitális bemenet'), cat: 'Bemenet', help: N_('Egy láb szintje (pl. nyomógomb). Felhúzással a lenyomott gomb alacsony szintet ad, ezért az „aktív” alapból az alacsony.'),
+    ins: [], outs: [bin('v', N_('aktív'))],
+    params: [PIN(), { key: 'pull', label: N_('Felhúzás'), type: 'select', default: 'pullup', options: [['pullup', N_('fel (3,3 V)')], ['pulldown', N_('le (GND)')], ['float', N_('nincs')]] },
+      { key: 'active', label: N_('Aktív'), type: 'select', default: 'low', options: [['low', N_('alacsony szinten')], ['high', N_('magas szinten')]] }],
     eval: c => { const r = c.read(c.p.pin), lv = r ? r.level : null; return { v: lv == null ? false : (c.p.active === 'high') === (lv === 1) }; },
     gpio: p => ({ ref: p.pin, mode: String(p.pull || 'pullup') }),
   },
   adc: {
-    label: 'Analóg bemenet', cat: 'Bemenet', help: 'Egy ADC-képes láb feszültsége 0…1 között (0 V → 0, 3,3 V → 1), pl. potméter vagy joystick.',
-    ins: [], outs: [nin('v', 'érték')], params: [PIN()],
+    label: N_('Analóg bemenet'), cat: 'Bemenet', help: N_('Egy ADC-képes láb feszültsége 0…1 között (0 V → 0, 3,3 V → 1), pl. potméter vagy joystick.'),
+    ins: [], outs: [nin('v', N_('érték'))], params: [PIN()],
     eval: c => { const r = c.read(c.p.pin); return { v: r ? Math.max(0, Math.min(1, r.V / 3.3)) : 0 }; },
     gpio: p => ({ ref: p.pin, mode: 'adc' }),
   },
   const: {
-    label: 'Állandó', cat: 'Bemenet', help: 'Rögzített szám (0…1 között PWM-kitöltéshez, vagy összehasonlításhoz).',
-    ins: [], outs: [nin('v', 'érték')], params: [{ key: 'value', label: 'Érték', type: 'number', default: 1 }],
+    label: N_('Állandó'), cat: 'Bemenet', help: N_('Rögzített szám (0…1 között PWM-kitöltéshez, vagy összehasonlításhoz).'),
+    ins: [], outs: [nin('v', N_('érték'))], params: [{ key: 'value', label: N_('Érték'), type: 'number', default: 1 }],
     eval: c => ({ v: num(c.p.value, 1) }),
   },
-  not: { label: 'NEM', cat: 'Logika', help: 'Megfordítja a jelet.', ins: [bin('a', 'be')], outs: [bin('v', 'ki')], params: [], eval: c => ({ v: !B(c.in.a) }) },
-  and: { label: 'ÉS', cat: 'Logika', help: 'Akkor igaz, ha mindkét bemenet igaz.', ins: [bin('a', 'A'), bin('b', 'B')], outs: [bin('v', 'ki')], params: [], eval: c => ({ v: B(c.in.a) && B(c.in.b) }) },
-  or: { label: 'VAGY', cat: 'Logika', help: 'Akkor igaz, ha legalább az egyik bemenet igaz.', ins: [bin('a', 'A'), bin('b', 'B')], outs: [bin('v', 'ki')], params: [], eval: c => ({ v: B(c.in.a) || B(c.in.b) }) },
-  xor: { label: 'KIZÁRÓ VAGY', cat: 'Logika', help: 'Akkor igaz, ha pontosan az egyik bemenet igaz.', ins: [bin('a', 'A'), bin('b', 'B')], outs: [bin('v', 'ki')], params: [], eval: c => ({ v: B(c.in.a) !== B(c.in.b) }) },
+  not: { label: N_('NEM'), cat: 'Logika', help: N_('Megfordítja a jelet.'), ins: [bin('a', N_('be'))], outs: [bin('v', N_('ki'))], params: [], eval: c => ({ v: !B(c.in.a) }) },
+  and: { label: N_('ÉS'), cat: 'Logika', help: N_('Akkor igaz, ha mindkét bemenet igaz.'), ins: [bin('a', N_('A')), bin('b', N_('B'))], outs: [bin('v', N_('ki'))], params: [], eval: c => ({ v: B(c.in.a) && B(c.in.b) }) },
+  or: { label: N_('VAGY'), cat: 'Logika', help: N_('Akkor igaz, ha legalább az egyik bemenet igaz.'), ins: [bin('a', N_('A')), bin('b', N_('B'))], outs: [bin('v', N_('ki'))], params: [], eval: c => ({ v: B(c.in.a) || B(c.in.b) }) },
+  xor: { label: N_('KIZÁRÓ VAGY'), cat: 'Logika', help: N_('Akkor igaz, ha pontosan az egyik bemenet igaz.'), ins: [bin('a', N_('A')), bin('b', N_('B'))], outs: [bin('v', N_('ki'))], params: [], eval: c => ({ v: B(c.in.a) !== B(c.in.b) }) },
   compare: {
-    label: 'Összehasonlítás', cat: 'Logika', help: 'Igaz, ha a bemenet nagyobb (vagy kisebb) a határnál, pl. „a potméter félnél tovább van tekerve”.',
-    ins: [nin('a', 'érték')], outs: [bin('v', 'igaz')],
-    params: [{ key: 'op', label: 'Feltétel', type: 'select', default: '>', options: [['>', 'nagyobb, mint'], ['<', 'kisebb, mint']] }, { key: 'value', label: 'Határ', type: 'number', default: 0.5 }],
+    label: N_('Összehasonlítás'), cat: 'Logika', help: N_('Igaz, ha a bemenet nagyobb (vagy kisebb) a határnál, pl. „a potméter félnél tovább van tekerve”.'),
+    ins: [nin('a', N_('érték'))], outs: [bin('v', N_('igaz'))],
+    params: [{ key: 'op', label: N_('Feltétel'), type: 'select', default: '>', options: [['>', N_('nagyobb, mint')], ['<', N_('kisebb, mint')]] }, { key: 'value', label: N_('Határ'), type: 'number', default: 0.5 }],
     eval: c => ({ v: c.p.op === '<' ? N(c.in.a) < num(c.p.value, 0.5) : N(c.in.a) > num(c.p.value, 0.5) }),
   },
   blink: {
-    label: 'Ütemadó', cat: 'Idő', help: 'Négyszögjel: periódusonként a kitöltés arányában igaz (villogó LED).',
-    ins: [], outs: [bin('v', 'ki')],
-    params: [{ key: 'period', label: 'Periódus', type: 'number', default: 1000, min: 20, unit: 'ms' }, { key: 'duty', label: 'Kitöltés', type: 'number', default: 50, min: 0, max: 100, unit: '%' }],
+    label: N_('Ütemadó'), cat: 'Idő', help: N_('Négyszögjel: periódusonként a kitöltés arányában igaz (villogó LED).'),
+    ins: [], outs: [bin('v', N_('ki'))],
+    params: [{ key: 'period', label: N_('Periódus'), type: 'number', default: 1000, min: 20, unit: 'ms' }, { key: 'duty', label: N_('Kitöltés'), type: 'number', default: 50, min: 0, max: 100, unit: '%' }],
     eval: c => { const T = Math.max(20, num(c.p.period, 1000)); return { v: (c.t % T) < T * Math.max(0, Math.min(100, num(c.p.duty, 50))) / 100 }; },
   },
   toggle: {
-    label: 'Váltókapcsoló', cat: 'Idő', help: 'Minden felfutó élre (pl. gombnyomásra) átvált: be, ki, be…',
-    ins: [bin('a', 'váltás')], outs: [bin('v', 'állapot')], params: [],
+    label: N_('Váltókapcsoló'), cat: 'Idő', help: N_('Minden felfutó élre (pl. gombnyomásra) átvált: be, ki, be…'),
+    ins: [bin('a', N_('váltás'))], outs: [bin('v', N_('állapot'))], params: [],
     eval: c => { if (rise(c.st, 'a', B(c.in.a))) c.st.v = !c.st.v; return { v: !!c.st.v }; },
   },
   counter: {
-    label: 'Számláló', cat: 'Idő', help: 'Felfutó élenként eggyel nő, a határnál elölről kezdi; a törlés lenullázza. Az „arány” 0…1 között (PWM-hez).',
-    ins: [bin('a', 'számol'), bin('r', 'törlés')], outs: [nin('n', 'érték'), nin('f', 'arány')],
-    params: [{ key: 'max', label: 'Lépésszám', type: 'number', default: 4, min: 1 }],
+    label: N_('Számláló'), cat: 'Idő', help: N_('Felfutó élenként eggyel nő, a határnál elölről kezdi; a törlés lenullázza. Az „arány” 0…1 között (PWM-hez).'),
+    ins: [bin('a', N_('számol')), bin('r', N_('törlés'))], outs: [nin('n', N_('érték')), nin('f', N_('arány'))],
+    params: [{ key: 'max', label: N_('Lépésszám'), type: 'number', default: 4, min: 1 }],
     eval: c => {
       const m = Math.max(1, Math.round(num(c.p.max, 4)));
       let n = num(c.st.n, 0);
@@ -124,10 +127,10 @@ export const NODE_DEFS: Record<string, NodeDef> = {
     },
   },
   delay: {
-    label: 'Időzítő', cat: 'Idő', help: 'Késleltetés vagy utánfutás a megadott idővel. Utánfutás: azonnal bekapcsol, és a bemenet megszűnése után még ennyi ideig igaz (lépcsőházi világítás). Bekapcsolási késleltetés: csak akkor kapcsol be, ha a bemenet ennyi ideig folyamatosan igaz. Impulzus: felfutó élre ennyi ideig igaz. Szűrés: mindkét változást csak akkor adja tovább, ha ennyi ideig tart (pergésmentesítés).',
-    ins: [bin('a', 'be')], outs: [bin('v', 'ki')],
-    params: [{ key: 'mode', label: 'Működés', type: 'select', default: 'off', legacy: 'filter', options: DELAY_OPTS },
-      { key: 'ms', label: 'Idő', type: 'number', default: 500, min: 0, unit: 'ms' }],
+    label: N_('Időzítő'), cat: 'Idő', help: N_('Késleltetés vagy utánfutás a megadott idővel. Utánfutás: azonnal bekapcsol, és a bemenet megszűnése után még ennyi ideig igaz (lépcsőházi világítás). Bekapcsolási késleltetés: csak akkor kapcsol be, ha a bemenet ennyi ideig folyamatosan igaz. Impulzus: felfutó élre ennyi ideig igaz. Szűrés: mindkét változást csak akkor adja tovább, ha ennyi ideig tart (pergésmentesítés).'),
+    ins: [bin('a', N_('be'))], outs: [bin('v', N_('ki'))],
+    params: [{ key: 'mode', label: N_('Működés'), type: 'select', default: 'off', legacy: 'filter', options: DELAY_OPTS },
+      { key: 'ms', label: N_('Idő'), type: 'number', default: 500, min: 0, unit: 'ms' }],
     eval: c => {
       const v = B(c.in.a), d = Math.max(0, num(c.p.ms, 500)), t = c.t, st = c.st;
       switch (c.p.mode) {
@@ -146,11 +149,11 @@ export const NODE_DEFS: Record<string, NodeDef> = {
     },
   },
   seq: {
-    label: 'Sorozat', cat: 'Idő', help: 'Minden felfutó élre (pl. ütemadótól) a minta következő sora kerül az A–D kimenetekre: léptetőmotor tekercsei, futófény, számláló. A „vissza” bemenet (vagy az irány) visszafelé léptet.',
-    ins: [bin('a', 'lépés'), bin('r', 'vissza')], outs: [bin('c0', 'A'), bin('c1', 'B'), bin('c2', 'C'), bin('c3', 'D'), nin('n', 'sor')],
-    params: [{ key: 'preset', label: 'Minta', type: 'select', default: 'half', options: SEQ_OPTS },
-      { key: 'custom', label: 'Saját minta (sorok szóközzel)', type: 'text', default: '10 01', when: { key: 'preset', is: 'custom' } },
-      { key: 'dir', label: 'Irány', type: 'select', default: 'fwd', options: [['fwd', 'előre'], ['back', 'vissza']] }],
+    label: N_('Sorozat'), cat: 'Idő', help: N_('Minden felfutó élre (pl. ütemadótól) a minta következő sora kerül az A–D kimenetekre: léptetőmotor tekercsei, futófény, számláló. A „vissza” bemenet (vagy az irány) visszafelé léptet.'),
+    ins: [bin('a', N_('lépés')), bin('r', N_('vissza'))], outs: [bin('c0', N_('A')), bin('c1', N_('B')), bin('c2', N_('C')), bin('c3', N_('D')), nin('n', N_('sor'))],
+    params: [{ key: 'preset', label: N_('Minta'), type: 'select', default: 'half', options: SEQ_OPTS },
+      { key: 'custom', label: N_('Saját minta (sorok szóközzel)'), type: 'text', default: '10 01', when: { key: 'preset', is: 'custom' } },
+      { key: 'dir', label: N_('Irány'), type: 'select', default: 'fwd', options: [['fwd', N_('előre')], ['back', N_('vissza')]] }],
     eval: c => {
       const rows = seqRows(c.p.preset, c.p.custom), n = rows.length;
       let i = num(c.st.i, 0);
@@ -163,14 +166,14 @@ export const NODE_DEFS: Record<string, NodeDef> = {
     },
   },
   out: {
-    label: 'Digitális kimenet', cat: 'Kimenet', help: 'Igaz → a láb magas (3,3 V), hamis → alacsony (pl. LED, relé, MOSFET kapuja).',
-    ins: [bin('a', 'be')], outs: [], params: [PIN()],
+    label: N_('Digitális kimenet'), cat: 'Kimenet', help: N_('Igaz → a láb magas (3,3 V), hamis → alacsony (pl. LED, relé, MOSFET kapuja).'),
+    ins: [bin('a', N_('be'))], outs: [], params: [PIN()],
     eval: () => ({}),
     gpio: (p, i) => ({ ref: p.pin, mode: B(i.a) ? 'out_high' : 'out_low' }),
   },
   pwm: {
-    label: 'PWM kimenet', cat: 'Kimenet', help: 'Kitöltés: LED fényereje, motor fordulatszáma. Ha a bemenet nincs bekötve, a beállított kitöltés érvényes; bekötve a bemenet (0…1) adja, pl. Állandó 0,3 = 30 % vagy potméter. Logikai jel (pl. Ütemadó) 0 % vagy 100 %. Szervóhoz 50 Hz és 2,5…12,5 %.',
-    ins: [nin('a', 'kitöltés')], outs: [], params: [PIN(), { key: 'duty', label: 'Kitöltés (bemenet nélkül)', type: 'number', default: 50, min: 0, max: 100, unit: '%' }, { key: 'freq', label: 'Frekvencia', type: 'number', default: 1000, min: 1, unit: 'Hz' }],
+    label: N_('PWM kimenet'), cat: 'Kimenet', help: N_('Kitöltés: LED fényereje, motor fordulatszáma. Ha a bemenet nincs bekötve, a beállított kitöltés érvényes; bekötve a bemenet (0…1) adja, pl. Állandó 0,3 = 30 % vagy potméter. Logikai jel (pl. Ütemadó) 0 % vagy 100 %. Szervóhoz 50 Hz és 2,5…12,5 %.'),
+    ins: [nin('a', N_('kitöltés'))], outs: [], params: [PIN(), { key: 'duty', label: N_('Kitöltés (bemenet nélkül)'), type: 'number', default: 50, min: 0, max: 100, unit: '%' }, { key: 'freq', label: N_('Frekvencia'), type: 'number', default: 1000, min: 1, unit: 'Hz' }],
     eval: () => ({}),
     gpio: (p, i) => ({ ref: p.pin, mode: 'pwm', pwm: { duty: Math.round(Math.max(0, Math.min(1, i.a === undefined ? num(p.duty, 50) / 100 : N(i.a))) * 1000) / 10, freq: Math.max(1, num(p.freq, 1000)) } }),
   },

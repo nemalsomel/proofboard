@@ -2,6 +2,7 @@
  * Vezérlőlapok GPIO-képességei (caps): ADC, csak bemenet, felhúzás nélkül, indítási láb, soros port,
  * beépített LED, buszfunkciók (I²C, SPI, UART, PWM-szelet). Ellenőrzés, GPIO-módok és útvonalkereső közös alapja.
  */
+import { N_ } from '../i18n/i18n';
 import type { LocalPin, PartInstance } from '../core/schema';
 import { DEFS, isMcu } from './defs';
 
@@ -58,8 +59,8 @@ export const gpioFits = (q: GpioPin | null | undefined, an: boolean): boolean =>
   !!q && isMcu(q.part) && q.role === 'gpio' && (an ? hasCap(q, 'adc') : !hasCap(q, 'in'));
 
 export const GPIO_MODES: ReadonlyArray<readonly [string, string]> = [
-  ['pullup', 'be, felhúzva'], ['pulldown', 'be, lehúzva'], ['float', 'be, lebegő'], ['adc', 'analóg (ADC)'],
-  ['out_high', 'ki: 1'], ['out_low', 'ki: 0'], ['pwm', 'ki: PWM'],
+  ['pullup', N_('be, felhúzva')], ['pulldown', N_('be, lehúzva')], ['float', N_('be, lebegő')], ['adc', N_('analóg (ADC)')],
+  ['out_high', N_('ki: 1')], ['out_low', N_('ki: 0')], ['pwm', N_('ki: PWM')],
 ];
 /** A GPIO-mód a láb képességei szerint választható-e: csak bemeneti lábon nincs kimenet, felhúzás nélkülin nincs belső felhúzás. */
 export function gpioModeOk(q: CapPin, m: string): boolean {

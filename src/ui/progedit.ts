@@ -7,6 +7,7 @@
  * bemenet); csomópont húzása a fejlécénél; üres helyen húzva a vászon mozog, görgővel nagyít.
  */
 import { icon } from './icons';
+import { t } from '../i18n/i18n';
 import { setFull } from './fullscreen';
 import { NODE_DEFS, stepperTemplate, type NodeDef, type PEdge, type PNode, type Program, type Val } from '../engine/program';
 
@@ -36,18 +37,18 @@ const fmt = (v: Val | undefined): string => (v === undefined ? '–' : typeof v 
 export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
   root.classList.add('pg');
   root.innerHTML = `
-    <div class="pg-bar" role="toolbar" aria-label="Program">
-      <div class="pg-add"><button class="btn" data-pg="add" aria-haspopup="true" aria-expanded="false">+ Blokk</button><div class="pg-menu" hidden></div></div>
-      <button class="btn" data-pg="del" disabled title="A kijelölt blokk vagy él törlése (Delete)">Törlés</button>
+    <div class="pg-bar" role="toolbar" aria-label="${t('Program')}">
+      <div class="pg-add"><button class="btn" data-pg="add" aria-haspopup="true" aria-expanded="false">${t('+ Blokk')}</button><div class="pg-menu" hidden></div></div>
+      <button class="btn" data-pg="del" disabled title="${t('A kijelölt blokk vagy él törlése (Delete)')}">${t('Törlés')}</button>
       <span class="pg-sp"></span>
-      <button class="btn" data-pg="zout" aria-label="Kicsinyítés">−</button><button class="btn" data-pg="zin" aria-label="Nagyítás">+</button>
-      <button class="btn" data-pg="fit" title="Az egész program látszódjon">Mind</button>
-      <button class="btn icon" data-pg="full" aria-pressed="false" aria-label="Teljes képernyő" title="Teljes képernyő (Esc: vissza)">${icon('full')}</button>
+      <button class="btn" data-pg="zout" aria-label="${t('Kicsinyítés')}">−</button><button class="btn" data-pg="zin" aria-label="${t('Nagyítás')}">+</button>
+      <button class="btn" data-pg="fit" title="${t('Az egész program látszódjon')}">${t('Mind')}</button>
+      <button class="btn icon" data-pg="full" aria-pressed="false" aria-label="${t('Teljes képernyő')}" title="${t('Teljes képernyő (Esc: vissza)')}">${icon('full')}</button>
       <button class="btn" data-pg="run"></button>
     </div>
-    <div class="pg-canvas" tabindex="0" aria-label="Programvászon">
+    <div class="pg-canvas" tabindex="0" aria-label="${t('Programvászon')}">
       <div class="pg-layer"><svg class="pg-edges" width="1" height="1"></svg><div class="pg-nodes"></div></div>
-      <p class="pg-empty" hidden>Még nincs program. A <b>+ Blokk</b> menüből rakj le egy bemenetet (pl. gomb) és egy kimenetet (pl. LED), majd húzz élt a kimeneti pontjától a bemeneti pontig.</p>
+      <p class="pg-empty" hidden>${t('Még nincs program. A {x} menüből rakj le egy bemenetet (pl. gomb) és egy kimenetet (pl. LED), majd húzz élt a kimeneti pontjától a bemeneti pontig.', { x: `<b>${t('+ Blokk')}</b>` })}</p>
     </div>
     <aside class="pg-props" hidden></aside>`;
   const $ = <T extends HTMLElement>(s: string) => root.querySelector(s) as T;
@@ -73,9 +74,9 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
   const nextId = (pre: string, list: Array<{ id: string }>) => { let i = 1; while (list.some(x => x.id === pre + i)) i++; return pre + i; };
   const save = (layoutOnly = false) => { selfEdit = !layoutOnly; host.set(JSON.parse(JSON.stringify(prog)), layoutOnly); };
   const pinLabel = (ref: unknown) => {
-    if (typeof ref !== 'string' || !ref) return 'nincs láb kiválasztva';
+    if (typeof ref !== 'string' || !ref) return t('nincs láb kiválasztva');
     const c = pinCache.find(p => p.ref === ref);
-    return c ? `${c.part}.${c.name}${c.gpio ? ' → ' + c.gpio : ' (nincs GPIO-n)'}` : 'ismeretlen láb';
+    return c ? `${c.part}.${c.name}${c.gpio ? ' → ' + c.gpio : ' ' + t('(nincs GPIO-n)')}` : t('ismeretlen láb');
   };
   const summary = (n: PNode): string[] => {
     const d = NODE_DEFS[n.type], out: string[] = [];
@@ -83,8 +84,8 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
       if (pr.when && String(n.props[pr.when.key]) !== pr.when.is) continue;
       const v = n.props[pr.key];
       if (pr.type === 'pin') out.push(pinLabel(v));
-      else if (pr.type === 'select') out.push(`${pr.label}: ${(pr.options || []).find(o => o[0] === v)?.[1] ?? v}`);
-      else out.push(`${pr.label}: ${v}${pr.unit ? ' ' + pr.unit : ''}`);
+      else if (pr.type === 'select') { const o = (pr.options || []).find(o => o[0] === v); out.push(`${t(pr.label)}: ${o ? t(o[1]) : v}`); }
+      else out.push(`${t(pr.label)}: ${v}${pr.unit ? ' ' + pr.unit : ''}`);
     }
     return out;
   };
@@ -92,9 +93,9 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
   function applyView() { layer.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.z})`; }
 
   function renderMenu() {
-    menu.innerHTML = CATS.map(c => `<div class="pg-mcat" style="--c:${CAT_COL[c]}">${c}</div>` + Object.entries(NODE_DEFS).filter(([, d]) => d.cat === c)
-      .map(([k, d]) => `<button class="pg-mitem" data-add="${k}" title="${esc(d.help)}">${esc(d.label)}</button>`).join('')).join('')
-      + `<div class="pg-mcat" style="--c:#868e96">Sablon</div><button class="pg-mitem" data-tpl="stepper" title="Ütemadó → Sorozat (félléptetés) → 4 digitális kimenet; ha van ULN2003, az IN1–IN4 lábaira">Léptetőmotor</button>`;
+    menu.innerHTML = CATS.map(c => `<div class="pg-mcat" style="--c:${CAT_COL[c]}">${esc(t(c))}</div>` + Object.entries(NODE_DEFS).filter(([, d]) => d.cat === c)
+      .map(([k, d]) => `<button class="pg-mitem" data-add="${k}" title="${esc(t(d.help))}">${esc(t(d.label))}</button>`).join('')).join('')
+      + `<div class="pg-mcat" style="--c:#868e96">${t('Sablon')}</div><button class="pg-mitem" data-tpl="stepper" title="${t('Ütemadó → Sorozat (félléptetés) → 4 digitális kimenet; ha van ULN2003, az IN1–IN4 lábaira')}">${t('Léptetőmotor')}</button>`;
   }
 
   function renderEdges() {
@@ -128,11 +129,11 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
         const pi = d.ins[i], po = d.outs[i];
         const vin = pi && on ? live!.vals[prog.edges.find(e => e.to === n.id + '.' + pi.id)?.from || ''] : undefined;
         const vout = po && on ? live!.vals[n.id + '.' + po.id] : undefined;
-        return `<div class="pg-row">${pi ? `<span class="pg-port in ${pi.kind}${pending ? ' can' : ''}" data-port="${n.id}.${pi.id}" title="${esc(pi.label)}"></span><span class="pg-pl">${esc(pi.label)}${on ? ` <b data-vin="${n.id}.${pi.id}">${fmt(vin)}</b>` : ''}</span>` : '<span></span><span></span>'}`
-          + `${po ? `<span class="pg-pr">${on ? `<b data-v="${n.id}.${po.id}">${fmt(vout)}</b> ` : ''}${esc(po.label)}</span><span class="pg-port out ${po.kind}${pending === n.id + '.' + po.id ? ' pend' : ''}" data-port="${n.id}.${po.id}" title="${esc(po.label)}"></span>` : '<span></span><span></span>'}</div>`;
+        return `<div class="pg-row">${pi ? `<span class="pg-port in ${pi.kind}${pending ? ' can' : ''}" data-port="${n.id}.${pi.id}" title="${esc(t(pi.label))}"></span><span class="pg-pl">${esc(t(pi.label))}${on ? ` <b data-vin="${n.id}.${pi.id}">${fmt(vin)}</b>` : ''}</span>` : '<span></span><span></span>'}`
+          + `${po ? `<span class="pg-pr">${on ? `<b data-v="${n.id}.${po.id}">${fmt(vout)}</b> ` : ''}${esc(t(po.label))}</span><span class="pg-port out ${po.kind}${pending === n.id + '.' + po.id ? ' pend' : ''}" data-port="${n.id}.${po.id}" title="${esc(t(po.label))}"></span>` : '<span></span><span></span>'}</div>`;
       }).join('');
       return `<div class="pg-node${s ? ' sel' : ''}${err ? ' err' : ''}" data-node="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${W}px;--c:${CAT_COL[d.cat]}">
-        <div class="pg-head" data-drag="${n.id}">${icon('grip', 'pg-grip')}<span>${esc(d.label)}</span></div>${ports}
+        <div class="pg-head" data-drag="${n.id}">${icon('grip', 'pg-grip')}<span>${esc(t(d.label))}</span></div>${ports}
         <div class="pg-sum">${sm.map(x => `<div style="height:${SUM}px">${esc(x)}</div>`).join('')}${err ? `<div class="pg-err">${esc(err)}</div>` : ''}</div></div>`;
     }).join('');
     $<HTMLElement>('.pg-empty').hidden = prog.nodes.length > 0;
@@ -146,22 +147,35 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     const groups = new Map<string, PinChoice[]>();
     for (const p of pinCache) { if (!groups.has(p.part)) groups.set(p.part, []); groups.get(p.part)!.push(p); }
     props.hidden = false;
-    props.innerHTML = `<p class="h" style="margin:0 0 4px;color:${CAT_COL[d.cat]}">${esc(d.cat)}</p><p style="margin:0 0 6px;font-weight:600">${esc(d.label)}</p>
-      <p class="help" style="margin:0 0 8px">${esc(d.help)}</p>
+    props.innerHTML = `<p class="h" style="margin:0 0 4px;color:${CAT_COL[d.cat]}">${esc(t(d.cat))}</p><p style="margin:0 0 6px;font-weight:600">${esc(t(d.label))}</p>
+      <p class="help" style="margin:0 0 8px">${esc(t(d.help))}</p>
       ${d.params.filter(pr => !pr.when || String(n.props[pr.when.key]) === pr.when.is).map(pr => {
         const id = 'pgp_' + pr.key, v = n.props[pr.key];
-        if (pr.type === 'text') return `<label class="small" for="${id}">${esc(pr.label)}</label><input type="text" id="${id}" data-pp="${pr.key}" value="${esc(v)}" spellcheck="false">`;
-        if (pr.type === 'pin') return `<label class="small" for="${id}">${esc(pr.label)}</label><select id="${id}" data-pp="${pr.key}"><option value="">– válassz lábat –</option>${[...groups].map(([g, ps]) =>
-          `<optgroup label="${esc(g)}">${ps.map(p => `<option value="${esc(p.ref)}" ${p.ref === v ? 'selected' : ''}>${esc(p.name)}${p.gpio ? ' → ' + esc(p.gpio) : ' (nincs GPIO-n)'}</option>`).join('')}</optgroup>`).join('')}</select>`;
-        if (pr.type === 'select') return `<label class="small" for="${id}">${esc(pr.label)}</label><select id="${id}" data-pp="${pr.key}">${(pr.options || []).map(([k, l]) => `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-        return `<label class="small" for="${id}">${esc(pr.label)}</label><div class="row"><input type="number" id="${id}" data-pp="${pr.key}" value="${esc(v)}" ${pr.min != null ? `min="${pr.min}"` : ''} ${pr.max != null ? `max="${pr.max}"` : ''} step="any" style="width:96px"><span class="muted small">${esc(pr.unit || '')}</span></div>`;
+        if (pr.type === 'text') return `<label class="small" for="${id}">${esc(t(pr.label))}</label><input type="text" id="${id}" data-pp="${pr.key}" value="${esc(v)}" spellcheck="false">`;
+        if (pr.type === 'pin') return `<label class="small" for="${id}">${esc(t(pr.label))}</label><select id="${id}" data-pp="${pr.key}"><option value="">– ${t('válassz lábat')} –</option>${[...groups].map(([g, ps]) =>
+          `<optgroup label="${esc(g)}">${ps.map(p => `<option value="${esc(p.ref)}" ${p.ref === v ? 'selected' : ''}>${esc(p.name)}${p.gpio ? ' → ' + esc(p.gpio) : ' ' + t('(nincs GPIO-n)')}</option>`).join('')}</optgroup>`).join('')}</select>`;
+        if (pr.type === 'select') return `<label class="small" for="${id}">${esc(t(pr.label))}</label><select id="${id}" data-pp="${pr.key}">${(pr.options || []).map(([k, l]) => `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(t(l))}</option>`).join('')}</select>`;
+        return `<label class="small" for="${id}">${esc(t(pr.label))}</label><div class="row"><input type="number" id="${id}" data-pp="${pr.key}" value="${esc(v)}" ${pr.min != null ? `min="${pr.min}"` : ''} ${pr.max != null ? `max="${pr.max}"` : ''} step="any" style="width:96px"><span class="muted small">${esc(pr.unit || '')}</span></div>`;
       }).join('')}
       ${err ? `<p class="pg-err" style="margin-top:6px">${esc(err)}</p>` : ''}
-      <div class="row" style="margin-top:8px"><button class="btn danger" data-pg="del">Blokk törlése</button></div>`;
+      <div class="row" style="margin-top:8px"><button class="btn danger" data-pg="del">${t('Blokk törlése')}</button></div>`;
   }
 
-  function render() { applyView(); renderNodes(); renderEdges(); renderProps(); renderRun(); }
-  function renderRun() { const b = $<HTMLButtonElement>('[data-pg="run"]'), on = host.running(); b.textContent = on ? '■ Leállítás' : '▶ Futtatás'; b.classList.toggle('on', on); }
+  /** A sáv feliratai (nyelvváltáskor is: a sablon csak egyszer épül). */
+  function relabel() {
+    const set = (sel: string, text: string | null, attrs: Record<string, string> = {}) => { const e = root.querySelector<HTMLElement>(sel); if (!e) return; if (text !== null) e.textContent = text; for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); };
+    set('.pg-bar', null, { 'aria-label': t('Program') });
+    set('[data-pg="add"]', t('+ Blokk'));
+    set('.pg-bar [data-pg="del"]', t('Törlés'), { title: t('A kijelölt blokk vagy él törlése (Delete)') });
+    set('[data-pg="zout"]', null, { 'aria-label': t('Kicsinyítés') }); set('[data-pg="zin"]', null, { 'aria-label': t('Nagyítás') });
+    set('[data-pg="fit"]', t('Mind'), { title: t('Az egész program látszódjon') });
+    const on = root.classList.contains('pg-full');
+    set('[data-pg="full"]', null, { title: on ? t('Vissza (Esc)') : t('Teljes képernyő (Esc: vissza)'), 'aria-label': on ? t('Kilépés a teljes képernyőből') : t('Teljes képernyő') });
+    set('.pg-canvas', null, { 'aria-label': t('Programvászon') });
+    $<HTMLElement>('.pg-empty').innerHTML = t('Még nincs program. A {x} menüből rakj le egy bemenetet (pl. gomb) és egy kimenetet (pl. LED), majd húzz élt a kimeneti pontjától a bemeneti pontig.', { x: `<b>${t('+ Blokk')}</b>` });
+  }
+  function render() { relabel(); applyView(); renderNodes(); renderEdges(); renderProps(); renderRun(); }
+  function renderRun() { const b = $<HTMLButtonElement>('[data-pg="run"]'), on = host.running(); b.textContent = on ? '■ ' + t('Leállítás') : '▶ ' + t('Futtatás'); b.classList.toggle('on', on); }
 
   function addNode(type: string) {
     const r = canvas.getBoundingClientRect(), [wx, wy] = toWorld(r.left + r.width / 2 - W / 2 * view.z, r.top + r.height / 3);
@@ -203,7 +217,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     setFull(root, on);
     const b = root.querySelector('[data-pg="full"]') as HTMLElement;
     b.innerHTML = icon(on ? 'fullExit' : 'full'); b.setAttribute('aria-pressed', String(on));
-    b.title = on ? 'Vissza (Esc)' : 'Teljes képernyő (Esc: vissza)'; b.setAttribute('aria-label', on ? 'Kilépés a teljes képernyőből' : 'Teljes képernyő');
+    b.title = on ? t('Vissza (Esc)') : t('Teljes képernyő (Esc: vissza)'); b.setAttribute('aria-label', on ? t('Kilépés a teljes képernyőből') : t('Teljes képernyő'));
     requestAnimationFrame(() => fit());
   }
   function fit() {

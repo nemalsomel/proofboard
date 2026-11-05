@@ -2,6 +2,7 @@
  * Többnyelvű felület (előkészítés). A forrásnyelv a magyar: a kódban és a HTML-ben a magyar szöveg áll, és ugyanez
  * a fordítás kulcsa (gettext-stílus). Más nyelven a szótár adja a fordítást; ami még nincs benne, magyarul marad.
  *
+ * - többes szám a fordításban: `"{n} bridge||{n} bridges"` (az `n` paraméter szerint)
  * - kódban: `t('Kijelölés')` (az app.ts-ben `tr` néven, mert ott sok a `t` nevű helyi változó), adattáblában `N_('…')`, paraméterrel `t('{n} híd', { n: 3 })` (a `{név}` helyére kerül az érték);
  * - statikus HTML: `translateDom(root)` a szövegcsomópontokat és a `title` / `aria-label` / `placeholder` / `alt`
  *   jellemzőket fordítja (az eredetit megjegyzi, így oda-vissza váltható); `data-i18n-skip` alatt nem fordít.
@@ -36,9 +37,15 @@ export function detectLang(stored: unknown, prefs: ReadonlyArray<string> = []): 
 
 /** Fordítás (a megadott nyelvre, alapból az aktuálisra); `{név}` helyére a paraméter. */
 export function t(src: string, params?: Readonly<Record<string, string | number>>, lang: Lang = cur): string {
-  const tr = lang === 'hu' ? src : DICTS[lang][src] ?? src;
+  let tr = lang === 'hu' ? src : DICTS[lang][src] ?? src;
+  // többes szám: „{n} bridge||{n} bridges” – egy darabnál az első alak (a magyarban nem kell)
+  if (tr.includes('||')) { const [one, many] = tr.split('||'); tr = params && Number(params.n) === 1 ? one : many; }
   return params ? tr.replace(/\{(\w+)\}/g, (m, k: string) => (k in params ? String(params[k]) : m)) : tr;
 }
+/** Fordítófüggvény típusa (az engine paraméterként kapja, így maga nem olvas nyelvi állapotot). */
+export type Tr = (src: string, params?: Readonly<Record<string, string | number>>) => string;
+/** Fordítás nélküli formázás (magyar): a `{név}` helyére a paraméter; az engine alapértelmezése. */
+export const fmt: Tr = (src, params) => (params ? src.replace(/\{(\w+)\}/g, (m, k: string) => (k in params ? String(params[k]) : m)) : src);
 /** Csak jelöli a szöveget a kigyűjtésnek (adattáblákban); a fordítás a felhasználás helyén, `t()`-vel történik. */
 export const N_ = (src: string): string => src;
 /** Van-e fordítás (a szótár lefedettségéhez). */

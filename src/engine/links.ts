@@ -1,4 +1,5 @@
 /** Kapcsolatok (links): lábhivatkozások feloldása, egyenértékű lábak, feliratok és a bekötöttségi állapot. */
+import { N_, fmt, type Tr } from '../i18n/i18n';
 import type { PartInstance } from '../core/schema';
 import { DEFS, isMcu, isOff } from './defs';
 import { plugOf } from './plug';
@@ -76,9 +77,9 @@ export function linkStates(D: Design, A: Netlist): Map<string, LinkState> {
 /* ---------- Bekötés lábanként (tulajdonságok) és a kapcsolat célja ---------- */
 /** A lábszerepek magyar neve a lábtáblázathoz. */
 export const ROLE_HU: Record<string, string> = {
-  gnd: 'föld', vin: 'tápbemenet', pwr: 'táp', p33: '3,3 V', gpio: 'GPIO', sig: 'jel', adc: 'analóg jel', out: 'kimenet', pout: 'tápkimenet',
-  A: 'kapcsoló A', B: 'kapcsoló B', base: 'bázis', col: 'kollektor', emit: 'emitter', g: 'gate', d: 'drain', s: 'source',
-  an: 'anód', ka: 'katód', cp: '+', cn: '−', bp: '+', bn: '−', coil: 'tekercs', chg: 'töltés', r: 'ellenállás', c: 'kondenzátor', j: 'átkötés', h: 'tüske',
+  gnd: N_('föld'), vin: N_('tápbemenet'), pwr: N_('táp'), p33: N_('3,3 V'), gpio: 'GPIO', sig: N_('jel'), adc: N_('analóg jel'), out: N_('kimenet'), pout: N_('tápkimenet'),
+  A: N_('kapcsoló A'), B: N_('kapcsoló B'), base: N_('bázis'), col: N_('kollektor'), emit: N_('emitter'), g: N_('gate'), d: N_('drain'), s: N_('source'),
+  an: N_('anód'), ka: N_('katód'), cp: '+', cn: '−', bp: '+', bn: '−', coil: N_('tekercs'), chg: N_('töltés'), r: N_('ellenállás'), c: N_('kondenzátor'), j: N_('átkötés'), h: N_('tüske'),
 };
 /** Kötelező lábak: ha az alkatrész már be van kötve, de ezek lebegnek, a Problémák között jelezzük. */
 export const REQUIRED_ROLES = new Set(['gnd', 'vin']);
@@ -110,8 +111,8 @@ export function pinRows(D: Design, A: Netlist, p: PartInstance): PinRow[] {
 
 export interface TargetOpt { value: string; label: string; group: string }
 /** Kapcsolat lehetséges céljai: föld, szabad GPIO, a vezérlő táplábai és GPIO-i, a többi alkatrész lábai. */
-export function linkTargets(D: Design, A: Netlist, exceptPart?: string): TargetOpt[] {
-  const o: TargetOpt[] = [{ value: 'GND', label: 'GND (föld)', group: 'Általános' }, { value: 'GPIO', label: 'szabad GPIO (az útvonalkereső választ)', group: 'Általános' }];
+export function linkTargets(D: Design, A: Netlist, exceptPart?: string, tr: Tr = fmt): TargetOpt[] {
+  const o: TargetOpt[] = [{ value: 'GND', label: tr('GND (föld)'), group: tr('Általános') }, { value: 'GPIO', label: tr('szabad GPIO (az útvonalkereső választ)'), group: tr('Általános') }];
   const st = linkStates(D, A), usedGpio = new Map<string, string>();
   for (const l of D.links) { const s = st.get(l.id); if (s && s.gpioRef) usedGpio.set(s.gpioRef, linkText(D, l).split(' → ')[0]); }
   for (const p of D.parts) {
@@ -123,9 +124,9 @@ export function linkTargets(D: Design, A: Netlist, exceptPart?: string): TargetO
       const ref = p.id + '.' + q.id;
       if (isMcu(p)) {
         if (q.role === 'gnd') continue; // a föld az Általános csoportban
-        if (q.role === 'gpio') { const u = usedGpio.get(ref); o.push({ value: ref, label: `${q.name}${u ? ` (foglalt: ${u})` : ''}`, group: `${p.label}: GPIO` }); }
-        else o.push({ value: ref, label: q.name, group: `${p.label}: táp` });
-      } else o.push({ value: ref, label: `${groupLabel(q)}${ROLE_HU[q.role] ? ` · ${ROLE_HU[q.role]}` : ''}`, group: `${p.label} (${DEFS[p.type].def.name})` });
+        if (q.role === 'gpio') { const u = usedGpio.get(ref); o.push({ value: ref, label: u ? tr('{x} (foglalt: {y})', { x: q.name, y: u }) : q.name, group: `${p.label}: GPIO` }); }
+        else o.push({ value: ref, label: q.name, group: tr('{x}: táp', { x: p.label }) });
+      } else o.push({ value: ref, label: `${groupLabel(q)}${ROLE_HU[q.role] ? ` · ${tr(ROLE_HU[q.role])}` : ''}`, group: `${p.label} (${DEFS[p.type].def.name})` });
     }
   }
   return o;

@@ -1,3 +1,4 @@
+import { N_ } from '../i18n/i18n';
 /**
  * Példatervek: egy-egy alkatrész vagy funkció bemutatása, magyarázó jegyzetekkel.
  * Tiszta adat (DOM nélkül): a betöltést az app végzi (útvonaltervezés, kézi rögzítés, jelsorozat).
@@ -35,7 +36,9 @@ export interface Example {
   learn?: string[];
 }
 
+/** A kategóriák neve egyben azonosító is; a felület `t()`-vel fordítja (a jelölés a kigyűjtésnek szól). */
 export const EX_CATS = ['Alapok', 'Vezérlő', 'Bemenet', 'Program', 'Félvezető', 'Passzív', 'Motor', 'Logika', 'Saját alkatrész', 'Modul'] as const;
+void [N_('Alapok'), N_('Vezérlő'), N_('Bemenet'), N_('Félvezető'), N_('Passzív'), N_('Motor'), N_('Logika'), N_('Saját alkatrész'), N_('Modul'), N_('kezdő'), N_('haladó')];
 
 const YEL = '#fff3bf', GRN = '#d3f9d8', BLU = '#d0ebff';
 const PICO: ExPart = { id: 'p1', type: 'pico', label: 'PICO', r: 12, c: 32, rot: 2, props: { span: 6 } };

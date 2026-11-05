@@ -1,4 +1,5 @@
 /** A terv: üres terv, beolvasás (normalizálás, régi formátumok), saját alkatrészek összefésülése megnyitáskor. */
+import { N_ } from '../i18n/i18n';
 import type { PartDef } from '../core/schema';
 import { hasErrors, validatePartDef } from '../core/validate';
 import { PARTS } from '../parts/builtin';
@@ -9,7 +10,7 @@ import type { AutoBridge, Bridge, Design, Hole, Link, Note, Wire } from './types
 
 
 /** Jegyzetszínek: [szín, név]. */
-export const NOTE_COL: ReadonlyArray<readonly [string, string]> = [['#fff3bf', 'sárga'], ['#d3f9d8', 'zöld'], ['#d0ebff', 'kék'], ['#ffe3e3', 'piros'], ['#f1f3f5', 'szürke']];
+export const NOTE_COL: ReadonlyArray<readonly [string, string]> = [['#fff3bf', N_('sárga')], ['#d3f9d8', N_('zöld')], ['#d0ebff', N_('kék')], ['#ffe3e3', N_('piros')], ['#f1f3f5', N_('szürke')]];
 
 export const emptyDesign = (): Design => ({
   v: 1, board: { rows: 78, cols: 39, sec: 3 }, parts: [], bridges: [], wires: [], links: [], auto: { bridges: [], wires: [] },

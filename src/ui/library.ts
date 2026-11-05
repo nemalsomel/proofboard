@@ -5,6 +5,7 @@
  */
 import type { PartDef } from '../core/schema';
 import { matchPart } from '../core/library';
+import { N_, t as tr } from '../i18n/i18n';
 
 export interface LibPref { fav?: string[]; recent?: string[]; closed?: string[] }
 const KEY = 'proofboard.lib.ui';
@@ -38,21 +39,21 @@ export function libraryHtml(I: LibInput): string {
   const item = (t: string) => {
     const d = I.defs[t], own = !I.builtin.has(t), projOnly = own && !I.library.has(t), f = fav.has(t);
     return `<div class="libitem" role="group">`
-      + `<button class="btn libfav ${f ? 'on' : ''}" data-fav="${t}" title="${f ? 'Kedvenc (kattintásra kiveszi)' : 'Kedvencekhez'}" aria-label="${esc(d.name)} kedvenc" aria-pressed="${f}">${f ? '★' : '☆'}</button>`
+      + `<button class="btn libfav ${f ? 'on' : ''}" data-fav="${t}" title="${f ? tr('Kedvenc (kattintásra kiveszi)') : tr('Kedvencekhez')}" aria-label="${esc(tr('{x} kedvenc', { x: d.name }))}" aria-pressed="${f}">${f ? '★' : '☆'}</button>`
       + `<button class="btn ${I.placing === t ? 'on' : ''}" data-lib="${t}" ${dis}>${esc(d.name)}<span>${esc(d.fp)}</span></button>`
-      + (projOnly ? `<button class="btn" data-tolib="${t}" title="Hozzáadás a saját könyvtárhoz (más tervekben is elérhető lesz)" aria-label="${esc(d.name)} a könyvtárba" ${dis}>＋</button>` : '')
-      + (own ? `<button class="btn" data-adv data-edit="${t}" title="Szerkesztés" aria-label="${esc(d.name)} szerkesztése" ${dis}>✎</button>` : '') + `</div>`;
+      + (projOnly ? `<button class="btn" data-tolib="${t}" title="${tr('Hozzáadás a saját könyvtárhoz (más tervekben is elérhető lesz)')}" aria-label="${esc(tr('{x} a könyvtárba', { x: d.name }))}" ${dis}>＋</button>` : '')
+      + (own ? `<button class="btn" data-adv data-edit="${t}" title="${tr('Szerkesztés')}" aria-label="${esc(tr('{x} szerkesztése', { x: d.name }))}" ${dis}>✎</button>` : '') + `</div>`;
   };
   const group = (id: string, title: string, list: string[], hint = '') => {
     const ts = list.filter(ok); if (!ts.length) return '';
     const open = q || !closed.has(id);
-    return `<details class="libgrp" data-grp="${esc(id)}" ${open ? 'open' : ''}><summary><span>${esc(title)}</span><span class="muted small">${ts.length}</span></summary>${hint ? `<p class="help" style="margin:2px 0 4px">${hint}</p>` : ''}${ts.map(item).join('')}</details>`;
+    return `<details class="libgrp" data-grp="${esc(id)}" ${open ? 'open' : ''}><summary><span>${esc(tr(title))}</span><span class="muted small">${ts.length}</span></summary>${hint ? `<p class="help" style="margin:2px 0 4px">${esc(tr(hint))}</p>` : ''}${ts.map(item).join('')}</details>`;
   };
   const all = Object.keys(I.defs), cats = [...new Set(all.filter(t => I.builtin.has(t)).map(t => I.defs[t].cat))];
   let h = '';
-  if (!q) { h += group('fav', 'Kedvencek', [...fav].filter(t => I.defs[t])); h += group('recent', 'Legutóbb használt', (I.pref.recent || []).filter(t => I.defs[t])); }
-  h += group('proj', 'Projekt', I.project.filter(t => !I.library.has(t)), 'A megnyitott terv saját alkatrészei, amelyek nincsenek a könyvtáradban. ＋: hozzáadás a saját könyvtárhoz.');
-  h += group('lib', 'Saját könyvtár', [...I.library]);
+  if (!q) { h += group('fav', N_('Kedvencek'), [...fav].filter(t => I.defs[t])); h += group('recent', N_('Legutóbb használt'), (I.pref.recent || []).filter(t => I.defs[t])); }
+  h += group('proj', N_('Projekt'), I.project.filter(t => !I.library.has(t)), N_('A megnyitott terv saját alkatrészei, amelyek nincsenek a könyvtáradban. ＋: hozzáadás a saját könyvtárhoz.'));
+  h += group('lib', N_('Saját könyvtár'), [...I.library]);
   for (const c of cats) if (!I.hideCats?.has(c)) h += group('cat:' + c, c, all.filter(t => I.builtin.has(t) && I.defs[t].cat === c));
-  return h || '<p class="help">Nincs találat.</p>';
+  return h || `<p class="help">${tr('Nincs találat.')}</p>`;
 }

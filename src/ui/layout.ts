@@ -3,6 +3,7 @@
  * oldalsáv van összecsukva, nyitva van-e az alsó panel, melyik nézet látszik, melyik a jobb sáv füle –,
  * a kézi módosítás elrendezésenként megmarad. Tiszta, DOM-mentes állapotkezelés; a tárolás a gazdáé.
  */
+import { N_ } from '../i18n/i18n';
 export type LayoutId = 'design' | 'prog' | 'sim';
 export type Work = 'board' | 'prog' | 'split';
 export type RightTab = 'design' | 'sim' | 'code';
@@ -16,9 +17,9 @@ export interface LayoutState {
 export interface LayoutStore { cur: LayoutId; saved: Partial<Record<LayoutId, Partial<LayoutState>>> }
 
 export const LAYOUTS: { id: LayoutId; name: string; hint: string }[] = [
-  { id: 'design', name: 'Tervezés', hint: 'Alkatrészek lerakása és bekötése' },
-  { id: 'prog', name: 'Program', hint: 'A panel és a program egymás mellett, jobbra a kód' },
-  { id: 'sim', name: 'Szimuláció', hint: 'Vezérlők és GPIO-k; a szimuláció indításakor erre vált' },
+  { id: 'design', name: N_('Tervezés'), hint: N_('Alkatrészek lerakása és bekötése') },
+  { id: 'prog', name: N_('Program'), hint: N_('A panel és a program egymás mellett, jobbra a kód') },
+  { id: 'sim', name: N_('Szimuláció'), hint: N_('Vezérlők és GPIO-k; a szimuláció indításakor erre vált') },
 ];
 export const LAYOUT_DEFAULTS: Record<LayoutId, LayoutState> = {
   design: { l: false, r: false, bottom: false, work: 'board', rtab: 'design' },
