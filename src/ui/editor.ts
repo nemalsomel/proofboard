@@ -344,6 +344,8 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   };
   /** A bal oldali fül az előnézet alatt: Alapadatok, Megjelenés vagy Problémák. */
   let vtab: 'basic' | 'look' | 'probs' = 'basic';
+  /** Az előnézeten húzott láb (a rács közben rögzített). */
+  let drag: { i: number; moved: boolean; frame: { r0: number; r1: number; c0: number; c1: number } } | null = null, dragEnd = 0;
   /** A lábtáblázat minden oszloppal (különben a kijelölt láb további adatai a sora alatt). */
   let wide = false;
   let sel = -1, selModel = -1, selOut = -1, nameBefore: string | null = null;
@@ -377,7 +379,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       <div class="pe-body">
         <div class="pe-right pe-vis" data-ref="right">
           <canvas class="pe-cv" data-ref="cv" aria-label="Előnézet"></canvas>
-          <p class="help" data-ref="cvhelp">Kattints egy üres lyukra: új láb oda. Kattints egy lábra: kijelölés a táblázatban.</p>
+          <p class="help" data-ref="cvhelp">Kattints egy üres lyukra: új láb oda. Kattints egy lábra: kijelölés a táblázatban; húzva áthelyezhető.</p>
           <div class="grp seg pe-vtabs" role="tablist" aria-label="Az alkatrész adatai"><button class="btn" data-vtab="basic" role="tab">Alapadatok</button><button class="btn" data-vtab="look" role="tab">Megjelenés</button><button class="btn" data-vtab="probs" role="tab">Problémák <span class="badge" data-ref="pcount" hidden></span></button></div>
           <div class="pe-vscroll" data-ref="vscroll">
             <div data-ref="basic"></div>
@@ -861,12 +863,13 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     const pts = (tab !== 'json' && form ? form.pins.map(p => ({ id: p.id, name: p.name, lr: p.lr, lc: p.lc, role: p.role })) : pinsOfJson(d));
     const rs = pts.map(p => p.lr), cs = pts.map(p => p.lc);
     const BB = pts.length && form && tab !== 'json' ? bodyRect(form, pts) : null;
-    const r0 = Math.floor(Math.min(0, ...rs, BB ? BB.r0 : 0)) - 1, r1 = Math.ceil(Math.max(0, ...rs, BB ? BB.r1 : 0)) + 1;
-    const c0 = Math.floor(Math.min(0, ...cs, BB ? BB.c0 : 0)) - 1, c1 = Math.ceil(Math.max(0, ...cs, BB ? BB.c1 : 0)) + 1;
+    let r0 = Math.floor(Math.min(0, ...rs, BB ? BB.r0 : 0)) - 1, r1 = Math.ceil(Math.max(0, ...rs, BB ? BB.r1 : 0)) + 1;
+    let c0 = Math.floor(Math.min(0, ...cs, BB ? BB.c0 : 0)) - 1, c1 = Math.ceil(Math.max(0, ...cs, BB ? BB.c1 : 0)) + 1;
+    if (drag) ({ r0, r1, c0, c1 } = drag.frame); // húzás közben a rács nem méreteződik át (a mutató alatti lyuk ne csússzon el)
     const S = Math.max(10, Math.min(44, Math.floor(Math.min((W - 20) / (c1 - c0 + 1), (H - 20) / (r1 - r0 + 1)))));
     const ox = (W - (c1 - c0 + 1) * S) / 2, oy = (H - (r1 - r0 + 1) * S) / 2;
     const X = (c: number) => ox + (c - c0 + 0.5) * S, Y = (r: number) => oy + (r - r0 + 0.5) * S;
-    (cv as any)._map = { r0, c0, S, ox, oy };
+    (cv as any)._map = { r0, c0, r1, c1, S, ox, oy };
     ctx.fillStyle = '#ead6a8'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#4a3c24';
     for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) { ctx.beginPath(); ctx.arc(X(c), Y(r), S * 0.14, 0, 7); ctx.fill(); }
@@ -904,7 +907,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     });
     if (pts.length) { ctx.strokeStyle = '#a8571f'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5; ctx.strokeRect(X(pts[0].lc) - S * 0.45, Y(pts[0].lr) - S * 0.45, S * 0.9, S * 0.9); ctx.setLineDash([]); }
     $('cvhelp').textContent = tab === 'func' && form ? 'A kijelölt elem vagy kimenet lábai kiemelve. Kattints egy lábra: a Lábak fülön kijelöli.' : tab === 'pins' && form
-      ? 'Kattints egy üres lyukra: új láb oda. Kattints egy lábra: kijelölés a táblázatban. A szaggatott keret a lerakási pont.'
+      ? 'Kattints egy üres lyukra: új láb oda. Kattints egy lábra: kijelölés a táblázatban; húzva áthelyezhető. A szaggatott keret a lerakási pont.'
       : 'JSON-nézetben az előnézet csak a lábakat mutatja (alapértékekkel).';
   }
   function pinsOfJson(d: PartDef | null): Array<{ id: string; name: string; lr: number; lc: number; role: string }> {
@@ -926,7 +929,38 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     }
   }
 
+  /** Az előnézet lyuka a mutató alatt (az aktuális rajz szerint). */
+  const cellAt = (e: PointerEvent | MouseEvent): { r: number; c: number } | null => {
+    const m = (cv as any)._map; if (!m) return null;
+    const rc = cv.getBoundingClientRect();
+    return { c: Math.round((e.clientX - rc.left - m.ox) / m.S - 0.5) + m.c0, r: Math.round((e.clientY - rc.top - m.oy) / m.S - 0.5) + m.r0 };
+  };
+  /** Láb áthelyezése húzással: a megfogott láb a mutató alatti szabad lyukba kerül. */
+  cv.addEventListener('pointerdown', e => {
+    if (!form || tab === 'json' || e.button !== 0) return;
+    const at = cellAt(e); if (!at) return;
+    const i = form.pins.findIndex(p => p.lr === at.r && p.lc === at.c); if (i < 0) return;
+    const m = (cv as any)._map;
+    drag = { i, moved: false, frame: { r0: m.r0, r1: m.r1, c0: m.c0, c1: m.c1 } }; sel = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; drawPreview();
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!form || tab === 'json') return;
+    const at = cellAt(e); if (!at) return;
+    if (!drag) { cv.style.cursor = form.pins.some(p => p.lr === at.r && p.lc === at.c) ? 'grab' : ''; return; }
+    const p = form.pins[drag.i], F = drag.frame;
+    if (at.r < F.r0 || at.r > F.r1 || at.c < F.c0 || at.c > F.c1) return; // a látható rácson belül
+    if ((p.lr === at.r && p.lc === at.c) || form.pins.some(q => q !== p && q.lr === at.r && q.lc === at.c)) return;
+    p.lr = at.r; p.lc = at.c; drag.moved = true; refresh();
+  });
+  const dragStop = (e: PointerEvent) => {
+    if (!drag) return;
+    const d = drag; drag = null; cv.style.cursor = ''; if (cv.hasPointerCapture(e.pointerId)) cv.releasePointerCapture(e.pointerId);
+    if (d.moved) { dragEnd = Date.now(); if (tab !== 'pins') tab = 'pins'; render(); left.querySelector(`tr[data-row="${sel}"]`)?.scrollIntoView({ block: 'nearest' }); }
+  };
+  cv.addEventListener('pointerup', dragStop);
+  cv.addEventListener('pointercancel', dragStop);
   cv.addEventListener('click', e => {
+    if (Date.now() - dragEnd < 300) return; // húzás után nincs kattintás (új láb)
     if (!form || tab === 'json') return;
     if (tab !== 'pins') tab = 'pins';
     const m = (cv as any)._map; if (!m) return;

@@ -272,3 +272,23 @@ test('több alkatrész egyszerre: mindegyik saját fület kap, a másik megnyit�
   await expect(page.locator('#partTabs .ptab')).toHaveCount(1);
   await expect(page.locator('#pe_name')).toHaveValue('Félkész modul');
 });
+
+test('az előnézeten a láb megfogva áthelyezhető; foglalt lyukba nem kerül, új láb nem keletkezik', async ({ page }) => {
+  await page.click('#bNewPart');
+  await page.fill('#pe_gnames', 'A,B,C');
+  await page.click('[data-act="gen"]');
+  const xy = (r: number, c: number) => page.locator('.pe-cv').evaluate((cv: any, [r, c]) => {
+    const m = cv._map, b = cv.getBoundingClientRect();
+    return { x: b.left + m.ox + (c - m.c0 + 0.5) * m.S, y: b.top + m.oy + (r - m.r0 + 0.5) * m.S };
+  }, [r, c]);
+  const a = await xy(0, 2), t = await xy(2, 2);
+  await page.mouse.move(a.x, a.y); await page.mouse.down();
+  await page.mouse.move(t.x, t.y, { steps: 6 }); await page.mouse.up();
+  await expect(page.locator('.pe-pins tbody tr[data-row]')).toHaveCount(3);
+  await expect(page.locator('.pe-pins input[data-pin="2"][data-k="lr"]')).toHaveValue('2');
+  await expect(page.locator('.pe-pins tr[data-row="2"]')).toHaveClass(/on/); // a húzott láb kijelölve
+  // foglalt lyukra húzva marad a helyén
+  const b = await xy(0, 1), o = await xy(0, 0);
+  await page.mouse.move(b.x, b.y); await page.mouse.down(); await page.mouse.move(o.x, o.y, { steps: 4 }); await page.mouse.up();
+  await expect(page.locator('.pe-pins input[data-pin="1"][data-k="lc"]')).toHaveValue('1');
+});
