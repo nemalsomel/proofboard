@@ -749,3 +749,19 @@ input:disabled::placeholder{color:var(--muted)}
 .pg.pg-full>.pg-canvas{flex:1 1 auto;height:auto}
 .cg.pg-full .pg-props{position:absolute;right:12px;top:56px;width:280px;max-height:calc(100% - 70px);overflow:auto;border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-2);background:var(--panel)}
 .cg>.pg-canvas{height:max(360px,calc(100vh - 330px))}
+
+/* Panel a szerkesztő mellett: bal fele a vászon, jobb fele az Alkatrész-szerkesztő (egy hasábban) */
+.app.part-split .scroll{width:50%;flex:1 1 auto}
+.app.part-split .partview{left:50%;border-left:1px solid var(--line)}
+.app.part-split #vModes{display:flex}
+.app.part-split .toolstrip,.app.part-split .toolstrip.col{left:12px;transform:none;max-width:calc(50% - 24px)}
+.app.part-split .intro{right:50%}
+.app.part-split .pe-view .pe-body{display:flex;flex-direction:column;overflow:auto}
+.app.part-split .pe-view .pe-vis{overflow:visible;border-right:0;border-bottom:1px solid var(--line)}
+.app.part-split .pe-view .pe-vscroll{overflow:visible}
+.app.part-split .pe-parcol{min-height:auto}
+.app.part-split .pe-view .pe-left{overflow:visible}
+.app.part-split .pe-ptabs{position:sticky;top:0;z-index:3;background:var(--panel)}
+#partSplit.on{background:var(--primary-soft);color:var(--primary)}
+.app.part-split .pe-view .pe-vis,.app.part-split .pe-view .pe-parcol{flex:0 0 auto;min-height:auto}
+.app.part-split .pe-view .pe-vis{max-height:none}

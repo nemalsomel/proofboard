@@ -668,7 +668,7 @@ document.addEventListener('keydown',ev=>{
   if(ev.altKey&&k==='n'){ev.preventDefault();openNew();return;}
   if(ev.altKey&&!ev.ctrlKey&&['1','2','3'].includes(ev.key)){ev.preventDefault();applyLayout(LAYOUTS[+ev.key-1].id);return;}
   if(t&&t.closest&&t.closest('#progView,#partView,.pg,dialog'))return; // a program- és az alkatrész-szerkesztő, valamint a párbeszédablakok saját billentyűi
-  if(ui.part&&!['1','2','3'].includes(ev.key)&&!(ev.ctrlKey||ev.metaKey))return; // az Alkatrész-szerkesztő látszik: a panel billentyűi nem élnek
+  if(ui.part&&!$('.app').classList.contains('part-split')&&!['1','2','3'].includes(ev.key)&&!(ev.ctrlKey||ev.metaKey))return; // az Alkatrész-szerkesztő látszik (panel nélkül): a panel billentyűi nem élnek
   if((ev.ctrlKey||ev.metaKey)&&k==='a'&&!ui.sim){ev.preventDefault();ui.sel=grp(D.parts.map(p=>p.id),D.bridges.map((b,i)=>i),D.wires.map((w,i)=>i));setTool('select');return;}
   if(ev.ctrlKey||ev.metaKey||ev.altKey)return;
   if(k==='escape'){ui.placing=null;ui.wireStart=null;ui.sel=null;if(ui.selLink){ui.selLink=null;renderLinks();}renderLeft();draw();status();return;}
@@ -1353,8 +1353,11 @@ function partTabs(){const c=$('#partTabs');c.hidden=!PT.size;
 function partShow(id){const on=id!=null&&PT.has(id);if(on)partCur=id;ui.part=on;const v=$('#partView');v.hidden=!on;
   if(on){const el=PT.get(id).el;if(v.firstChild!==el)v.replaceChildren(el);}else v.replaceChildren();
   $('.app').classList.toggle('work-part',on);
+  // Panel a szerkesztő mellett: a vászon bal fele látszik és használható (a beállítás megmarad)
+  const sp=on&&!!uiPref().partSplit&&!MOB.matches;$('.app').classList.toggle('part-split',sp);
+  const sb=$('#partSplit');sb.hidden=!on;sb.classList.toggle('on',sp);sb.setAttribute('aria-pressed',String(sp));
   document.querySelectorAll('[data-work]').forEach(b=>{const o=!on&&b.dataset.work===ui.work;b.classList.toggle('on',o);b.setAttribute('aria-pressed',String(o));});
-  partTabs();if(!on){resize();draw();}}
+  partTabs();if(!on||sp){resize();draw();}}
 editorHost.view={
   open(id,el,title,onClose,show=true,acts=null){PT.set(id,{el,title,onClose,acts});if(!show){partTabs();return;}partShow(id);if(MOB.matches)sheet('');log('Alkatrész-szerkesztő: '+title.replace(/^Alkatrész: /,''));},
   title(id,t){const x=PT.get(id);if(!x||x.title===t)return;const flip=/ •$/.test(t)!==/ •$/.test(x.title);x.title=t;if(flip){partTabs();return;}const g=[...document.querySelectorAll('#partTabs [data-pt]')].find(e=>e.dataset.pt===id);if(g)g.querySelector('.pgo').textContent=t;ptWrap();},
@@ -1364,6 +1367,7 @@ editorHost.view={
   show(id){partShow(id);if(MOB.matches)sheet('');},
   visible:id=>!!ui.part&&partCur===id,
 };
+$('#partSplit').onclick=()=>{uiPrefSet({partSplit:!uiPref().partSplit});partShow(partCur);};
 $('#partTabs').addEventListener('click',e=>{const g=e.target.closest('[data-pt]');if(!g)return;const id=g.dataset.pt;
   if(e.target.closest('.px')){const x=PT.get(id);if(x)x.onClose();}else partShow(id);});
 function libMsg(t){const e=$('#libMsg');if(e)e.textContent=t;toast(t);}

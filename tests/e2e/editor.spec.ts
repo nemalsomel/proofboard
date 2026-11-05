@@ -317,3 +317,27 @@ test('a fül gombjai egy gombsorban; sok alkatrészfül a nézetváltók alá t�
   expect(await c.evaluate(e => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
   expect((await c.boundingBox())!.y).toBeGreaterThan((await page.locator('#workSw').boundingBox())!.y + 10);
 });
+
+test('panel a szerkesztő mellett: a vászon bal fele látszik és használható, a beállítás megmarad', async ({ page }) => {
+  await pcb(page, `pcb.preset();`);
+  await page.click('#bNewPart');
+  await expect(page.locator('#partSplit')).toBeVisible();
+  const vw = page.viewportSize()!.width;
+  await page.click('#partSplit');
+  await expect(page.locator('#partSplit')).toHaveAttribute('aria-pressed', 'true');
+  const pv = (await page.locator('#partView').boundingBox())!, sc = (await page.locator('#scroll').boundingBox())!;
+  expect(sc.x + sc.width).toBeLessThanOrEqual(pv.x + 2); // egymás mellett
+  await expect(page.locator('#vModes')).toBeVisible();
+  // a panelen kijelölhető alkatrész, a szerkesztő közben nyitva marad
+  const q = await pcb<any>(page, `const q = pcb.pins('K1'); return pcb.reveal(q[0].r, q[0].c);`);
+  expect(q.x).toBeLessThan(pv.x);
+  await page.mouse.click(q.x, q.y);
+  await expect(page.locator('#selSumm')).toHaveText('K1');
+  await expect(page.locator('#partView .pe')).toBeVisible();
+  // a Panel gomb a szerkesztőt háttérbe teszi; visszahozva újra mellette a panel
+  await page.click('#workSw [data-work="board"]');
+  await expect(page.locator('#partSplit')).toBeHidden();
+  await page.click('#partTabs .pgo');
+  await expect(page.locator('.app')).toHaveClass(/part-split/);
+  expect(vw).toBeGreaterThan(0);
+});
