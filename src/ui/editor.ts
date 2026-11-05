@@ -9,6 +9,7 @@ import { gateSvg, gatesToText, tableVars, toggleCell, truthTable, TABLE_MAX_VARS
 import { fmtSI, parseSI } from '../core/expr';
 import { BUS_FNS, hasErrors, validatePartDef, type Problem } from '../core/validate';
 import type { ModelEl, PartDef, Prim } from '../core/schema';
+import { icon } from './icons';
 
 export interface EditorHost {
   builtin: Record<string, PartDef>;
@@ -26,7 +27,8 @@ export interface EditorHost {
    * `onClose`: a fül × gombja.
    */
   view: {
-    open(id: string, el: HTMLElement, title: string, onClose: () => void, show?: boolean): void;
+    /** `acts`: a szerkesztő saját gombjai (Elvetés, Mentés), a látható fülre kerülnek. */
+    open(id: string, el: HTMLElement, title: string, onClose: () => void, show?: boolean, acts?: HTMLElement): void;
     title(id: string, t: string): void;
     close(id: string): void;
     /** Háttérbe tétel: a nézet eltűnik, a fül marad (mint a Panel gombra váltva). */
@@ -368,14 +370,6 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   back.className = 'pe-view';
   back.innerHTML = `
     <div class="pe" role="region" aria-label="Alkatrész-szerkesztő">
-      <header class="pe-head">
-        <div class="grp seg pe-tabs" role="tablist" aria-label="Szerkesztési mód"><button class="btn" data-tab="pins" role="tab" title="Lábak: hely, név, szerep, csoport, funkció">Lábak</button><button class="btn" data-tab="func" role="tab" title="Működés: villamos modell, digitális logika, vezérlő a szimulációban">Működés</button><button class="btn" data-tab="json" role="tab" title="A leírás teljes JSON-formája">JSON</button></div>
-        <span class="muted small pe-sub" data-ref="sub"></span>
-        <span class="sp"></span>
-        <button class="btn ghost" data-act="discard" title="A nem mentett módosítások elvetése, vissza a kiinduló állapotra" hidden>Elvetés</button>
-        ${existing ? '<button class="btn ghost danger" data-act="delete" title="Az alkatrész törlése a könyvtárból">Törlés</button>' : ''}
-        <button class="btn primary" data-act="save" title="${existing ? 'Mentés a saját könyvtárba' : 'Mentés a saját könyvtárba, és a lerakás indítása a panelon'}">Mentés</button>
-      </header>
       <div class="pe-body">
         <div class="pe-right pe-vis" data-ref="right">
           <canvas class="pe-cv" data-ref="cv" aria-label="Előnézet"></canvas>
@@ -386,11 +380,19 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
             <section class="pe-probs" data-vpane="probs" aria-label="Az alkatrész problémái"><ul class="issues" data-ref="probs"></ul></section>
           </div>
         </div>
-        <div class="pe-left pe-par" data-ref="left"></div>
+        <div class="pe-parcol">
+          <div class="pe-ptabs"><div class="grp seg pe-tabs" role="tablist" aria-label="Szerkesztési mód"><button class="btn" data-tab="pins" role="tab" title="Lábak: hely, név, szerep, csoport, funkció">Lábak</button><button class="btn" data-tab="func" role="tab" title="Működés: villamos modell, digitális logika, vezérlő a szimulációban">Működés</button><button class="btn" data-tab="json" role="tab" title="A leírás teljes JSON-formája">JSON</button></div>
+            <span class="muted small pe-sub" data-ref="sub"></span></div>
+          <div class="pe-left pe-par" data-ref="left"></div>
+        </div>
       </div>
     </div>`;
+  /** A fül gombjai a nézetsávban (a gazda a látható szerkesztő füléhez teszi): Elvetés, Mentés. */
+  const acts = document.createElement('span');
+  acts.className = 'pe-acts';
+  acts.innerHTML = `<button class="btn icon" data-act="discard" aria-label="Elvetés" title="Elvetés: a nem mentett módosítások eldobása, vissza a kiinduló állapotra" hidden>${icon('trash')}</button><button class="btn icon primary" data-act="save" aria-label="Mentés" title="${existing ? 'Mentés a saját könyvtárba (Ctrl+S)' : 'Mentés a saját könyvtárba, és a lerakás indítása a panelon (Ctrl+S)'}">${icon('disk')}</button>`;
   const titleOf = () => 'Alkatrész: ' + ((form && tab !== 'json' ? form.name : jsonDef?.name) || (existing ? existing.name : 'új'));
-  host.view.open(draftKey, back, titleOf(), () => close(), show);
+  host.view.open(draftKey, back, titleOf(), () => close(), show, acts);
   const $ = <T extends HTMLElement = HTMLElement>(ref: string) => back.querySelector(`[data-ref="${ref}"]`) as T;
   const left = $('left'), cv = $<HTMLCanvasElement>('cv'), probsEl = $('probs');
   const prevFocus = document.activeElement as HTMLElement | null;
@@ -493,7 +495,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   document.addEventListener('keydown', onDocKey, true);
   back.addEventListener('keydown', e => {
     e.stopPropagation();
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); back.querySelector<HTMLButtonElement>('[data-act="save"]')?.click(); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); acts.querySelector<HTMLButtonElement>('[data-act="save"]')?.click(); }
   });
   /** Az Űrlap szakaszai közül az, amelyiknél tartunk, kiemelve a navigációban. */
   const navSync = () => {
@@ -517,7 +519,8 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
     });
     left.innerHTML = tab === 'pins' && form ? pinsHtml(form) : tab === 'func' && form ? funcHtml(form) : jsonHtml();
-    $('basic').innerHTML = form && tab !== 'json' ? basicHtml(form) : '<p class="help pe-sec" data-vpane="basic">JSON-nézetben az alapadatok a leírásban szerkeszthetők.</p><p class="help pe-sec" data-vpane="look">JSON-nézetben a megjelenés a leírásban szerkeszthető.</p>';
+    $('basic').innerHTML = form && tab !== 'json' ? basicHtml(form) : '<p class="help pe-sec" data-vpane="basic">JSON-nézetben az alapadatok a leírásban szerkeszthetők.</p><p class="help pe-sec" data-vpane="look">JSON-nézetben a megjelenés a leírásban szerkeszthető.</p>'
+    if (existing) $('basic').insertAdjacentHTML('beforeend', `<div class="pe-sec pe-danger" data-vpane="basic"><button class="btn danger" data-act="delete" title="Az alkatrész törlése a saját könyvtárból">${icon('trash')}Alkatrész törlése</button><p class="help">A tervben már lerakott példányok megmaradnak (a terv saját leírásával).</p></div>`);
     showVtab();
     refresh(); navSync();
   }
@@ -532,9 +535,9 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     probsEl.innerHTML = ps.length
       ? ps.map((p, k) => { const w = whereOf(p); return `<li class="${p.level === 'error' ? 'c-err' : 'c-warn'}" data-prob="${k}" tabindex="0" title="${w.sel ? 'Kattints: ugrás a mezőhöz' : ''}"><span class="dot"></span><span class="pe-pmsg">${w.at ? `<b class="pe-where">${esc(w.at)}</b>` : ''}${esc(w.msg)}</span></li>`; }).join('')
       : '<li class="c-ok" style="cursor:default"><span class="dot"></span><span style="color:var(--fg)">A leírás rendben, menthető.</span></li>';
-    back.querySelectorAll<HTMLButtonElement>('[data-act="save"]').forEach(b => { b.disabled = err; });
+    acts.querySelectorAll<HTMLButtonElement>('[data-act="save"]').forEach(b => { b.disabled = err; });
     const pc = $('pcount'); pc.hidden = !ps.length; pc.textContent = String(ps.length); pc.classList.toggle('err', err);
-    const dirty = snapshot() !== clean, dis = back.querySelector<HTMLButtonElement>('[data-act="discard"]')!;
+    const dirty = snapshot() !== clean, dis = acts.querySelector<HTMLButtonElement>('[data-act="discard"]')!;
     if (!dirty && !confirmDiscard) dis.hidden = true; else dis.hidden = false;
     host.view.title(draftKey, titleOf() + (dirty ? ' •' : ''));
   }
@@ -1059,7 +1062,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     const p = problems()[+li.dataset.prob!]; if (p) goTo(whereOf(p));
   });
   probsEl.addEventListener('keydown', e => { if (e.key === 'Enter') (e.target as HTMLElement).click(); });
-  back.addEventListener('click', e => {
+  const onClick = (e: MouseEvent) => {
     const b = (e.target as HTMLElement).closest('button');
     if (!b) return;
     if (logicEvent('click', b)) return;
@@ -1072,8 +1075,9 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
     if (act === 'toform' && pending) { form = pending.form; tab = pending.to; pending = null; render(); return; }
     if (act === 'stayjson') { pending = null; render(); return; }
     if (act === 'discard') {
-      if (Date.now() - confirmDiscard > 3000) { confirmDiscard = Date.now(); b.textContent = 'Biztos? Kattints újra'; setTimeout(() => { b.textContent = 'Elvetés'; }, 3000); return; }
-      confirmDiscard = 0; b.textContent = 'Elvetés'; b.hidden = true; putDraft(draftKey, null); setParked(draftKey, false); initial(); sel = -1; selModel = -1; clean = snapshot(); render(); return;
+      const idle = () => { b.innerHTML = icon('trash'); b.classList.remove('danger', 'confirm'); };
+      if (Date.now() - confirmDiscard > 3000) { confirmDiscard = Date.now(); b.innerHTML = `${icon('trash')}<span>Biztos? Kattints újra</span>`; b.classList.add('danger', 'confirm'); setTimeout(() => { if (Date.now() - confirmDiscard >= 2900) idle(); }, 3000); return; }
+      confirmDiscard = 0; idle(); b.hidden = true; putDraft(draftKey, null); setParked(draftKey, false); initial(); sel = -1; selModel = -1; clean = snapshot(); render(); return;
     }
     if (act === 'gen' && form) {
       const n = Math.max(1, Math.min(40, +(left.querySelector<HTMLInputElement>('#pe_gn')!.value) || 1));
@@ -1110,7 +1114,9 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       if (n && Date.now() - confirmDel > 3000) { confirmDel = Date.now(); b.textContent = `Biztos? ${n} példány is törlődik`; return; }
       host.remove(opts.type); putDraft(draftKey, null); close(false); return;
     }
-  });
+  };
+  back.addEventListener('click', onClick);
+  acts.addEventListener('click', onClick);
 
   render();
   if (!restored && snapshot() !== clean) { clean = snapshot(); refresh(); } // a JSON-szöveg az első megjelenítéskor áll elő: az még nem módosítás

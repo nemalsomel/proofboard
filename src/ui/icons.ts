@@ -62,6 +62,10 @@ const P: Record<string, string> = {
   stub: '<circle cx="4" cy="12" r="2"/><circle cx="20" cy="12" r="2"/><path d="M6 12h3M15 12h3M10 15.5l2-7M13 15.5l2-7"/>',
   mirror: '<path d="M12 3v18" stroke-dasharray="2 2.2"/><path d="M9 7 4 17h5zM15 7l5 10h-5z"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+  expandAll: '<path d="m7 15 5 5 5-5M7 9l5-5 5 5"/>',
+  collapseAll: '<path d="m7 20 5-5 5 5M7 4l5 5 5-5"/>',
+  disk: '<path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M8 3v5h7V3M7 21v-7h10v7"/>',
+  minimize: '<path d="M6 18h12"/>',
   pulse: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
 };
 export type IconName = keyof typeof P;

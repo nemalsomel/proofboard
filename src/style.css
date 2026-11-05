@@ -704,3 +704,17 @@ input:disabled::placeholder{color:var(--muted)}
 .libitem>.btn.libfav.on{background:var(--panel);border-color:var(--line)}
 .lib-bar{display:flex;align-items:center;gap:6px;margin:0 0 8px}
 .lib-bar .sp{flex:1}
+
+/* Alkatrész-szerkesztő fejléc nélkül: a fülön a mentés és az elvetés, a jobb hasáb tetején Lábak | Működés | JSON */
+.pe-view .pe{grid-template-rows:minmax(0,1fr)}
+.pe-parcol{display:flex;flex-direction:column;min-width:0;min-height:0}
+.pe-ptabs{flex:0 0 auto;display:flex;align-items:center;gap:var(--sp-2);padding:8px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.pe-ptabs .btn{padding:4px 12px;font-size:12.5px}
+.pe-parcol>.pe-left{flex:1 1 auto;min-height:0}
+.pe-acts{display:contents}
+.ptab .pe-acts .btn{min-width:28px;padding:4px}
+.ptab .pe-acts .btn.confirm{padding:4px 8px;gap:4px}
+.pe-danger{margin-top:12px;border-color:color-mix(in srgb,var(--err) 35%,var(--line))!important}
+.pe-danger .btn{gap:6px}
+.pe-danger .help{margin:6px 0 0}
+@media (max-width:820px){.pe-parcol{min-height:auto}.pe-ptabs{position:sticky;top:0;z-index:3;background:var(--panel)}}

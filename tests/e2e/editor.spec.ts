@@ -178,7 +178,11 @@ test('5.6: a szerkesztő középső nézet, fül a nézetsávban; háttérbe teh
   await page.click('#partTabs .pgo');
   await expect(page.locator('#pe_name')).toHaveValue('Szenzor');
   // egyetlen fő gomb; a lábtáblázat keskeny, a kijelölt láb további adatai a sora alatt
-  await expect(page.locator('.pe .btn.primary')).toHaveText('Mentés');
+  // a mentés és az elvetés a látható szerkesztő fülén (ikongombok); Lábak | Működés | JSON a jobb hasáb tetején
+  await expect(page.locator('#partTabs .ptab.cur [data-act="save"]')).toHaveAttribute('aria-label', 'Mentés');
+  await expect(page.locator('#partTabs .ptab.cur [data-act="discard"]')).toBeVisible();
+  await expect(page.locator('#partTabs .ptab.cur .px')).toHaveAttribute('aria-label', /^Háttérbe/); // nem mentett: kicsinyítés
+  await expect(page.locator('.pe-parcol .pe-ptabs [data-tab]')).toHaveCount(3);
   await page.fill('#pe_gnames', 'OUT,GND');
   await page.click('[data-act="gen"]');
   await expect(page.locator('.pe-pins th')).toHaveCount(6);
