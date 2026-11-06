@@ -6,7 +6,7 @@ import { plugOf } from './plug';
 import { placedPins } from './geometry';
 import { hasCap } from './mcu';
 import { pinLabel, type Netlist } from './netlist';
-import type { Design, Link, PlacedPin } from './types';
+import type { AutoBridge, Design, Hole, Link, PlacedPin, Wire } from './types';
 
 /** 'p3.A1' → a láb panel-koordinátákkal, vagy null. */
 export function findPin(D: Design, ref: string): PlacedPin | null {
@@ -158,4 +158,73 @@ export function setLinkTarget(D: Design, id: string, target: string): boolean {
   if (!l || !target || l.b === target || l.a === target) return false;
   l.b = target; l.gpio = null;
   return true;
+}
+
+/* ---------- Kapcsolati geometria: a kiemelés és a kapcsolati vonalak végpontjai ---------- */
+
+const onBoard = (D: Design, r: number, c: number) => r >= 0 && c >= 0 && r < D.board.rows && c < D.board.cols;
+type Pt = Pick<PlacedPin, 'r' | 'c'>;
+
+/**
+ * A kapcsolat célpontja a megadott forráslábtól (kapcsolati vonalhoz): láb–láb kapcsolatnál a cél azonos lábai közül
+ * a legközelebbi; GPIO-nál a kiosztott (vagy javasolt) GPIO, különben a legközelebbi szabad, megfelelő képességű;
+ * GND-nél a legközelebbi GND-hálózati láb (bekötött kapcsolatnál a saját hálózatán belül a vezérlő GND-je).
+ */
+export function ratTarget(D: Design, A: Netlist, l: Link, st: LinkState | null | undefined, a?: PlacedPin | null): PlacedPin | null {
+  a = a || findPin(D, l.a); if (!a) return null;
+  const near = <T extends PlacedPin>(qs: Iterable<T>, w: (q: T) => number, ok: (q: T) => boolean = () => true): T | null => {
+    let bt: T | null = null, bd = 1e9; for (const q of qs) { if (!ok(q)) continue; const d = w(q); if (d < bd) { bd = d; bt = q; } } return bt;
+  };
+  const A0 = a, man = (q: Pt) => Math.abs(q.r - A0.r) / 3 + Math.abs(q.c - A0.c);
+  if (l.b !== 'GND' && l.b !== 'GPIO') return near(equivPins(findPin(D, l.b)), t => Math.hypot(t.r - A0.r, t.c - A0.c));
+  const na = onBoard(D, a.r, a.c) ? A.find(A.sid(a.r, a.c)) : -1;
+  if (l.b === 'GPIO') {
+    const ref = (st && st.gpioRef) || l.gpio, t = ref && findPin(D, ref); if (t) return t;
+    const an = a.role === 'adc';
+    return near(A.pins, man, q => isMcu(q.part) && q.role === 'gpio' && q.on && !(an && !hasCap(q, 'adc'))
+      && !((A.netPins.get(q.net) || []).length > 1 || (A.netSecs.get(q.net) || 0) > 1));
+  }
+  let bt: PlacedPin | null = null, bd = 1e9;
+  for (const [net, qs] of A.netPins) {
+    if (!qs.some(q => isMcu(q.part) && q.role === 'gnd')) continue;
+    if (st && st.ok) { if (net !== na) continue; for (const q of qs) { if (!isMcu(q.part) || q.role !== 'gnd') continue; const d = man(q); if (d < bd) { bd = d; bt = q; } } }
+    else { if (net === na) continue; for (const q of qs) { if (q.part === a.part) continue; const d = man(q); if (d < bd) { bd = d; bt = q; } } }
+  }
+  return bt;
+}
+
+/** A kijelölt kapcsolat kiemelése: kezdő- és végpont, a saját automatikus hídjai és vezetékei. */
+export interface LinkGeom { start: Hole; end: Hole | null; endPin: PlacedPin | null; bridges: AutoBridge[]; wires: Wire[] }
+
+/**
+ * Kezdő- és végpont: ha a kapcsolatnak saját automatikus útvonala van, a forrás cellájától a legtávolabbi elért cella
+ * (ott a legközelebbi idegen láb, ha van); különben a legközelebbi cél (`ratTarget`).
+ */
+export function linkGeom(D: Design, A: Netlist, l: Link | null | undefined, st?: LinkState | null): LinkGeom | null {
+  if (!l) return null;
+  const as = equivPins(findPin(D, l.a)).filter(q => onBoard(D, q.r, q.c)); if (!as.length) return null;
+  const own = D.auto.bridges.filter(b => (b[4] || []).includes(l.id)), ownW = D.auto.wires.filter(w => (w.links || []).includes(l.id));
+  if (own.length || ownW.length) {
+    const adj = new Map<number, Array<[number, Hole]>>(), add = (x: number, y: number, h: Hole) => { if (!adj.has(x)) adj.set(x, []); adj.get(x)!.push([y, h]); };
+    for (const b of own) { const x = A.sid(b[0], b[1]), y = A.sid(b[2], b[3]); add(x, y, [b[2], b[3]]); add(y, x, [b[0], b[1]]); }
+    for (const w of ownW) { const x = A.sid(w.a[0], w.a[1]), y = A.sid(w.b[0], w.b[1]); add(x, y, w.b); add(y, x, w.a); }
+    const srcCells = new Set(as.map(q => A.sid(q.r, q.c)));
+    const start = as.find(q => adj.has(A.sid(q.r, q.c))) || as[0];
+    const dist = new Map<number, number>(), hole = new Map<number, Hole>(), qu: number[] = [];
+    for (const c of srcCells) { dist.set(c, 0); qu.push(c); }
+    let far: number | null = null;
+    while (qu.length) {
+      const x = qu.shift()!;
+      for (const [y, h] of adj.get(x) || []) { if (dist.has(y)) continue; dist.set(y, dist.get(x)! + 1); hole.set(y, h); qu.push(y); if (far == null || dist.get(y)! > dist.get(far)!) far = y; }
+    }
+    let end: Pt | null = null, endPin: PlacedPin | null = null;
+    if (far != null) {
+      const h = hole.get(far)!, cand = A.pins.filter(q => q.on && A.sid(q.r, q.c) === far && q.part !== start.part);
+      if (cand.length) { cand.sort((a, b) => Math.hypot(a.r - h[0], a.c - h[1]) - Math.hypot(b.r - h[0], b.c - h[1])); end = endPin = cand[0]; } else end = { r: h[0], c: h[1] };
+    }
+    return { start: [start.r, start.c], end: end ? [end.r, end.c] : null, endPin, bridges: own, wires: ownW };
+  }
+  let best: LinkGeom | null = null, bd = 1e9;
+  for (const a0 of as) { const t = ratTarget(D, A, l, st, a0); if (!t) continue; const d = Math.hypot(t.r - a0.r, t.c - a0.c); if (d < bd) { bd = d; best = { start: [a0.r, a0.c], end: [t.r, t.c], endPin: t, bridges: [], wires: [] }; } }
+  return best || { start: [as[0].r, as[0].c], end: null, endPin: null, bridges: [], wires: [] };
 }

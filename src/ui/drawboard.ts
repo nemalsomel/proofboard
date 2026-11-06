@@ -1,10 +1,13 @@
 /**
  * A panel rajza (vászon): panel, vonalzók, rézcellák a hálózat színével, lyukak, csíkvágások, hidak, vezetékek,
  * forrpontok, alkatrészek (ui/drawpart.ts), lerakási előnézet és a kiemelések. Kiemelve az app.ts-ből, a viselkedés
- * változatlan. A gazda a pillanatnyi állapotot (`BoardScene`) adja; a még az app.ts-ben lévő rétegeket (kábeles
- * dugók, jegyzetek, kapcsolati vonalak) a `layers` hívja a megfelelő sorrendben.
+ * változatlan. A gazda a pillanatnyi állapotot (`BoardScene`) adja; a felső rétegek (kábeles dugók, jegyzetek,
+ * kapcsolati vonalak, kapcsolatkiemelés) a `ui/layers.ts`-ben.
  */
 import { makePainter, rgba } from './drawpart';
+import { drawLinkSel, drawNotes, drawPlugs, drawRats, type Gfx } from './layers';
+import type { LinkState } from '../engine/links';
+import type { Tr } from '../i18n/i18n';
 import { applyRotation } from './viewport';
 import { isMcu } from '../engine/defs';
 import type { Cut, Layout } from '../engine/board';
@@ -26,7 +29,7 @@ export interface BoardScene {
   /** a rajzolt netlista (szimulációban a szimulációs) */ A: Netlist;
   layout: Layout;
   /** fut-e a szimuláció, és a (pillanatnyi) eredménye */ simOn: boolean; sim: SimResult | null;
-  colors: { stage: string; accent: string; muted: string; mono: string; monoFont: string };
+  colors: { stage: string; accent: string; muted: string; mono: string; monoFont: string; /** a jegyzetek betűtípusa */ display: string };
   hover: HoverHole | null;
   tool: string;
   /** lerakás alatt álló alkatrész előnézete (null: nincs lerakás) */ ghost: { part: PartInstance; fits: boolean } | null;
@@ -46,7 +49,10 @@ export interface BoardScene {
   findPin(ref: string): { r: number; c: number } | null | undefined;
   /** hibás lyukak villantása */ flash: { holes: ReadonlyArray<readonly [number, number]>; until: number } | null;
   /** kijelölő keret */ box: { h0: HoverHole; h1: HoverHole } | null;
-  layers: { plugs(alpha: number): void; notes(): void; rats(A: Netlist): void; linkSel(): void };
+  /** kijelölt jegyzet azonosítója */ selNote?: string | null;
+  /** a kapcsolatok állapota (bekötve-e) a kapcsolati vonalakhoz */ linkState: Map<string, LinkState>;
+  /** a kapcsolatkiemelés netlistája (szimuláció közben is a nyugalmi) */ linkA?: Netlist;
+  /** fordító a vászon feliratához */ tr?: Tr;
 }
 
 /**
@@ -89,6 +95,12 @@ export function drawBoard(S: BoardScene): void {
   const rr = (x: number, y: number, w: number, h: number, r: number) => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); };
   const line = (x1: number, y1: number, x2: number, y2: number) => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
   const ring = (r: number, c: number, col: string, rad?: number, w?: number) => { ctx.strokeStyle = col; ctx.lineWidth = w || 2.5; ctx.beginPath(); ctx.arc(hx(c), hy(r), rad || P * 0.48, 0, 7); ctx.stroke(); };
+  const stext = (x: number, y: number, str: string, size: number, color: string, halo?: string) => {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(-angle); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `600 ${size}px ${S.colors.monoFont}`;
+    if (halo) { ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = halo; ctx.strokeText(str, 0, 0); }
+    ctx.fillStyle = color; ctx.fillText(str, 0, 0); ctx.restore();
+  };
+  const G: Gfx = { hx, hy, line, rr, stext };
   const vlabel = (x: number, y: number, str: string | number, col: string) => { ctx.save(); ctx.translate(x, y); ctx.rotate(-angle); ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(str), 0, 0); ctx.restore(); };
 
   /* vezetékek: rámutatva (bármelyik végére vagy csonkjára), kijelölve vagy kapcsolatkiemeléskor a teljes vonal */
@@ -219,18 +231,18 @@ export function drawBoard(S: BoardScene): void {
     ctx.fillStyle = '#e6e9ec'; ctx.beginPath(); ctx.arc(hx(q.c) - P * 0.08, hy(q.r) - P * 0.08, P * 0.12, 0, 7); ctx.fill();
   }
   // vezetékek (alatta a rézoldali nézetben)
-  if (C) { drawWires(0.28); S.layers.plugs(0.28); }
+  if (C) { drawWires(0.28); drawPlugs(S, G, 0.28); }
   // alkatrészek (ui/drawpart.ts)
   const PNT = makePainter({ ctx, P, M, cols: B.cols, cu: C, angle, xray: S.xray, accent: acc, mono: S.colors.monoFont, design: D, sim: S.simOn ? S.sim : null, pressed: S.pressed, phase: S.phase });
   for (const p of D.parts) PNT.drawPart(p, C ? 0.32 : 1, S.selPart(p));
-  if (!C) { drawWires(1); S.layers.plugs(1); }
-  S.layers.notes();
+  if (!C) { drawWires(1); drawPlugs(S, G, 1); }
+  drawNotes(S, G);
   // lerakási előnézet
   if (S.ghost && hv) PNT.drawPart(S.ghost.part, 0.6, false, !S.ghost.fits);
   if (S.tool === 'wire' && S.wireStart && hv) { ctx.setLineDash([5, 4]); ctx.strokeStyle = S.wireColor; ctx.lineWidth = P * 0.18; line(hx(S.wireStart[1]), hy(S.wireStart[0]), hx(hv.c), hy(hv.r)); ctx.setLineDash([]); }
   if (S.tool === 'wire' && S.wireStart) ring(S.wireStart[0], S.wireStart[1], acc);
-  S.layers.rats(A);
-  S.layers.linkSel();
+  drawRats(S, G, A);
+  drawLinkSel(S, G, S.linkA || A);
   if (S.linkStart) {
     const q = S.findPin(S.linkStart);
     if (q) { ring(q.r, q.c, acc, P * 0.55, 3); if (hv) { ctx.setLineDash([4, 4]); ctx.strokeStyle = acc; ctx.lineWidth = 2; line(hx(q.c), hy(q.r), hx(hv.c), hy(hv.r)); ctx.setLineDash([]); } }

@@ -12,7 +12,7 @@ import { hasErrors, validatePartDef } from './core/validate';
 import { exportLibrary, importLibrary, typeKeyFor } from './core/library';
 import { History } from './ui/history';
 import { drawBoard, stubOf as stubOfW } from './ui/drawboard';
-import { ROLEC, makePainter, plugColor, rgba } from './ui/drawpart';
+import { ROLEC, makePainter, rgba } from './ui/drawpart';
 import { applyRotation, fromScreen as vpFrom, toScreen as vpTo } from './ui/viewport';
 import { EventLog } from './ui/log';
 import { favToggled, libPref, libPrefSet, libraryHtml, recentWith } from './ui/library';
@@ -26,6 +26,8 @@ import { buildLayout, planCuts } from './engine/board';
 import { cutCheck, sameCut, toggleCut as toggleCutOf, clearManualCuts } from './engine/cuts';
 import { grp, gSize, groupSnap as groupSnapOf, groupOk as groupOkOf, groupApply as groupApplyOf, hitPart as hitPartOf, hitWire as hitWireOf } from './ui/hit';
 import { createInteraction } from './ui/interact';
+import { createLinksPanel } from './ui/links';
+import { createPropsPanel } from './ui/props';
 import { pinLabelPositions } from './core/labels';
 import { evalExpr, parseExpr, pinRef, varsOf } from './core/logic';
 import { DEFS, syncDefs, setLibrary, penv, hasPress, isOff, isMcu } from './engine/defs';
@@ -143,9 +145,10 @@ function draw(){const keep=SIM;if(ui.sim&&ui.blinkSim)SIM=ui.blinkSim;try{draw0(
 /** A panel rajza: ui/drawboard.ts; itt csak a pillanatnyi állapot összeállítása. */
 function draw0(){
   if(!D||!A0)return;
+  if(ui.selLink&&!D.links.some(x=>x.id===ui.selLink))ui.selLink=null;
   const hv=ui.hover,A=ui.sim?AS:A0;
   drawBoard({ctx,dpr,P,M,vrot:VR(),cu:cu(),design:D,A,layout:LAY(),simOn:!!ui.sim,sim:SIM||null,
-    colors:{stage:css('--stage'),accent:css('--accent'),muted:css('--muted'),mono:css('--mono'),monoFont:MONO},
+    colors:{stage:css('--stage'),accent:css('--accent'),muted:css('--muted'),mono:css('--mono'),monoFont:MONO,display:css('--display')},
     hover:hv,tool:ui.tool,ghost:ui.placing&&hv?(()=>{const g=ghostPart(hv);return{part:g,fits:partFits(g)};})():null,
     xray:!!ui.xray,pressed:id=>!!ui.pressed[id],phase:id=>ui.phase[id]||0,
     selPart:isSelPart,selBridge:i=>!!(ui.sel&&((ui.sel.kind==='bridge'&&ui.sel.i===i)||(isGroup()&&ui.sel.bridges.has(i)))),
@@ -153,17 +156,13 @@ function draw0(){
     stub:!!ui.stub,hoverWire:ui.hoverWire,selLink:ui.selLink||null,rats:!!ui.rats,autoHidden,cutAt,selCut:ct=>IA.isSelCut(ct),
     wireStart:ui.wireStart||null,wireColor:ui.wireColor,linkStart:ui.linkStart||null,progHi:ui.progHi||null,findPin,
     flash:ui.flash||null,box:ui.drag&&ui.drag.kind==='box'?{h0:ui.drag.h0,h1:ui.drag.h1}:null,
-    layers:{plugs:drawPlugs,notes:drawNotes,rats:drawRats,linkSel:drawLinkSel}});
+    selNote:ui.sel&&ui.sel.kind==='note'?ui.sel.id:null,linkState:ui.linkState,linkA:A0,tr});
 }
-function rr(x,y,w,h,r){ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);}
-function line(x1,y1,x2,y2){ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
-function ring(r,c,col,rad,w){ctx.strokeStyle=col;ctx.lineWidth=w||2.5;ctx.beginPath();ctx.arc(hx(c),hy(r),rad||P*0.48,0,7);ctx.stroke();}
 /* Rövid vezeték nézet (ui/drawboard.ts rajzolja): a találatvizsgálathoz kell, látszik-e a teljes vonal. */
 const stubOf=w=>stubOfW(w,!!ui.stub);
 function wireFull(w,i,auto){const hv=ui.hover;if(hv&&((hv.r===w.a[0]&&hv.c===w.a[1])||(hv.r===w.b[0]&&hv.c===w.b[1])))return true;
   if(!auto&&ui.sel&&((ui.sel.kind==='wire'&&ui.sel.i===i)||(isGroup()&&ui.sel.wires.has(i))))return true;
   if(!auto&&hv&&ui.hoverWire===i)return true;if(auto&&ui.selLink&&(w.links||[]).includes(ui.selLink))return true;return false;}
-function stext(x,y,str,size,color,halo){ctx.save();ctx.translate(x,y);ctx.rotate(-VA());ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`600 ${size}px ${MONO}`;if(halo){ctx.lineWidth=3;ctx.lineJoin='round';ctx.strokeStyle=halo;ctx.strokeText(str,0,0);}ctx.fillStyle=color;ctx.fillText(str,0,0);ctx.restore();}
 /* Az alkatrészek rajza: ui/drawpart.ts (makePainter) */
 
 /* ---------- Interakció ---------- */
@@ -196,32 +195,19 @@ function toggleCut(ct){const D0=D;if((D0.cuts||[]).some(x=>sameCut(x,ct))){pushU
 /* ---------- Jegyzetek: szöveges megjegyzés a vásznon (nem villamos elem), opcionális mutatóval egy alkatrészre ---------- */
 function addNote(h){pushUndo();const id='n'+(D.seq++);const n={id,r:Math.round(h.rf),c:Math.round(h.cf),w:12,h:6,text:tr('Jegyzet')+'\n'+tr('Írd ide a leírást…'),color:NOTE_COL[0][0],target:null};
   D.notes=[...(D.notes||[]),n];ui.sel={kind:'note',id};setTool('select');commit(true);setTimeout(()=>{const t=$('#nText');if(t){t.focus();t.select();}},0);}
-function noteLines(n,maxW){ctx.font=`500 ${Math.max(9,P*0.62)}px ${css('--display')}`;const out=[];
-  for(const raw of String(n.text).split('\n')){const head=/^#\s+/.test(raw),line=raw.replace(/^#\s+/,'');const words=line.split(/\s+/);let cur='';
-    ctx.font=`${head?700:500} ${Math.max(9,P*(head?0.75:0.62))}px ${css('--display')}`;
-    for(const w of words){const t=cur?cur+' '+w:w;if(ctx.measureText(t).width>maxW&&cur){out.push({t:cur,head});cur=w;}else cur=t;}out.push({t:cur,head});}
-  return out;}
-function drawNotes(){if(!(D.notes||[]).length)return;ctx.save();
-  for(const n of D.notes){const x=hx(n.c)-P/2,y=hy(n.r)-P/2,w=n.w*P,h=n.h*P,sel=ui.sel&&ui.sel.kind==='note'&&ui.sel.id===n.id;
-    // mutató: szaggatott, nyílhegyes – nem vezeték
-    const t=n.target&&D.parts.find(p=>p.id===n.target);
-    if(t){const b=DEFS[t.type].bounds(t),[tr,tc]=xf(t,(b.r0+b.r1)/2,(b.c0+b.c1)/2),tx=hx(tc),ty=hy(tr);
-      const ex=Math.max(x,Math.min(x+w,tx)),ey=Math.max(y,Math.min(y+h,ty));
-      ctx.setLineDash([5,4]);ctx.strokeStyle='rgba(73,80,87,.85)';ctx.lineWidth=1.6;line(ex,ey,tx,ty);ctx.setLineDash([]);
-      const a=Math.atan2(ty-ey,tx-ex),L=9;ctx.fillStyle='rgba(73,80,87,.9)';ctx.beginPath();ctx.moveTo(tx,ty);ctx.lineTo(tx-L*Math.cos(a-0.4),ty-L*Math.sin(a-0.4));ctx.lineTo(tx-L*Math.cos(a+0.4),ty-L*Math.sin(a+0.4));ctx.closePath();ctx.fill();}
-    ctx.shadowColor='rgba(0,0,0,.18)';ctx.shadowBlur=8;ctx.shadowOffsetY=2;ctx.fillStyle=n.color;rr(x,y,w,h,6);ctx.fill();ctx.shadowColor='transparent';
-    ctx.strokeStyle=sel?css('--accent'):'rgba(0,0,0,.18)';ctx.lineWidth=sel?2:1;rr(x,y,w,h,6);ctx.stroke();
-    ctx.save();ctx.beginPath();ctx.rect(x+4,y+4,w-8,h-8);ctx.clip();ctx.translate(x,y);ctx.fillStyle='#2b2f33';ctx.textBaseline='top';ctx.textAlign='left';
-    let yy=P*0.35;for(const l of noteLines(n,w-P*0.8)){ctx.font=`${l.head?700:500} ${Math.max(9,P*(l.head?0.75:0.62))}px ${css('--display')}`;ctx.fillText(l.t,P*0.4,yy);yy+=Math.max(11,P*(l.head?0.95:0.8));}
-    ctx.restore();
-    if(sel){ctx.fillStyle=css('--accent');ctx.fillRect(x+w-7,y+h-7,7,7);}}
-  ctx.restore();}
 let hintTimer;function flashHint(m){const s=$('#status');s.textContent=m;clearTimeout(hintTimer);hintTimer=setTimeout(status,1800);}
 /* A panel interakciója (egér, érintés, pásztázás): ui/interact.ts; itt csak a gazda műveletei. */
 const IA=createInteraction({ui,D:()=>D,cv,scroll:$('#scroll'),toHole,boundsOf,inb,partFits,ghostPart,offPinAt,hitPin,hitWire,addBridge,hasPress,isOff,attachPlug,
   placed:t=>{useInProject(t);libRecent(t);},nextLabel,cutKind:()=>cutKind(),pushUndo,dropUndo:()=>HIST.drop(),restoreSnap,commit,recompute,save,renderLeft,draw,status,setTool,addNote,addLink,removeParts,movedLinks,
   flashMsg,flashHint,P:()=>P,resize,toScreen,hx:c=>hx(c),hy:r=>hy(r),sheetOpen:()=>sheetOpen(),closeSheet:()=>sheet(''),NEXT});
 IA.attach();
+const PP=createPropsPanel({ui,el:$('#props'),D:()=>D,A:()=>A0,tr,selPart:()=>selPart(),wireColors:WCOL,
+  pinsOpen:()=>uiPref().pinsOpen!==false,setPinsOpen:o=>uiPrefSet({pinsOpen:o}),pushUndo,dropUndo:()=>HIST.drop(),commit,save,draw,renderLeft,flashMsg,partFits,
+  rotate:()=>rotate(),mirror:()=>mirror(),delSel:()=>delSel(),duplicate,editPart:t=>openEditor(editorHost,{type:t}),copyPart:t=>openEditor(editorHost,{from:PARTS[t]}),
+  isBuiltin:t=>t in PARTS,manualToAuto:x=>manualToAuto(x),swapMcu:(pid,t)=>swapMcu(pid,t),attachPlug:p=>attachPlug(p),addLink});
+const LP=createLinksPanel({ui,D:()=>D,A:()=>A0,tr,autoCutOn:()=>autoCutOn(),pushUndo,dropUndo:()=>HIST.drop(),commit:()=>commit(),draw,status,
+  root:{sum:$('#linkSum'),list:$('#links'),total:$('#linkTotal'),autoRoute:$('#autoR'),autoCut:$('#autoCut')},
+  center(pts){const sc=$('#scroll'),xy=pts.map(([r,c])=>toScreen(hx(c),hy(r)));const vx=xy.reduce((t,p)=>t+p[0],0)/xy.length,vy=xy.reduce((t,p)=>t+p[1],0)/xy.length;sc.scrollTo({left:vpX(vx)-sc.clientWidth/2,top:vpY(vy)-sc.clientHeight/2,behavior:'smooth'});}});
 $('#scroll').addEventListener('wheel',ev=>{if(ev.ctrlKey||ev.metaKey){ev.preventDefault();zoomTo(ui.zoom*Math.pow(1.0015,-Math.max(-120,Math.min(120,ev.deltaY))),ev.clientX,ev.clientY);}},{passive:false});
 document.addEventListener('keydown',ev=>{if(ev.code!=='Space'||ev.repeat)return;const t=ev.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.tagName==='BUTTON'||t.closest&&t.closest('#progView,#partView,.pg,dialog'))||ui.part)return;ev.preventDefault();ui.space=true;$('.app').classList.add('space');});
 document.addEventListener('keyup',ev=>{if(ev.code==='Space'){ui.space=false;$('.app').classList.remove('space');}});
@@ -403,51 +389,7 @@ $('#fab').addEventListener('click',e=>{const b=e.target.closest('[data-fab]');if
   else if(a==='props'){rtab('props',false);sheet('right');}
   else if(a==='esc'){ui.placing=null;ui.wireStart=null;ui.linkStart=null;ui.hover=null;setTool(ui.tool==='place'?'select':ui.tool);}
   renderFab();});
-function paramUI(p){const def=DEFS[p.type].def,E=penv(p);let h=def.meta&&typeof def.meta.help==='string'?`<p class="help" style="margin:4px 0 8px">${esc(tr(def.meta.help))}</p>`:'';
-  for(const pr of def.params||[]){const k=pr.key,id='pp_'+k;
-    if(pr.type==='span')h+=`<div class="row"><label>${esc(tr(pr.label))}</label><input type="number" id="pp_dr" data-pk="dr" min="-12" max="12" value="${E.dr}" style="width:58px" aria-label="${tr('sor eltolás')}"><span class="muted small">${tr('sor')}</span><input type="number" id="pp_dc" data-pk="dc" min="-12" max="12" value="${E.dc}" style="width:58px" aria-label="${tr('oszlop eltolás')}"><span class="muted small">${tr('oszlop')}</span></div>`;
-    else if(pr.type==='select')h+=`<div class="row"><label for="${id}">${esc(tr(pr.label))}</label><select id="${id}" data-pk="${k}" style="flex:1;min-width:0">${pr.options.map(o=>`<option value="${esc(o.v)}" ${String(o.v)===String(E[k])?'selected':''}>${esc(tr(o.label))}</option>`).join('')}</select></div>`;
-    else if(pr.type==='color')h+=`<div class="row"><label>${esc(tr(pr.label))}</label><div class="swatches" role="group" aria-label="${esc(tr(pr.label))}">${pr.options.map(o=>`<button class="sw ${String(o.v)===String(E[k])?'on':''}" data-pk="${k}" data-pv="${esc(o.v)}" title="${esc(tr(o.label))}" aria-label="${esc(tr(o.label))}" style="background:${o.hex}"></button>`).join('')}</div></div>`;
-    else if(pr.type==='names')h+=`<div class="row"><label for="${id}">${esc(tr(pr.label))}</label><input type="text" id="${id}" data-pk="${k}" value="${esc(E[k]||'')}" placeholder="${tr('pl. GND,VCC,SDA,SCL')}" autocomplete="off" style="flex:1;min-width:0"></div>`;
-    else if(pr.type==='value')h+=`<div class="row"><label for="${id}">${esc(tr(pr.label))}</label><input type="text" id="${id}" data-pk="${k}" value="${fmtSI(E[k])}" inputmode="decimal" autocomplete="off" style="width:96px;flex:0 1 auto" title="${tr('Pl. 4,7k · 4k7 · 100n · 2.1 — ↑/↓: {x}',{x:pr.series==='E12'?tr('E12-sor'):tr('léptetés')})}"><span class="muted small">${esc(tr(pr.unit||''))}</span></div>`;
-    else h+=`<div class="row"><label for="${id}">${esc(tr(pr.label))}</label><input type="number" id="${id}" data-pk="${k}" value="${E[k]}" ${pr.min!=null?`min="${pr.min}"`:''} ${pr.max!=null?`max="${pr.max}"`:''} step="${pr.step||(pr.type==='int'?1:'any')}" style="width:80px"><span class="muted small">${esc(tr(pr.unit||''))}</span></div>`;
-    if(pr.help)h+=`<p class="help">${esc(tpl(tr(pr.help),E))}</p>`;
-  }return h;}
-function bindParams(root,p){
-  const def=DEFS[p.type].def,find=k=>(def.params||[]).find(x=>x.key===k)||((k==='dr'||k==='dc')?(def.params||[]).find(x=>x.type==='span'):null);
-  const set=(k,raw)=>{const pr=find(k);if(!pr)return;let v;
-    if(pr.type==='span')v=Math.round(+raw)||0;
-    else if(pr.type==='value'){v=parseSI(raw);if(!isFinite(v)){flashMsg(tr('Nem értelmezhető érték (pl. 4,7k · 4k7 · 100n)'));renderLeft();return;}}
-    else if(pr.type==='number'||pr.type==='int'){v=+raw;if(!isFinite(v)){renderLeft();return;}if(pr.type==='int')v=Math.round(v);}
-    else if(pr.type==='names')v=String(raw).split(',').map(x=>x.trim()).join(',').replace(/,+$/,'');
-    else{const o=pr.options.find(o=>String(o.v)===String(raw));v=o?o.v:raw;}
-    if(typeof v==='number'&&pr.type!=='span'){if(pr.min!=null)v=Math.max(pr.min,v);if(pr.max!=null)v=Math.min(pr.max,v);}
-    const t={...p,props:{...p.props,[k]:v}},geo=pr.geo||pr.type==='span';
-    if(pr.type==='span'){const dr=+(t.props.dr??pr.default[0])||0,dc=+(t.props.dc??pr.default[1])||0;if(!dr&&!dc){flashMsg(tr('A két láb nem lehet ugyanabban a lyukban'));renderLeft();return;}}
-    if(geo&&!partFits(t)){flashMsg(tr('Ennyire nem lóghat ki (legalább egy láb a panelon, legfeljebb 8 lyuknyi túllógás)'));renderLeft();return;}
-    if(p.props[k]===v){renderLeft();return;}
-    pushUndo();p.props[k]=v;if(geo)ui.moved=new Set([p.id]);commit(!geo);};
-  root.querySelectorAll('[data-pk]').forEach(el=>{
-    if(el.tagName==='BUTTON'){el.onclick=()=>set(el.dataset.pk,el.dataset.pv);return;}
-    el.addEventListener('change',()=>set(el.dataset.pk,el.value));
-    const pr=find(el.dataset.pk);
-    if(pr&&pr.type==='value')el.addEventListener('keydown',ev=>{if(ev.key!=='ArrowUp'&&ev.key!=='ArrowDown')return;ev.preventDefault();const dir=ev.key==='ArrowUp'?1:-1,cur=parseSI(el.value);const base=isFinite(cur)?cur:pr.default;
-      const nv=pr.series==='E12'?stepE12(base,dir):+(base+dir*(pr.step||Math.max(1e-6,Math.abs(base)*0.05))).toPrecision(4);el.value=fmtSI(nv);set(el.dataset.pk,el.value);});
-  });
-}
-/** Lábak és bekötés: lábcsoportonként a szerep, a mostani bekötés (háló vagy kapcsolat) és a kapcsolat célja. */
-function targetSelect(attr,id,cur,except){const ts=linkTargets(D,A0,except,tr),groups=new Map();
-  if(cur&&!ts.some(t=>t.value===cur)){const q=findPin(cur);ts.push({value:cur,label:q?groupLabel(q):cur,group:N_('Jelenlegi')});}
-  for(const t of ts){if(!groups.has(t.group))groups.set(t.group,[]);groups.get(t.group).push(t);}
-  return `<select ${attr}="${esc(id)}"><option value="">– ${tr('nincs kapcsolat')} –</option>${[...groups].map(([g,xs])=>`<optgroup label="${esc(tr(g))}">${xs.map(t=>`<option value="${esc(t.value)}" ${t.value===cur?'selected':''}>${esc(t.label)}</option>`).join('')}</optgroup>`).join('')}</select>`;}
-function pinsUI(p){const rows=pinRows(D,A0,p),open=uiPref().pinsOpen!==false,nf=rows.filter(r=>r.floating&&r.on).length;
-  return `<details class="pr-sec" id="pinsSec" ${open?'open':''}><summary>${tr('Lábak és bekötés')} <span class="muted small">${tr('{n} láb',{n:rows.length})}${nf?` · <span class="c-warn">${tr('{n} lebeg',{n:nf})}</span>`:''}</span></summary><div class="pins">${rows.map(r=>{
-    const st=!r.on?`<span class="muted">${tr('a panelon kívül')}</span>`:r.link?`<span class="muted">${tr('kapcsolat')}${(ui.linkState.get(r.link.id)||{}).ok?', '+tr('bekötve'):`, <span class="c-err">${tr('nincs bekötve')}</span>`}</span>`:r.net.length?`<span class="muted" title="${esc(r.net.join(', '))}">${tr('háló')}: ${esc(r.net.slice(0,3).join(', '))}${r.net.length>3?` +${r.net.length-3}`:''}</span>`:`<span class="c-warn">${tr('lebeg (sehova sincs kötve)')}</span>`;
-    return `<div class="pin${r.floating&&r.on?' float':''}"><div class="pin-n"><b>${esc(r.name)}</b>${ROLE_HU[r.role]?`<span class="muted small"> ${esc(tr(ROLE_HU[r.role]))}</span>`:''}</div>${targetSelect('data-pinlink',r.ref,r.target||'',p.id)}<div class="pin-s small">${st}</div></div>`;}).join('')}</div></details>`;}
-function bindPins(pr){const d=pr.querySelector('#pinsSec');if(d)d.addEventListener('toggle',()=>uiPrefSet({pinsOpen:d.open}));
-  pr.querySelectorAll('[data-pinlink]').forEach(s=>s.addEventListener('change',()=>{pushUndo();if(!setPinLink(D,s.dataset.pinlink,s.value,()=>'l'+(D.seq++))){HIST.drop();renderLeft();return;}commit();}));}
-/** Tulajdonság-művelet gomb: ikon + név, a gyorsbillentyű súgóban és Ctrl-címkén. */
-const ACT=(id,ic,l,k,t='',cls='')=>`<button class="btn${cls}" id="${id}" data-kbd="${k}" title="${t?esc(tr(t))+' ':''}(${k})">${icon(ic)}${esc(tr(l))}</button>`;
+/* Tulajdonságpanel: ui/props.ts */
 /** Eszközsáv: ha a nevekkel nem fér ki (pl. Mindkettő nézetben), csak ikonok, de minden eszköz látszik. */
 function toolFit(){const ts=$('#toolstrip'),t=$('#tools');if(!ts||!t||ts.classList.contains('col'))return;ts.classList.remove('icons');if(t.scrollWidth>t.clientWidth+1)ts.classList.add('icons');}
 new ResizeObserver(()=>toolFit()).observe(document.querySelector('#carea'));
@@ -460,77 +402,7 @@ function renderLeft0(){
   {const ck=cutKind();$('#cutKinds').innerHTML=CUT_KINDS.map(([k,l,h])=>`<button class="btn ${ck===k?'on':''}" data-ck="${k}" aria-pressed="${ck===k}" title="${esc(tr(h))}">${esc(tr(l))}</button>`).join('');}
   {const g=isGroup()?ui.sel:null,sp=selPart();$('#selSumm').textContent=sp?sp.label:g&&gSize(g)?tr('{n} elem',{n:gSize(g)}):ui.sel&&ui.sel.kind==='wire'?tr('vezeték'):ui.sel&&ui.sel.kind==='bridge'?tr('híd'):ui.sel&&ui.sel.kind==='note'?tr('jegyzet'):ui.sel&&ui.sel.kind==='cut'?tr('csíkvágás'):'';}
   $('#swatches').innerHTML=WCOL.map(([c,l0])=>{const l=esc(tr(l0));return `<button class="sw ${ui.wireColor===c?'on':''}" data-col="${c}" title="${l}" aria-label="${l}" style="background:${c}"></button>`;}).join('');
-  const pr=$('#props');const p=selPart();
-  if(p){const d=DEFS[p.type];const extra=paramUI(p);
-    pr.innerHTML=`<div class="row"><label for="pLabel">${tr('Név')}</label><input type="text" id="pLabel" value="${esc(p.label)}"></div>
-      <div class="small muted">${esc(tr(d.name))} · ${tr('origó')} <span class="mono">${p.r}:${p.c}</span> · ${p.rot*90}°${p.mir?' · '+tr('tükrözve'):''}</div>
-      <div class="pr-acts">${ACT('pRot','rotate',N_('Forgatás'),'R')}${ACT('pMir','mirror',N_('Tükrözés'),'M')}${ACT('pDup','copy',N_('Duplikálás'),'D',N_('Új példány ugyanezekkel a beállításokkal'))}${ACT('pDel','trash',N_('Törlés'),'Del','',' danger')}</div>
-      <label class="check small"><input type="checkbox" id="pXray" ${p.xray?'checked':''}> ${tr('Röntgen (csak körvonal és lábak)')}</label>${extra}
-      ${pinsUI(p)}
-      <div class="pr-more" id="pMore"></div>`;
-    const ch=(id,fn)=>{const e=$(id);if(e)e.addEventListener('change',()=>{pushUndo();fn(e.value);commit();});};
-    ch('#pLabel',v=>p.label=v.trim()||p.label);
-    bindParams(pr,p);bindPins(pr);
-    $('#pRot').onclick=rotate;$('#pMir').onclick=mirror;$('#pDel').onclick=delSel;
-    const more=$('#pMore');
-    {$('#pDup').onclick=()=>duplicate(p);$('#pXray').onchange=e=>{pushUndo();if(e.target.checked)p.xray=true;else delete p.xray;commit(true);};}
-    {const row=more;const own=!(p.type in PARTS);row.innerHTML=own?`<button class="btn" data-adv id="pEditDef">✎ ${tr('Alkatrész szerkesztése')}</button>`:`<button class="btn" data-adv id="pCopyDef" title="${tr('A beépített leírásból saját, szerkeszthető alkatrész')}">${tr('Másolat saját alkatrészként')}</button>`;pr.appendChild(row);
-      if(own)$('#pEditDef').onclick=()=>openEditor(editorHost,{type:p.type});else $('#pCopyDef').onclick=()=>openEditor(editorHost,{from:PARTS[p.type]});}
-    {more.insertAdjacentHTML('beforeend',`<button class="btn" id="pToAuto" title="${tr('Az alkatrész kézi bekötését kapcsolatokká alakítja, így mozgatáskor követi')}">${tr('Bekötés automatikusra')}</button>`);
-      $('#pToAuto').onclick=()=>{if(!manualToAuto(p.id))flashMsg(tr('Ennek az alkatrésznek nincs kézi bekötése'));};}
-    if(isMcu(p)){const ts=Object.entries(DEFS).filter(([k,d])=>d.mcu&&k!==p.type);if(ts.length){const row=document.createElement('div');row.className='row';
-      row.innerHTML=`<label for="pSwap">${tr('Csere')}</label><select id="pSwap" style="flex:1">${ts.map(([k,d])=>`<option value="${k}">${esc(tr(d.name))}</option>`).join('')}</select><button class="btn" id="pSwapGo" title="${tr('Másik vezérlőre cseréli; a kapcsolatok megmaradnak, a GPIO-k újra kiosztódnak')}">${tr('Csere')}</button>`;pr.appendChild(row);
-      $('#pSwapGo').onclick=()=>{const r=swapMcu(p.id,$('#pSwap').value);if(r)flashMsg(r.msg);};}}
-    if(isOff(p)){const h=plugOf(D,p),row=document.createElement('div');row.className='row';
-      row.innerHTML=h?`<span class="small">${tr('Csatlakozó: {x} (tüskesor a panelon)',{x:`<b>${esc(h.label)}</b>`})}</span><button class="btn" id="pUnplug" title="${tr('A kábel kihúzása: a tüskesor a panelon marad, a lábak szabad kábelként köthetők be')}">${tr('Kihúzás')}</button>`
-        :`<button class="btn" id="pPlug" title="${tr('Tüskesor a panelra a lábszámával és lábneveivel; a kábel abba dugva, a bekötés onnan indul')}">${tr('Csatlakozó (tüskesor) a panelra')}</button>`;pr.appendChild(row);
-      if(h)$('#pUnplug').onclick=()=>{pushUndo();delete p.plug;commit();};
-      else $('#pPlug').onclick=()=>{pushUndo();const nh=attachPlug(p);if(!nh){HIST.drop();flashMsg(tr('Nincs elég szabad hely a panelon a csatlakozónak'));return;}commit();flashMsg(tr('{x}: a csatlakozó a panelon, a kábel bedugva. Mozgasd oda, ahová forrasztanád.',{x:nh.label}));};}
-    if(DEFS[p.type].def.socket){const o=pluggedInto(D,p),offs=D.parts.filter(x=>isOff(x)&&!plugOf(D,x)&&DEFS[x.type].pins(x).length<=DEFS[p.type].pins(p).length);
-      const row=document.createElement('div');row.className='row';
-      row.innerHTML=o?`<span class="small">${tr('Ide csatlakozik: {x} ({y}). A lábak sorrendje a kábelé.',{x:`<b>${esc(o.label)}</b>`,y:esc(tr(DEFS[o.type].name))})}</span>`
-        :offs.length?`<label for="pPlugTo">${tr('Kábel')}</label><select id="pPlugTo" style="flex:1">${offs.map(x=>`<option value="${x.id}">${esc(x.label)} · ${esc(tr(DEFS[x.type].name))}</option>`).join('')}</select><button class="btn" id="pPlugGo" title="${tr('A külső alkatrész kábele ebbe a csatlakozóba')}">${tr('Bedugás')}</button>`
-        :`<span class="help">${tr('Csatlakozó: külső alkatrész (motor, szervó, szenzor) kábele dugható bele. A lábnevek a feliratokhoz valók.')}</span>`;
-      pr.appendChild(row);
-      if(!o&&offs.length)$('#pPlugGo').onclick=()=>{const x=D.parts.find(y=>y.id===$('#pPlugTo').value);if(!x)return;pushUndo();x.plug=p.id;const sp=DEFS[p.type].def.socket;if(sp.names&&!p.props[sp.names])p.props[sp.names]=socketProps(DEFS[p.type].def,x)[sp.names];commit();};}
-    if(p.type==='button'){more.insertAdjacentHTML('afterbegin',`<button class="btn" id="pAuto" title="${tr('Kapcsolatok: az A láb szabad GPIO-ra, a B láb a földre')}">A → GPIO, B → GND</button>`);
-      $('#pAuto').onclick=()=>{const a=p.id+'.A1',b=p.id+'.B1';pushUndo();if(!D.links.some(l=>l.a===a))D.links.push({id:'l'+(D.seq++),a,b:'GPIO'});if(!D.links.some(l=>l.a===b))D.links.push({id:'l'+(D.seq++),a:b,b:'GND'});commit();};}
-  } else if(isGroup()&&gSize(ui.sel)){const g=ui.sel;
-    pr.innerHTML=`<div class="small">${tr('Kijelölve: {p} alkatrész, {b} kézi híd, {w} vezeték',{p:`<b>${g.parts.size}</b>`,b:`<b>${g.bridges.size}</b>`,w:`<b>${g.wires.size}</b>`})}</div>
-      <div class="small muted">${tr('Húzással együtt mozognak. Shift+kattintás: hozzáadás/elvétel.')}</div>
-      <div class="pr-acts">${ACT('gRot','rotate',N_('Forgatás'),'R')}${ACT('gMir','mirror',N_('Tükrözés'),'M')}${ACT('gDel','trash',N_('Törlés'),'Del','',' danger')}</div>
-      ${g.parts.size?`<div class="pr-more"><button class="btn" id="gAuto">${tr('Bekötés automatikusra')}</button><button class="btn" id="gXray">${tr('Röntgen be/ki')}</button></div>`:''}`;
-    if($('#gXray'))$('#gXray').onclick=()=>{pushUndo();const ps=D.parts.filter(p=>g.parts.has(p.id));const on=!ps.every(p=>p.xray);ps.forEach(p=>{if(on)p.xray=true;else delete p.xray;});commit(true);};
-    $('#gRot').onclick=rotate;$('#gMir').onclick=mirror;$('#gDel').onclick=delSel;
-    if($('#gAuto'))$('#gAuto').onclick=()=>{if(!manualToAuto(new Set(g.parts)))flashMsg(tr('A kijelölésnek nincs kézi bekötése'));};
-  } else if(ui.sel&&ui.sel.kind==='wire'){const w=D.wires[ui.sel.i];
-    pr.innerHTML=`<div class="small">${tr('Vezeték')} <span class="mono">${w.a.join(':')} → ${w.b.join(':')}</span></div><div class="swatches">${WCOL.map(([c,l0])=>{const l=esc(tr(l0));return `<button class="sw ${w.color===c?'on':''}" data-wcol="${c}" title="${l}" aria-label="${l}" style="background:${c}"></button>`;}).join('')}</div><div class="row"><button class="btn danger" id="pDel">${tr('Törlés')}</button></div>`;
-    pr.querySelectorAll('[data-wcol]').forEach(b=>b.onclick=()=>{pushUndo();w.color=b.dataset.wcol;commit();});$('#pDel').onclick=delSel;
-  } else if(ui.sel&&ui.sel.kind==='note'&&(D.notes||[]).some(n=>n.id===ui.sel.id)){const n=D.notes.find(x=>x.id===ui.sel.id);
-    pr.innerHTML=`<div class="small">${tr('Jegyzet')} <span class="muted">(${tr('nem villamos elem')})</span></div>
-      <textarea id="nText" class="note-text" rows="6" spellcheck="true" aria-label="${tr('Jegyzet szövege')}">${esc(n.text)}</textarea>
-      <p class="help" style="margin:2px 0 6px">${tr('Új sor: Enter. {x} sor félkövér címsor. Méret: húzd a jobb alsó sarkát, vagy add meg.',{x:`<code># ${tr('Cím')}</code>`})}</p>
-      <div class="row nowrap"><label for="nW">${tr('Méret')}</label><input type="number" id="nW" min="3" max="60" value="${n.w}" aria-label="${tr('szélesség')}"><span class="muted small">×</span><input type="number" id="nH" min="2" max="60" value="${n.h}" aria-label="${tr('magasság')}"><span class="muted small">${tr('lyuk')}</span></div>
-      <div class="row"><label>${tr('Szín')}</label><div class="swatches">${NOTE_COL.map(([c,l0])=>{const l=esc(tr(l0));return `<button class="sw ${n.color===c?'on':''}" data-ncol="${c}" title="${l}" aria-label="${l}" style="background:${c}"></button>`;}).join('')}</div></div>
-      <div class="row"><label for="nTarget" title="${tr('Szaggatott nyíl a jegyzettől az alkatrészig; csak jelölés, nem kapcsolat')}">${tr('Mutat')}</label><select id="nTarget" style="flex:1"><option value="">– ${tr('semmire')} –</option>${D.parts.map(p=>`<option value="${p.id}" ${n.target===p.id?'selected':''}>${esc(p.label)} · ${esc(tr(DEFS[p.type].name))}</option>`).join('')}</select></div>
-      <div class="row"><button class="btn danger" id="pDel">${tr('Törlés')}</button></div>`;
-    let undoPushed=false;const ta=$('#nText');
-    ta.addEventListener('input',()=>{if(!undoPushed){pushUndo();undoPushed=true;}n.text=ta.value;save();draw();});
-    const sz=()=>{pushUndo();n.w=Math.max(3,Math.min(60,+$('#nW').value||n.w));n.h=Math.max(2,Math.min(60,+$('#nH').value||n.h));save();draw();};
-    $('#nW').onchange=sz;$('#nH').onchange=sz;
-    pr.querySelectorAll('[data-ncol]').forEach(b=>b.onclick=()=>{pushUndo();n.color=b.dataset.ncol;save();renderLeft();draw();});
-    $('#nTarget').onchange=e=>{pushUndo();n.target=e.target.value||null;save();draw();};$('#pDel').onclick=delSel;
-  } else if(ui.sel&&ui.sel.kind==='cut'&&![...(D.cuts||[]),...(D.auto.cuts||[])].some(x=>sameCut(x,ui.sel.hit.cut))){ui.sel=null;renderLeft();return;
-  } else if(ui.sel&&ui.sel.kind==='cut'){const {src,cut:[r,c,k]}=ui.sel.hit;
-    pr.innerHTML=`<div class="small">${k?tr('Csíkvágás: furat'):tr('Csíkvágás: rés')} <span class="mono">${k?`${r}:${c}`:`${r}:${c} | ${r+1}:${c}`}</span> <span class="muted">(${src==='auto'?tr('automatikus'):tr('kézi')})</span></div>`
-      +(src==='auto'?`<p class="help" style="margin:2px 0 6px">${tr('Az automatikus csíkvágás tette ide, mert a csíkon két különböző hálózat lába van. Törlés után ide nem kerül újra; ha lehet, a program a két láb között máshol vág.')}</p>`:'')
-      +`<div class="row"><button class="btn danger" id="pDel">${tr('Törlés')}</button></div>`;$('#pDel').onclick=delSel;
-  } else if(ui.sel&&ui.sel.kind==='bridge'){const b=D.bridges[ui.sel.i];
-    pr.innerHTML=`<div class="small">${tr('Híd')} <span class="mono">${b[0]}:${b[1]} – ${b[2]}:${b[3]}</span></div><div class="row"><button class="btn danger" id="pDel">${tr('Törlés')}</button></div>`;$('#pDel').onclick=delSel;
-  } else if(ui.linkStart){const q=findPin(ui.linkStart);
-    pr.innerHTML=`<div class="small">${tr('Kapcsolat innen: {x}',{x:`<b class="mono">${q?esc(pinLabel(q)):'?'}</b>`})}</div><div class="small muted">${tr('Kattints a cél lábra, vagy válassz:')}</div><div class="row"><button class="btn" id="lkGnd">→ GND</button><button class="btn" id="lkGpio">→ ${tr('szabad GPIO')}</button><button class="btn" id="lkNo">${tr('Mégse')}</button></div>`;
-    $('#lkGnd').onclick=()=>{addLink(ui.linkStart,'GND');ui.linkStart=null;renderLeft();};$('#lkGpio').onclick=()=>{addLink(ui.linkStart,'GPIO');ui.linkStart=null;renderLeft();};$('#lkNo').onclick=()=>{ui.linkStart=null;renderLeft();draw();};
-  } else pr.innerHTML=`<span class="muted small">${ui.tool==='link'&&!ui.placing?tr('Kattints egy lábra, majd a cél lábra (vagy GND / szabad GPIO).'):''}${ui.placing?tr('Lerakás: {x}{y}. Kattints a panelra; Shift+kattintással több példány.',{x:`<b>${esc(tr(DEFS[ui.placing].name))}</b>`,y:ui.ghost.from?' '+tr('({x} másolata)',{x:esc(ui.ghost.from)}):''}):ui.tool==='bridge'?tr('Húzd az egeret szomszédos lyukakon át: minden szekcióhatárnál híd keletkezik.'):ui.tool==='wire'?tr('Kattints a kezdő, majd a cél lyukra.'):ui.tool==='erase'?tr('Kattints vagy húzz a törlendő elemen.'):tr('Kattints egy alkatrészre, vezetékre vagy hídra. Shift+kattintás vagy keret húzása üres helyen: több elem. Ctrl+A: minden.')}</span>`;
+  PP.render();
 }
 $('#tools').addEventListener('click',e=>{const b=e.target.closest('[data-tool]');if(b){setTool(b.dataset.tool);if(MOB.matches)sheet('');}});
 $('#lib').addEventListener('click',e=>{const ed=e.target.closest('[data-edit]');if(ed){openEditor(editorHost,{type:ed.dataset.edit});return;}
@@ -697,10 +569,6 @@ $('#bRoute').onclick=()=>{pushUndo();route({full:true});commit(true);log(routeSu
 $('#bFreeze').onclick=()=>{if(!D.auto.bridges.length&&!D.auto.wires.length&&!(D.auto.cuts||[]).length)return;pushUndo();D.cuts=[...(D.cuts||[]),...(D.auto.cuts||[])];D.settings.autoCut=false;D.bridges.push(...D.auto.bridges.map(b=>b.slice(0,4)));D.wires.push(...D.auto.wires.map(w=>({a:w.a,b:w.b,color:w.color})));D.auto={bridges:[],wires:[],cuts:[]};commit(true);log(tr('Az automatikus bekötés kézivé rögzítve.'));};
 $('#bToAuto').onclick=()=>{const n=manualToAuto(null);if(!n)flashMsg(tr('Nincs kézi bekötés, amit át lehetne alakítani'));};
 $('#bUnroute').onclick=()=>{pushUndo();D.auto={bridges:[],wires:[],cuts:[]};D.settings.autoRoute=false;commit(true);log(tr('Az automatikus hidak törölve, az útvonaltervezés kikapcsolva.'));};
-$('#links').addEventListener('change',e=>{const s=e.target.closest('[data-linkto]');if(!s)return;pushUndo();if(!setLinkTarget(D,s.dataset.linkto,s.value)){HIST.drop();renderLinks();return;}commit();});
-$('#links').addEventListener('click',e=>{const b=e.target.closest('[data-dl]');if(b){pushUndo();D.links=D.links.filter(l=>l.id!==b.dataset.dl);commit();return;}
-  const li=e.target.closest('[data-li]');if(li){const id=li.dataset.li;ui.selLink=ui.selLink===id?null:id;renderLinks();draw();status();
-    if(ui.selLink){const g=linkGeom(D.links.find(x=>x.id===id));if(g){const sc=$('#scroll'),pts=[g.start,g.end].filter(Boolean).map(([r,c])=>toScreen(hx(c),hy(r)));const vx=pts.reduce((t,p)=>t+p[0],0)/pts.length,vy=pts.reduce((t,p)=>t+p[1],0)/pts.length;sc.scrollTo({left:vpX(vx)-sc.clientWidth/2,top:vpY(vy)-sc.clientHeight/2,behavior:'smooth'});}}}});
 /* ---------- Fájl menü, párbeszédablakok, értesítés, téma, kezdőkép, állapotsor (5.1 alapozó kör) ---------- */
 let toastTimer;
 /** Rövid értesítés a vászon alján (a régi panelenkénti üzenetsorok helyett). */
@@ -918,117 +786,15 @@ function attachPlug(p){if(!isOff(p))return null;
   const t=socketType();if(!t)return null;const s=plugSpot(D,p,DEFS[p.type].pins(p).length);if(!s)return null;
   const h={id:'p'+(D.seq++),type:t,label:nextLabel(t),r:s.r,c:s.c,rot:s.rot,mir:false,props:{...DEFS[t].props,...socketProps(DEFS[t].def,p)}};
   D.parts.push(h);p.plug=h.id;return h;}
-/* Csatlakozóba dugott kábel erei: föld fekete, táp piros, a jelek sorban narancs, sárga, kék, zöld, lila. */
-/** Kábelkötegek: a külső alkatrész lábaitól a csatlakozóig ívelt erek, amelyek a köteg közepén összefutnak. */
-function drawPlugs(alpha){ctx.save();ctx.globalAlpha=alpha;ctx.lineCap='round';
-  for(const p of D.parts){const pr=plugPairs(D,p);if(!pr.length)continue;
-    // az erek a külső alkatrész testéből kifelé indulnak, és a csatlakozó lábsorára merőlegesen érkeznek: párhuzamos szalagkábel
-    const avg=a=>a.reduce((t,x)=>t+x,0)/a.length,nrm=(x,y)=>{const l=Math.hypot(x,y)||1;return[x/l,y/l];};
-    const bb=DEFS[p.type].bounds(p),[orr,occ]=xf(p,(bb.r0+bb.r1)/2,(bb.c0+bb.c1)/2);
-    const ax=avg(pr.map(([q])=>hx(q.c))),ay=avg(pr.map(([q])=>hy(q.r))),bx=avg(pr.map(([,h])=>hx(h.c))),by=avg(pr.map(([,h])=>hy(h.r)));
-    let [ux,uy]=nrm(ax-hx(occ),ay-hy(orr));
-    const h0=pr[0][1],h1=pr[pr.length-1][1];let [vx,vy]=pr.length<2?nrm(ax-bx,ay-by):nrm(hy(h1.r)-hy(h0.r),-(hx(h1.c)-hx(h0.c)));
-    const side=vx*(ax-bx)+vy*(ay-by);if(side<-P||(Math.abs(side)<=P&&ux*vx+uy*vy<0)){vx=-vx;vy=-vy;} // a csatlakozó a kábel felé néz (egy vonalban: a kábellel egy irányba)
-    const Lk=Math.max(P*1.6,Math.hypot(bx-ax,by-ay)*0.35),sel=isSelPart(p)||D.parts.some(h=>h.id===p.plug&&isSelPart(h));
-    const hv=ui.hover,short=ui.stub&&!(hv&&pr.some(([q,h])=>(q.r===hv.r&&q.c===hv.c)||(h.r===hv.r&&h.c===hv.c))); // rámutatva a teljes kábel
-    pr.forEach(([q,h],i)=>{const x1=hx(q.c),y1=hy(q.r),x2=hx(h.c),y2=hy(h.r),col=plugColor(q,i);
-      const curve=()=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.bezierCurveTo(x1+ux*Lk,y1+uy*Lk,x2+vx*Lk,y2+vy*Lk,x2,y2);ctx.stroke();};
-      // rövid vezeték nézet: a kábelből csak a két vég csonkja látszik szakadásjellel; kijelölve vagy rámutatva a teljes
-      const B=(t,a,b,c,d)=>{const u=1-t;return u*u*u*a+3*u*u*t*b+3*u*t*t*c+t*t*t*d;},bx=t=>B(t,x1,x1+ux*Lk,x2+vx*Lk,x2),by=t=>B(t,y1,y1+uy*Lk,y2+vy*Lk,y2);
-      const part=(t0,t1)=>{ctx.beginPath();ctx.moveTo(bx(t0),by(t0));for(let k=1;k<=12;k++){const t=t0+(t1-t0)*k/12;ctx.lineTo(bx(t),by(t));}ctx.stroke();};
-      const stub=short&&!sel?Math.min(0.45,(P*1.8)/(Math.hypot(x2-x1,y2-y1)||1)):0;
-      const draw3=f=>{if(sel){ctx.strokeStyle=css('--accent');ctx.lineWidth=P*0.42;f();}ctx.strokeStyle='rgba(0,0,0,.45)';ctx.lineWidth=P*0.26;f();ctx.strokeStyle=col;ctx.lineWidth=P*0.17;f();};
-      if(!stub)draw3(curve);
-      else{draw3(()=>part(0,stub));draw3(()=>part(1-stub,1));
-        for(const [t,s] of [[stub,1],[1-stub,-1]]){const dx=bx(t+0.01*s)-bx(t),dy=by(t+0.01*s)-by(t),l=Math.hypot(dx,dy)||1,tx=dx/l,ty=dy/l,nx=-ty*P*0.3,ny=tx*P*0.3;
-          ctx.strokeStyle=col;ctx.lineWidth=Math.max(1.4,P*0.1);for(const o of [0.2,0.42]){const cx=bx(t)+tx*P*o,cy=by(t)+ty*P*o;line(cx-nx,cy-ny,cx+nx,cy+ny);}}}
-      ctx.fillStyle='#1d1d1d';ctx.fillRect(x2-P*0.22,y2-P*0.22,P*0.44,P*0.44);ctx.fillStyle=col;ctx.beginPath();ctx.arc(x2,y2,P*0.12,0,7);ctx.fill();});
-    // lábnevek a csatlakozón, a kábellel átellenes oldalon (ahová forrasztasz)
-    if(alpha>=1&&P>=12)pr.forEach(([q],i)=>{const h=pr[i][1];stext(hx(h.c)-vx*P*0.85,hy(h.r)-vy*P*0.85,q.name,Math.max(7,P*0.4),q.role==='gnd'?'#212529':plugColor(q,i)==='#c92a2a'?'#c92a2a':'#5c3d0a','rgba(255,252,240,.9)');});}
-  ctx.restore();}
+/* A kábelek, jegyzetek, kapcsolati vonalak rétegei: ui/layers.ts */
 function addLink(a,b){if(D.links.some(l=>(l.a===a&&l.b===b)||(l.a===b&&l.b===a)))return;pushUndo();D.links.push({id:'l'+(D.seq++),a,b,gpio:null});commit();}
 function linkStates(){ui.linkState=linkStatesOf(D,A0);}
-function renderLinks(){
-  $('#autoR').checked=!!D.settings.autoRoute;$('#autoCut').checked=autoCutOn();
-  const n=D.links.length,ok=[...ui.linkState.values()].filter(s=>s.ok).length;
-  $('#linkSum').innerHTML=n?`<span class="chip ${ok===n?'c-ok':'c-warn'}">${tr('{ok}/{n} bekötve',{ok,n})}</span>`:'';
-  $('#links').innerHTML=n?D.links.map(l=>{const s=ui.linkState.get(l.id)||{};
-    const st=!s.ok?`<span class="c-err">${tr('nincs')}</span>`:s.cable?`<span class="c-ok">${tr('kábel')}</span>`:s.wire?`<span class="c-warn">${tr('vezeték')}</span>`:s.nb?`<span class="c-ok">${tr('{n} híd',{n:s.nb})}</span>`:`<span class="muted">${tr('kézi')}</span>`;
-    return `<li class="lk${ui.selLink===l.id?' on':''}" data-li="${l.id}" title="${tr('Kattints: kezdő- és végpont, útvonal kiemelése')}"><span class="t">${esc(linkText(l))}${s.gpio&&l.b==='GPIO'?` <b>${s.gpio}</b>`:''}</span>${st}<button data-dl="${l.id}" aria-label="${tr('Kapcsolat törlése')}" title="${tr('Törlés')}">×</button></li>${ui.selLink===l.id?`<li class="lk-edit"><label class="small muted" for="lkTo">${tr('Cél')}</label>${targetSelect('data-linkto',l.id,l.b,l.a.split('.')[0]).replace('<select ','<select id="lkTo" ').replace(`<option value="">– ${tr('nincs kapcsolat')} –</option>`,'')}</li>`:''}`;}).join('')
-    :`<li class="muted small" style="padding:4px 6px">${tr('Még nincs kapcsolat.')}</li>`;
-  const ab=D.auto.bridges.length,aw=D.auto.wires.length,mb=D.bridges.length,mw=D.wires.length;
-  const sum=[...ui.linkState.values()].reduce((t,s)=>t+(s.nb||0),0);
-  /** „12 híd (10 auto + 2 kézi)”: a darabszám és hogy honnan van */
-  const cnt=(key,a,m,always)=>tr(key,{n:`<b>${a+m}</b>`})+(a&&m?` <span class="muted">(${tr('{a} auto + {m} kézi',{a,m})})</span>`:a?' <span class="muted">(auto)</span>':(m||always)?` <span class="muted">(${tr('kézi')})</span>`:'');
-  const parts=[cnt(N_('{n} híd'),ab,mb,false)];
-  if(aw+mw)parts.push(cnt(N_('{n} vezeték'),aw,mw,true));
-  {const ac=(D.auto.cuts||[]).length,mc=(D.cuts||[]).length;if(ac+mc)parts.push(cnt(N_('{n} vágás'),ac,mc,true));}
-  $('#linkTotal').innerHTML=(n||ab+mb+aw+mw||(D.cuts||[]).length)?`<span>${tr('Összesen: {x}',{x:parts.join(' · ')})}</span>`+(ab&&sum>ab?`<span class="muted" title="${tr('A soronkénti számok összege {n}; a közös szakaszok (pl. GND-törzs) több kapcsolatnál is szerepelnek, de csak egyszer kell beforrasztani.',{n:sum})}">ⓘ ${tr('sorok összege: {n} (közös szakaszok)',{n:sum})}</span>`:''):'';
-}
-function linkGeom(l){
-  if(!l)return null;const A=A0,st=ui.linkState.get(l.id)||{};
-  const as=equivPins(findPin(l.a)).filter(q=>inb(q.r,q.c));if(!as.length)return null;
-  const own=D.auto.bridges.filter(b=>(b[4]||[]).includes(l.id)),ownW=D.auto.wires.filter(w=>(w.links||[]).includes(l.id));
-  if(own.length||ownW.length){
-    const adj=new Map(),add=(x,y,h)=>{if(!adj.has(x))adj.set(x,[]);adj.get(x).push([y,h]);};
-    for(const b of own){const x=A.sid(b[0],b[1]),y=A.sid(b[2],b[3]);add(x,y,[b[2],b[3]]);add(y,x,[b[0],b[1]]);}
-    for(const w of ownW){const x=A.sid(w.a[0],w.a[1]),y=A.sid(w.b[0],w.b[1]);add(x,y,w.b);add(y,x,w.a);}
-    const srcCells=new Set(as.map(q=>A.sid(q.r,q.c)));
-    const start=as.find(q=>adj.has(A.sid(q.r,q.c)))||as[0];
-    const dist=new Map(),hole=new Map(),qu=[];for(const c of srcCells){dist.set(c,0);qu.push(c);}
-    let far=null;
-    while(qu.length){const x=qu.shift();for(const [y,h] of adj.get(x)||[]){if(dist.has(y))continue;dist.set(y,dist.get(x)+1);hole.set(y,h);qu.push(y);if(!far||dist.get(y)>dist.get(far))far=y;}}
-    let end=null;
-    if(far!=null){const h=hole.get(far);const cand=A.pins.filter(q=>q.on&&A.sid(q.r,q.c)===far&&q.part!==start.part);
-      if(cand.length){cand.sort((a,b)=>Math.hypot(a.r-h[0],a.c-h[1])-Math.hypot(b.r-h[0],b.c-h[1]));end=cand[0];}else end={r:h[0],c:h[1]};}
-    return{start:[start.r,start.c],end:end?[end.r,end.c]:null,endPin:end&&end.part?end:null,bridges:own,wires:ownW};
-  }
-  let best=null,bd=1e9;for(const a0 of as){const t=ratTarget(l,A,st,a0);if(!t)continue;const d=Math.hypot(t.r-a0.r,t.c-a0.c);if(d<bd){bd=d;best={start:[a0.r,a0.c],end:[t.r,t.c],endPin:t,bridges:[],wires:[]};}}
-  return best||{start:[as[0].r,as[0].c],end:null,endPin:null,bridges:[],wires:[]};
-}
-function drawLinkSel(){
-  if(!ui.selLink)return;const l=D.links.find(x=>x.id===ui.selLink);if(!l){ui.selLink=null;return;}
-  const g=linkGeom(l);if(!g)return;
-  ctx.save();ctx.lineCap='round';
-  for(const b of g.bridges){ctx.strokeStyle='rgba(255,145,0,.55)';ctx.lineWidth=P*0.75;line(hx(b[1]),hy(b[0]),hx(b[3]),hy(b[2]));}
-  for(const w of g.wires){ctx.strokeStyle='rgba(255,145,0,.55)';ctx.lineWidth=P*0.6;line(hx(w.a[1]),hy(w.a[0]),hx(w.b[1]),hy(w.b[0]));}
-  if(!g.bridges.length&&!g.wires.length&&g.end){ctx.setLineDash([P*0.4,P*0.25]);ctx.strokeStyle='rgba(255,145,0,.9)';ctx.lineWidth=Math.max(2.5,P*0.16);line(hx(g.start[1]),hy(g.start[0]),hx(g.end[1]),hy(g.end[0]));ctx.setLineDash([]);}
-  const mark=([r,c],col,txt)=>{const x=hx(c),y=hy(r);ctx.fillStyle='rgba(255,255,255,.35)';ctx.beginPath();ctx.arc(x,y,P*0.7,0,7);ctx.fill();ctx.strokeStyle='rgba(20,20,20,.6)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(x,y,P*0.62,0,7);ctx.stroke();ctx.strokeStyle=col;ctx.lineWidth=3;ctx.stroke();
-    stext(x,y-P*1.1,txt,Math.max(9,P*0.55),col,'rgba(255,252,240,.95)');};
-  if(g.end)mark(g.end,'#c000e8',tr('cél'));
-  mark(g.start,'#00a844','kezdet');
-  ctx.restore();
-}
-function linkStatusText(){const l=D.links.find(x=>x.id===ui.selLink);if(!l)return null;const g=linkGeom(l);if(!g)return null;
-  const e=g.endPin?` (${pinLabel(g.endPin)})`:'';return `${linkText(l)} · ${tr('kezdet')} ${g.start.join(':')}${g.end?` → ${tr('cél')} ${g.end.join(':')}${e}`:''}${g.bridges.length?` · ${tr('{n} híd',{n:g.bridges.length})}`:''} · ${tr('Esc: kiemelés vége')}`;}
+/* Kapcsolatok panel: ui/links.ts */
+function renderLinks(){LP.render();}
+const linkGeom=l=>LP.geom(l),linkStatusText=()=>LP.statusText();
 function autoHidden(ids){const h=ui.hideAuto;if(!h)return false;if(h==='all')return true;return !!ids&&ids.length>0&&ids.every(id=>h.has(id));}
 function movedLinks(p){const ids=new Set();for(const l of D.links){if(l.a.startsWith(p.id+'.')||l.b.startsWith(p.id+'.'))ids.add(l.id);else if(isMcu(p)&&(l.b==='GND'||l.b==='GPIO'))ids.add(l.id);}return ids;}
 function toggleRats(){ui.rats=!ui.rats;$('#vRats').classList.toggle('on',ui.rats);draw();}
-function ratTarget(l,A,st,a){
-  a=a||findPin(l.a);if(!a)return null;
-  if(l.b!=='GND'&&l.b!=='GPIO'){const ts=equivPins(findPin(l.b));let bt=null,bd=1e9;for(const t of ts){const d=Math.hypot(t.r-a.r,t.c-a.c);if(d<bd){bd=d;bt=t;}}return bt;}
-  const na=inb(a.r,a.c)?A.find(A.sid(a.r,a.c)):-1;
-  if(l.b==='GPIO'){const ref=(st&&st.gpioRef)||l.gpio;const t=ref&&findPin(ref);if(t)return t;
-    const an=a.role==='adc';let bt=null,bd=1e9;for(const q of A.pins){if(!isMcu(q.part)||q.role!=='gpio'||!q.on||(an&&!hasCap(q,'adc')))continue;if((A.netPins.get(q.net)||[]).length>1||(A.netSecs.get(q.net)||0)>1)continue;const d=Math.abs(q.r-a.r)/3+Math.abs(q.c-a.c);if(d<bd){bd=d;bt=q;}}return bt;}
-  // GND: a legközelebbi GND-hálózati láb (bekötött kapcsolatnál a saját hálózatán belül a Pico GND)
-  let bt=null,bd=1e9;
-  for(const [net,qs] of A.netPins){if(!qs.some(q=>isMcu(q.part)&&q.role==='gnd'))continue;
-    if(st&&st.ok){if(net!==na)continue;for(const q of qs){if(!isMcu(q.part)||q.role!=='gnd')continue;const d=Math.abs(q.r-a.r)/3+Math.abs(q.c-a.c);if(d<bd){bd=d;bt=q;}}}
-    else{if(net===na)continue;for(const q of qs){if(q.part===a.part)continue;const d=Math.abs(q.r-a.r)/3+Math.abs(q.c-a.c);if(d<bd){bd=d;bt=q;}}}}
-  return bt;
-}
-function drawRats(A){
-  if(!D.links.length)return;
-  ctx.save();ctx.lineCap='round';
-  for(const l of D.links){const st=ui.linkState.get(l.id);if(!st)continue;if(st.ok&&!ui.rats)continue;
-    let a=null,t=null,bd=1e9;for(const a0 of equivPins(findPin(l.a))){const t0=ratTarget(l,A,st,a0);if(!t0)continue;const d=Math.hypot(t0.r-a0.r,t0.c-a0.c);if(d<bd){bd=d;a=a0;t=t0;}}if(!a||!t)continue;
-    const col=!st.ok?'#ff1744':l.b==='GND'?'#00b8ff':l.b==='GPIO'?'#00e676':'#ffab00';
-    const x1=hx(a.c),y1=hy(a.r),x2=hx(t.c),y2=hy(t.r);
-    ctx.setLineDash([]);ctx.strokeStyle='rgba(20,20,20,.55)';ctx.lineWidth=Math.max(4,P*0.3);line(x1,y1,x2,y2);
-    ctx.setLineDash(st.ok?[P*0.5,P*0.3]:[P*0.35,P*0.25]);ctx.strokeStyle=col;ctx.lineWidth=Math.max(2.5,P*0.17);line(x1,y1,x2,y2);
-    ctx.setLineDash([]);for(const [x,y] of [[x1,y1],[x2,y2]]){ctx.fillStyle='rgba(20,20,20,.6)';ctx.beginPath();ctx.arc(x,y,P*0.3,0,7);ctx.fill();ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,P*0.21,0,7);ctx.fill();}}
-  ctx.restore();
-}
 /* ---------- Útvonalkereső: engine/route.ts ---------- */
 function suggestCuts(){return suggestCutsOf(D);}
 function route(opts){routeOf(D,opts||{});}

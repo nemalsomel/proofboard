@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { linkStates } from '../../src/engine/links';
+import { findPin, linkGeom, linkStates, ratTarget } from '../../src/engine/links';
 import { analyze } from '../../src/engine/netlist';
 import { autoCutOn, manualToAuto, route } from '../../src/engine/route';
+import { linkStatusLine, linksViewHtml, targetSelectHtml } from '../../src/ui/links';
+import { fmt } from '../../src/i18n/i18n';
 import { DEFS } from '../../src/engine/defs';
 import type { Design } from '../../src/engine/types';
 
@@ -43,5 +45,54 @@ describe('útvonalkereső', () => {
     expect(called).toBe(1);
     expect(D.bridges).toEqual([]);
     expect([...linkStates(D, analyze(D)).values()].every(s => s.ok)).toBe(true);
+  });
+});
+
+describe('kapcsolati geometria', () => {
+  it('bekötés előtt: a kapcsolati vonal a forrásláb és a cél legközelebbi lába között; a kiemelés ugyanezt mutatja', () => {
+    const D = ledDesign(), A = analyze(D), st = linkStates(D, A), l = D.links[1];
+    const t = ratTarget(D, A, l, st.get(l.id));
+    expect(t && t.id).toBe('A');
+    const g = linkGeom(D, A, l, st.get(l.id))!;
+    const a = findPin(D, 'p2.2')!;
+    expect(g.start).toEqual([a.r, a.c]);
+    expect(g.end).toEqual([t!.r, t!.c]);
+    expect(g.bridges).toEqual([]);
+  });
+  it('bekötve: a saját hidak a kiemelésben, a végpont a túloldali láb', () => {
+    const D = ledDesign(); route(D, { full: true });
+    const A = analyze(D), st = linkStates(D, A), l = D.links[1], g = linkGeom(D, A, l, st.get(l.id))!;
+    expect(g.bridges.length).toBeGreaterThan(0);
+    expect(g.bridges.every(b => b[4].includes(l.id))).toBe(true);
+    expect(g.endPin && g.endPin.part.id).toBe('p3');
+    expect(linkGeom(D, A, null)).toBeNull();
+  });
+});
+
+describe('Kapcsolatok panel', () => {
+  it('lista, bekötöttség, összesítő; a kiemelt kapcsolatnál célválasztó', () => {
+    const D = ledDesign(), A0 = analyze(D);
+    let v = linksViewHtml(D, A0, linkStates(D, A0), null, fmt);
+    expect(v.sum).toContain('0/3 bekötve');
+    expect((v.list.match(/data-li=/g) || []).length).toBe(3);
+    expect(v.list).not.toContain('lkTo');
+    expect(v.total).toContain('Összesen');
+    route(D, { full: true });
+    const A = analyze(D), st = linkStates(D, A);
+    v = linksViewHtml(D, A, st, 'l2', fmt);
+    expect(v.sum).toContain('3/3 bekötve');
+    expect(v.list).toContain('id="lkTo"');
+    expect(v.total).toMatch(/<b>\d+<\/b> híd <span class="muted">\(auto\)/);
+    const g = linkGeom(D, A, D.links[1], st.get('l2'))!;
+    expect(linkStatusLine(D, D.links[1], g, fmt)).toMatch(/^R1\.2 → LED1\.A · kezdet \d+:\d+ → cél/);
+    expect(linksViewHtml({ ...D, links: [] }, A, new Map(), null, fmt).list).toContain('Még nincs kapcsolat.');
+  });
+  it('célválasztó: GND, szabad GPIO, lábak; a már nem választható jelenlegi cél is szerepel', () => {
+    const D = ledDesign(), A = analyze(D);
+    const h = targetSelectHtml(D, A, 'data-x', 'p2.2', 'p9.1', 'p2', fmt);
+    expect(h).toContain('value="GND"');
+    expect(h).toContain('label="Jelenlegi"');
+    expect(h).toContain('value="p9.1" selected');
+    expect(h.startsWith('<select data-x="p2.2">')).toBe(true);
   });
 });
