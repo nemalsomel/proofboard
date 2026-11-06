@@ -220,7 +220,6 @@ export const EN: Readonly<Record<string, string>> = {
   "Telepített alkalmazásként fut; internet nélkül is működik.": "Running as an installed app; works without internet.",
   "Internet nélkül is működik (a böngésző eltárolta). Telepíthető is önálló alkalmazásként.": "Works without internet (stored by the browser). It can also be installed as an app.",
   "Telepítve: a Proofboard önálló alkalmazásként is elindítható.": "Installed: Proofboard can now be started as an app.",
-  "Az angol fordítás készül: a felület egy része még magyar.": "The English translation is in progress: part of the interface is still in Hungarian.",
   "Visszavonás az alkatrész-szerkesztőben (Ctrl+Z)": "Undo in the part editor (Ctrl+Z)",
   "Újra az alkatrész-szerkesztőben (Ctrl+Y)": "Redo in the part editor (Ctrl+Y)",
   // eszközsáv, csíkvágás, állapotsor

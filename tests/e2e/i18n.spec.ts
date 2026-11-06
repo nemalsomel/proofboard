@@ -20,7 +20,6 @@ test('Fájl → Nyelv: English, majd vissza Magyar; újratöltés után is megma
   await expect(page.locator('#bFile')).toContainText('File');
   await expect(page.locator('#bExamples')).toContainText('Examples…');
   await expect(page.locator('[data-lang-set="hu"]')).toHaveText('Magyar'); // a nyelvek neve nem fordul
-  await expect(page.locator('#toast')).toContainText('in progress');
   await expect(page.locator('#bUndo')).toHaveAttribute('title', 'Undo (Ctrl+Z)');
   await expect(page.locator('#exSearch')).toHaveAttribute('placeholder', 'Search the examples');
   // a program által épített részek is (eszközsáv, állapotsor)
@@ -100,4 +99,25 @@ test('angolul az alkatrészlista, a paraméterek, a Problémák és a példák s
   await page.evaluate(() => (window as any).pcb.lang('hu'));
   const huNotes = await page.evaluate(() => (window as any).pcb.notes().map((n: { text: string }) => n.text).join('\n'));
   expect(huNotes).not.toContain('Próbáld ki'); // a már betöltött jegyzet a terv része, nem fordul vissza
+});
+
+test.describe('angol böngésző', () => {
+  test.use({ locale: 'en-GB' });
+  test('első indításkor a böngésző nyelve; a mentett választás erősebb', async ({ page }) => {
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page.locator('#bFile')).toContainText('File');
+    await page.evaluate(() => (window as any).pcb.lang('hu'));
+    await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'hu');
+    await expect(page.locator('#bFile')).toContainText('Fájl');
+  });
+});
+
+test('Alkatrészkeresés angol névre is talál, magyar felületen is', async ({ page }) => {
+  const q = page.locator('#libSearch');
+  await q.fill('resistor');
+  await expect(page.locator('[data-lib="res"]')).toBeVisible();
+  await page.evaluate(() => (window as any).pcb.lang('en'));
+  await q.fill('ellenállás');
+  await expect(page.locator('[data-lib="res"]')).toBeVisible();
 });

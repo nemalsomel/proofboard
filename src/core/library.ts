@@ -1,4 +1,4 @@
-import { N_ } from '../i18n/i18n';
+import { N_, type Tr } from '../i18n/i18n';
 import { hasErrors, validatePartDef, type Problem } from './validate';
 import type { PartDef } from './schema';
 
@@ -52,18 +52,20 @@ export function importLibrary(data: unknown, taken: (k: string) => boolean): Imp
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 /** Keresési szöveg egy alkatrészhez: név, lábkép, kategória, előtag, lábnevek, szerepek, képességek és buszfunkciók. */
-export function partSearchText(def: PartDef): string {
+export function partSearchText(def: PartDef, tr?: Tr): string {
   const pins = Array.isArray(def.pins) ? def.pins : [];
   const words = [def.name, def.fp, def.cat || '', def.prefix,
+    ...(tr ? [tr(def.name), tr(def.fp), def.cat ? tr(def.cat) : ''] : []),
     ...pins.flatMap(p => [p.name != null ? String(p.name) : '', p.role || '', p.fn || '', ...(p.caps || [])]),
     ...Object.values(def.pinTable || {}).flatMap(t => [t[0], t[1], ...((t[2] as readonly string[] | undefined) || [])]),
     ...(def.model || []).map(e => e.el)];
   return fold(words.filter(Boolean).join(' '));
 }
-/** Minden szóközzel elválasztott keresőszó szerepel-e (kis- és nagybetű, ékezet nem számít). */
-export function matchPart(def: PartDef, query: string): boolean {
+/** Minden szóközzel elválasztott keresőszó szerepel-e (kis- és nagybetű, ékezet nem számít).
+ *  A `tr` megadásával a név, a lábkép és a kategória fordítása is kereshető. */
+export function matchPart(def: PartDef, query: string, tr?: Tr): boolean {
   const q = fold(query).split(/\s+/).filter(Boolean);
   if (!q.length) return true;
-  const t = partSearchText(def);
+  const t = partSearchText(def, tr);
   return q.every(w => t.includes(w));
 }

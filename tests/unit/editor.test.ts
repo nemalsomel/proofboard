@@ -17,6 +17,7 @@ describe('alkatrész-szerkesztő segédfüggvényei', () => {
 
 import { defToForm, formToDef, splitCaps } from '../../src/ui/editor';
 import { matchPart } from '../../src/core/library';
+import { t } from '../../src/i18n/i18n';
 import { rekeyAgainstLibrary } from '../../src/engine/design';
 import { PARTS } from '../../src/parts/builtin';
 import type { PartDef } from '../../src/core/schema';
@@ -56,6 +57,12 @@ describe('alkatrészkönyvtár', () => {
     expect(matchPart(mini, 'mini motor')).toBe(false);
     expect(matchPart(PARTS.pico, 'adc')).toBe(true);
     expect(matchPart(PARTS.pico, '')).toBe(true);
+    // fordítóval az angol név, lábkép és kategória is kereshető
+    const en = (x: string) => t(x, undefined, 'en');
+    expect(matchPart(PARTS.res, 'passive')).toBe(false);
+    expect(matchPart(PARTS.res, 'passive', en)).toBe(true);
+    expect(matchPart(PARTS.res, 'resistor', en)).toBe(true);
+    expect(matchPart(PARTS.res, 'ellenallas', en)).toBe(true);
   });
   it('a megnyitott terv ütköző alkatrésze új kulcsot kap, a könyvtár nem változik', () => {
     const lib = { c_mini: mini };

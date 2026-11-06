@@ -30,19 +30,21 @@ export interface LibInput {
   pref: LibPref; query: string; placing: string | null; sim: boolean;
   /** rejtett kategóriák (egyszerű mód) */ hideCats?: ReadonlySet<string>;
 }
+/** a keresés magyarul és angolul is talál, bármelyik a felület nyelve */
+const EN = (s: string) => tr(s, undefined, 'en');
 const esc = (s: unknown) => String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]!));
 
 /** Az alkatrészlista HTML-je (üresen „Nincs találat.”). */
 export function libraryHtml(I: LibInput): string {
   const q = I.query.trim(), fav = new Set(I.pref.fav || []), closed = new Set(I.pref.closed || []), dis = I.sim ? 'disabled' : '';
-  const ok = (t: string) => !!I.defs[t] && matchPart(I.defs[t].def, q);
+  const ok = (t: string) => !!I.defs[t] && matchPart(I.defs[t].def, q, EN);
   const item = (t: string) => {
     const d = I.defs[t], own = !I.builtin.has(t), projOnly = own && !I.library.has(t), f = fav.has(t);
     return `<div class="libitem" role="group">`
-      + `<button class="btn libfav ${f ? 'on' : ''}" data-fav="${t}" title="${f ? tr('Kedvenc (kattintásra kiveszi)') : tr('Kedvencekhez')}" aria-label="${esc(tr('{x} kedvenc', { x: d.name }))}" aria-pressed="${f}">${f ? '★' : '☆'}</button>`
+      + `<button class="btn libfav ${f ? 'on' : ''}" data-fav="${t}" title="${f ? tr('Kedvenc (kattintásra kiveszi)') : tr('Kedvencekhez')}" aria-label="${esc(tr('{x} kedvenc', { x: tr(d.name) }))}" aria-pressed="${f}">${f ? '★' : '☆'}</button>`
       + `<button class="btn ${I.placing === t ? 'on' : ''}" data-lib="${t}" ${dis}>${esc(tr(d.name))}<span>${esc(tr(d.fp))}</span></button>`
-      + (projOnly ? `<button class="btn" data-tolib="${t}" title="${tr('Hozzáadás a saját könyvtárhoz (más tervekben is elérhető lesz)')}" aria-label="${esc(tr('{x} a könyvtárba', { x: d.name }))}" ${dis}>＋</button>` : '')
-      + (own ? `<button class="btn" data-adv data-edit="${t}" title="${tr('Szerkesztés')}" aria-label="${esc(tr('{x} szerkesztése', { x: d.name }))}" ${dis}>✎</button>` : '') + `</div>`;
+      + (projOnly ? `<button class="btn" data-tolib="${t}" title="${tr('Hozzáadás a saját könyvtárhoz (más tervekben is elérhető lesz)')}" aria-label="${esc(tr('{x} a könyvtárba', { x: tr(d.name) }))}" ${dis}>＋</button>` : '')
+      + (own ? `<button class="btn" data-adv data-edit="${t}" title="${tr('Szerkesztés')}" aria-label="${esc(tr('{x} szerkesztése', { x: tr(d.name) }))}" ${dis}>✎</button>` : '') + `</div>`;
   };
   const group = (id: string, title: string, list: string[], hint = '') => {
     const ts = list.filter(ok); if (!ts.length) return '';

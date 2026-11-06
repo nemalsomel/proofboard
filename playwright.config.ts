@@ -6,7 +6,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
-  use: { baseURL: 'http://localhost:4173/proofboard/', viewport: { width: 1500, height: 1000 }, serviceWorkers: 'block' }, // a PWA-teszt maga engedi
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1500, height: 1000 } } }],
+  use: { baseURL: 'http://localhost:4173/proofboard/', viewport: { width: 1500, height: 1000 }, serviceWorkers: 'block', locale: 'hu-HU' }, // a PWA-teszt maga engedi
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1500, height: 1000 }, locale: 'hu-HU' } }],
   webServer: { command: 'npm run preview', url: 'http://localhost:4173/proofboard/', reuseExistingServer: !process.env.CI, timeout: 60_000 },
 });

@@ -884,12 +884,11 @@ function setTheme(v,remember=true){const r=document.documentElement;if(v==='ligh
   if(remember){try{localStorage.setItem(THEMEKEY,v);}catch(e){}}themeUI();draw();}
 function themeUI(){const v=themeGet();document.querySelectorAll('[data-theme-set]').forEach(b=>{const on=b.dataset.themeSet===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});}
 document.querySelectorAll('[data-theme-set]').forEach(b=>b.addEventListener('click',()=>setTheme(b.dataset.themeSet)));
-/* Nyelv (előkészítés): a statikus felület fordítása (i18n/), a választás megmarad. A program által épített részek
-   fokozatosan kapnak t()-t; ami még nincs lefordítva, magyarul marad. */
+/* Nyelv: a mentett választás, különben a böngésző nyelve (detectLang); a választás megmarad. */
 const LANGKEY='proofboard.lang';
 function langUI(){const v=getLang();document.querySelectorAll('[data-lang-set]').forEach(b=>{const on=b.dataset.langSet===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});}
-function applyLang(l,remember){if(!isLang(l))return;const was=getLang();setLang(l);document.documentElement.lang=l;if(D){ISSUES=checkAll();renderLeft();renderRight();renderLinks();renderExamples();boardUI();boardSelects();simBtn();partTabs();pwUpdate();renderFab();renderLog();if(PE)PE.refresh();if(PC)PC.refresh();rerenderEditors();status();sbUpdate();}translateDom(document.body,l);undoUI();langUI();
-  if(remember){try{localStorage.setItem(LANGKEY,l);}catch(e){}if(l!=='hu'&&l!==was)toast(tr('Az angol fordítás készül: a felület egy része még magyar.'));}}
+function applyLang(l,remember){if(!isLang(l))return;setLang(l);document.documentElement.lang=l;if(D){ISSUES=checkAll();renderLeft();renderRight();renderLinks();renderExamples();boardUI();boardSelects();simBtn();partTabs();pwUpdate();renderFab();renderLog();if(PE)PE.refresh();if(PC)PC.refresh();rerenderEditors();status();sbUpdate();}translateDom(document.body,l);undoUI();langUI();
+  if(remember){try{localStorage.setItem(LANGKEY,l);}catch(e){}}}
 document.querySelectorAll('[data-lang-set]').forEach(b=>b.addEventListener('click',()=>applyLang(b.dataset.langSet,true)));
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>draw());
 setTheme(themeGet(),false);
@@ -1425,5 +1424,5 @@ function statusText(){return $('#status').textContent;}
   applyLayout(LAY_S.cur,false);
   setSimple(!!uiPref().simple,false);
   restoreParked(editorHost); // a háttérben hagyott, nem mentett alkatrész füle
-  {let l=null;try{l=localStorage.getItem(LANGKEY);}catch(e){}applyLang(detectLang(l),false);}
+  {let l=null;try{l=localStorage.getItem(LANGKEY);}catch(e){}applyLang(detectLang(l,navigator.languages||[navigator.language]),false);}
 })();
