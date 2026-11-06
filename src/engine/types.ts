@@ -31,6 +31,7 @@ export interface Design {
   links: Link[];
   auto: { bridges: AutoBridge[]; wires: Wire[]; cuts?: Cut[] };
   cuts?: Cut[];
+  /** törölt automatikus vágások helye: az automatikus csíkvágás ide nem tesz újat */ cutBan?: Cut[];
   customParts: Record<string, PartDef>;
   notes: Note[];
   gpio: Record<string, string>;

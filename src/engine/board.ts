@@ -115,8 +115,9 @@ export function buildLayout(b: BoardSpec, cutsIn: readonly Cut[] = []): Layout {
  * (a két láb közti sorköz közepére) rés-vágás kerül. `net` lábanként egy hálózatazonosító;
  * az azonos azonosítójúak egy csíkon maradhatnak.
  */
-export function planCuts(b: BoardSpec, manual: readonly Cut[], pins: ReadonlyArray<{ r: number; c: number; net: string }>): Cut[] {
+export function planCuts(b: BoardSpec, manual: readonly Cut[], pins: ReadonlyArray<{ r: number; c: number; net: string }>, ban: readonly Cut[] = []): Cut[] {
   const L = buildLayout(b, manual);
+  const banned = new Set(ban.filter(x => !x[2]).map(x => keyOf(x[0], x[1])));
   const by = new Map<number, Array<{ r: number; net: string }>>();
   for (const p of pins) {
     if (p.r < 0 || p.c < 0 || p.r >= b.rows || p.c >= b.cols || L.drilled(p.r, p.c)) continue;
@@ -131,7 +132,12 @@ export function planCuts(b: BoardSpec, manual: readonly Cut[], pins: ReadonlyArr
     for (let i = 0; i + 1 < list.length; i++) {
       const a = list[i], z = list[i + 1];
       if (a.net === z.net || a.r === z.r) continue;
-      out.push([(a.r + z.r - 1) >> 1, c, 0]);
+      // a két láb között középen; ha ott a felhasználó törölte (tiltott), a legközelebbi szabad rés a kettő között
+      const mid = (a.r + z.r - 1) >> 1;
+      let r = -1;
+      for (let d = 0; d <= z.r - a.r && r < 0; d++)
+        for (const x of d ? [mid - d, mid + d] : [mid]) if (x >= a.r && x < z.r && !banned.has(keyOf(x, c))) { r = x; break; }
+      if (r >= 0) out.push([r, c, 0]);
     }
   }
   return normCuts(b, out);

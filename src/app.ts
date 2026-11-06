@@ -23,6 +23,9 @@ import { editorHistory, rerenderEditors, formToDef, openEditor, restoreParked } 
 import { LEDC, PARTS, PICO_NAMES, picoRole } from './parts/builtin';
 import { solve } from './engine/solve';
 import { buildLayout, planCuts } from './engine/board';
+import { cutCheck, sameCut, toggleCut as toggleCutOf, clearManualCuts } from './engine/cuts';
+import { grp, gSize, groupSnap as groupSnapOf, groupOk as groupOkOf, groupApply as groupApplyOf, hitPart as hitPartOf, hitWire as hitWireOf } from './ui/hit';
+import { createInteraction } from './ui/interact';
 import { pinLabelPositions } from './core/labels';
 import { evalExpr, parseExpr, pinRef, varsOf } from './core/logic';
 import { DEFS, syncDefs, setLibrary, penv, hasPress, isOff, isMcu } from './engine/defs';
@@ -147,7 +150,7 @@ function draw0(){
     xray:!!ui.xray,pressed:id=>!!ui.pressed[id],phase:id=>ui.phase[id]||0,
     selPart:isSelPart,selBridge:i=>!!(ui.sel&&((ui.sel.kind==='bridge'&&ui.sel.i===i)||(isGroup()&&ui.sel.bridges.has(i)))),
     selWire:i=>!!(ui.sel&&((ui.sel.kind==='wire'&&ui.sel.i===i)||(isGroup()&&ui.sel.wires.has(i)))),
-    stub:!!ui.stub,hoverWire:ui.hoverWire,selLink:ui.selLink||null,rats:!!ui.rats,autoHidden,cutAt,
+    stub:!!ui.stub,hoverWire:ui.hoverWire,selLink:ui.selLink||null,rats:!!ui.rats,autoHidden,cutAt,selCut:ct=>IA.isSelCut(ct),
     wireStart:ui.wireStart||null,wireColor:ui.wireColor,linkStart:ui.linkStart||null,progHi:ui.progHi||null,findPin,
     flash:ui.flash||null,box:ui.drag&&ui.drag.kind==='box'?{h0:ui.drag.h0,h1:ui.drag.h1}:null,
     layers:{plugs:drawPlugs,notes:drawNotes,rats:drawRats,linkSel:drawLinkSel}});
@@ -167,12 +170,10 @@ function stext(x,y,str,size,color,halo){ctx.save();ctx.translate(x,y);ctx.rotate
 function toHole(ev){const rc=cv.getBoundingClientRect();const[x,y]=fromScreen(ev.clientX-rc.left,ev.clientY-rc.top);let cf=(x-M)/P-0.5,rf=(y-M)/P-0.5;if(cu())cf=D.board.cols-1-cf;return{rf,cf,r:Math.round(rf),c:Math.round(cf)};}
 function ghostPart(h){return{id:'ghost',type:ui.placing,label:DEFS[ui.placing].prefix,r:h.r,c:h.c,rot:ui.ghost.rot,mir:ui.ghost.mir,xray:!!ui.ghost.xray,props:{...DEFS[ui.placing].props,...(ui.ghost.props||{})}};}
 function duplicate(p){if(!p||ui.sim)return;ui.placing=p.type;ui.ghost={rot:p.rot,mir:p.mir,props:JSON.parse(JSON.stringify(p.props)),xray:!!p.xray,from:p.label};ui.sel=null;ui.wireStart=null;ui.linkStart=null;renderLeft();draw();}
-function hitPart(rf,cf){for(let i=D.parts.length-1;i>=0;i--){const p=D.parts[i],b=DEFS[p.type].bounds(p),[lr,lc]=ixf(p,rf,cf);if(lr>=b.r0&&lr<=b.r1&&lc>=b.c0&&lc<=b.c1)return p;}return null;}
-function segDist(pr,pc,r1,c1,r2,c2){const dr=r2-r1,dc=c2-c1,l=dr*dr+dc*dc;let t=l?((pr-r1)*dr+(pc-c1)*dc)/l:0;t=Math.max(0,Math.min(1,t));return Math.hypot(pr-(r1+t*dr),pc-(c1+t*dc));}
-function hitWire(rf,cf){let best=-1,bd=ui.coarse?0.5:0.32;D.wires.forEach((w,i)=>{const sb=stubOf(w);let d;
-  if(sb&&!wireFull(w,i,false)){const ar=w.a[0]+(w.b[0]-w.a[0])*sb.k,ac=w.a[1]+(w.b[1]-w.a[1])*sb.k,br=w.b[0]-(w.b[0]-w.a[0])*sb.k,bc=w.b[1]-(w.b[1]-w.a[1])*sb.k;d=Math.min(segDist(rf,cf,w.a[0],w.a[1],ar,ac),segDist(rf,cf,br,bc,w.b[0],w.b[1]));}
-  else d=segDist(rf,cf,w.a[0],w.a[1],w.b[0],w.b[1]);if(d<bd){bd=d;best=i;}});return best;}
-function hitBridge(rf,cf){let best=-1,bd=ui.coarse?0.45:0.3;D.bridges.forEach((b,i)=>{const d=segDist(rf,cf,b[0],b[1],b[2],b[3]);if(d<bd){bd=d;best=i;}});return best;}
+/* Találatvizsgálat és csoportok: ui/hit.ts; a pointer- és érintéskezelés: ui/interact.ts */
+const boundsOf=p=>DEFS[p.type].bounds(p);
+function hitPart(rf,cf){return hitPartOf(D,boundsOf,rf,cf);}
+function hitWire(rf,cf){return hitWireOf(D,rf,cf,ui.coarse?0.5:0.32,stubOf,(w,i)=>wireFull(w,i,false));}
 /* Visszavonás: a terv és a saját könyvtár együtt (a könyvtár szerkesztése is visszavonható). */
 const snap=()=>JSON.stringify({D,L:LIB});
 function restoreSnap(s){const o=JSON.parse(s);if(o&&o.D&&o.L){D=o.D;setLib(o.L);}else D=o;}
@@ -185,54 +186,14 @@ function sameSec(r1,c1,r2,c2){const L=LAY();return L.cell(r1,c1)===L.cell(r2,c2)
 function addBridge(r1,c1,r2,c2){if(!inb(r1,c1)||!inb(r2,c2))return false;if(LAY().drilled(r1,c1)||LAY().drilled(r2,c2))return false;if(Math.abs(r1-r2)+Math.abs(c1-c2)!==1)return false;if(sameSec(r1,c1,r2,c2))return false;
   if(D.bridges.some(b=>(b[0]===r1&&b[1]===c1&&b[2]===r2&&b[3]===c2)||(b[0]===r2&&b[1]===c2&&b[2]===r1&&b[3]===c1)))return false;D.bridges.push([r1,c1,r2,c2]);return true;}
 
-function onDown(ev,hAt){
-  const h=hAt||toHole(ev);ui.hover=h;
-  if(ui.tool==='pan'){ui.drag={kind:'pan',x:ev.clientX,y:ev.clientY};cv.setPointerCapture(ev.pointerId);return;}
-  if(ui.sim){const p=hitPart(h.rf,h.cf);if(!(p&&hasPress(p))){if(ui.tool==='select'){ui.sel=p?grp([p.id]):null;renderLeft();draw();}return;}if(p&&hasPress(p)){if(D.settings.btnMode==='toggle')ui.pressed[p.id]=!ui.pressed[p.id];else{ui.pressed[p.id]=true;ui.holdPtr.set(ev.pointerId,p.id);cv.setPointerCapture(ev.pointerId);}recompute();}return;}
-  if(ui.placing){const g=ghostPart(h);if(!partFits(g))return;pushUndo();useInProject(ui.placing);libRecent(ui.placing);const p={...g,id:'p'+(D.seq++),label:nextLabel(ui.placing)};if(!p.xray)delete p.xray;D.parts.push(p);if(isOff(p))attachPlug(p);
-    if(ev.shiftKey){commit();return;} // Shift: további példányok
-    ui.sel=grp([p.id]);ui.placing=null;setTool('select');commit();return;}
-  if(ui.tool==='note'){addNote(h);return;}
-  if(ui.tool==='select'){
-    {const n=hitNote(h.rf,h.cf);if(n&&!ev.shiftKey){ui.sel={kind:'note',id:n.id};ui.drag={kind:noteCorner(n,h.rf,h.cf)?'nsize':'nmove',n,h0:h,r0:n.r,c0:n.c,w0:n.w,h0n:n.h,pushed:false};cv.setPointerCapture(ev.pointerId);renderLeft();draw();return;}}
-    const p=hitPart(h.rf,h.cf),sh=ev.shiftKey;
-    if(p){
-      if(sh){const g=isGroup()?ui.sel:grp();if(g.parts.has(p.id))g.parts.delete(p.id);else g.parts.add(p.id);ui.sel=gSize(g)?g:null;renderLeft();draw();return;}
-      if(!(isGroup()&&ui.sel.parts.has(p.id)))ui.sel=grp([p.id]);
-      ui.drag={kind:'gmove',h0:h,sn:groupSnap(ui.sel),dr:0,dc:0,pushed:false};cv.setPointerCapture(ev.pointerId);renderLeft();draw();return;}
-    const w=hitWire(h.rf,h.cf),b=w<0?hitBridge(h.rf,h.cf):-1;
-    if(w>=0||b>=0){
-      if(sh||(isGroup()&&(w>=0?ui.sel.wires.has(w):ui.sel.bridges.has(b)))){const g=isGroup()?ui.sel:grp();
-        if(sh){if(w>=0){g.wires.has(w)?g.wires.delete(w):g.wires.add(w);}else{g.bridges.has(b)?g.bridges.delete(b):g.bridges.add(b);}ui.sel=gSize(g)?g:null;renderLeft();draw();return;}
-        ui.drag={kind:'gmove',h0:h,sn:groupSnap(g),dr:0,dc:0,pushed:false};cv.setPointerCapture(ev.pointerId);return;}
-      ui.sel=w>=0?{kind:'wire',i:w}:{kind:'bridge',i:b};renderLeft();draw();return;}
-    ui.drag={kind:'box',h0:h,h1:h,add:sh};cv.setPointerCapture(ev.pointerId);return;}
-  if(ui.tool==='bridge'){if(!inb(h.r,h.c))return;pushUndo();ui.drag={kind:'bridge',last:[h.r,h.c],n:0};cv.setPointerCapture(ev.pointerId);return;}
-  if(ui.tool==='wire'){if(!inb(h.r,h.c)&&!offPinAt(h.r,h.c))return;
-    if(!ui.wireStart){ui.wireStart=[h.r,h.c];draw();return;}
-    if(ui.wireStart[0]===h.r&&ui.wireStart[1]===h.c){ui.wireStart=null;draw();return;}
-    pushUndo();D.wires.push({a:ui.wireStart,b:[h.r,h.c],color:ui.wireColor});ui.wireStart=null;commit();return;}
-  if(ui.tool==='link'){const q=hitPin(h.rf,h.cf);if(!q){ui.linkStart=null;renderLeft();draw();return;}const ref=q.part.id+'.'+q.id;
-    if(!ui.linkStart||ui.linkStart===ref){ui.linkStart=ui.linkStart===ref?null:ref;renderLeft();draw();return;}
-    addLink(ui.linkStart,ref);ui.linkStart=null;return;}
-  if(ui.tool==='cut'){if(!inb(h.r,h.c))return;toggleCut(cutAt(h));return;}
-  if(ui.tool==='erase'){pushUndo();ui.drag={kind:'erase',any:false};cv.setPointerCapture(ev.pointerId);eraseAt(h,true);return;}
-}
-/** A kattintás helye szerinti vágás: lyuk közepén kifúrt lyuk, két sor között rés. */
 /** A csíkvágás típusa: hely szerint (a kattintás helye dönt: lyuk közepén furat, két lyuk között rés), furat vagy rés. */
 const CUT_KINDS=[['auto',N_('Hely szerint'),N_('A kattintás helye dönt: lyuk közepén furat, két lyuk között rés')],['hole',N_('Furat'),N_('A lyuk kifúrása: a csík ott megszakad')],['gap',N_('Rés'),N_('Szakadás két lyuk között: a csík a két lyuk között megszakad')]];
 const cutKind=()=>{const k=uiPref().cutKind;return k==='hole'||k==='gap'?k:'auto';};
-function cutAt(h){const k=cutKind(),gap=()=>{const r=Math.floor(h.rf);return[Math.max(0,Math.min(D.board.rows-2,r)),h.c,0];};
-  if(k==='hole')return[h.r,h.c,1];if(k==='gap')return gap();
-  if(Math.abs(h.rf-h.r)<0.28)return[h.r,h.c,1];return gap();}
-function toggleCut(ct){const k=ct.join(','),same=x=>x.join(',')===k;
-  if((D.cuts||[]).some(same)){pushUndo();D.cuts=D.cuts.filter(x=>!same(x));commit();return;}
-  const L=buildLayout(D.board,[ct]);if(!L.cuts.length){flashMsg(ct[2]?tr('Ide nem tehető vágás'):tr('Itt nincs mit elvágni (szekcióhatár vagy a csík vége)'));return;}
-  pushUndo();D.cuts=[...(D.cuts||[]),ct];if((D.auto.cuts||[]).some(same))D.auto.cuts=D.auto.cuts.filter(x=>!same(x));commit();}
-function hitCut(rf,cf){let best=-1,bd=ui.coarse?0.6:0.4;(D.cuts||[]).forEach((x,i)=>{const d=x[2]?Math.hypot(x[0]-rf,x[1]-cf):Math.hypot(x[0]+0.5-rf,x[1]-cf);if(d<bd){bd=d;best=i;}});return best;}
+const cutAt=h=>IA.cutAt(h);
+function toggleCut(ct){const D0=D;if((D0.cuts||[]).some(x=>sameCut(x,ct))){pushUndo();toggleCutOf(D0,ct);commit();return;}
+  const ok=cutCheck(D0.board,ct);if(ok!=='ok'){flashMsg(ok==='bad-hole'?tr('Ide nem tehető vágás'):tr('Itt nincs mit elvágni (szekcióhatár vagy a csík vége)'));return;}
+  pushUndo();toggleCutOf(D0,ct);commit();}
 /* ---------- Jegyzetek: szöveges megjegyzés a vásznon (nem villamos elem), opcionális mutatóval egy alkatrészre ---------- */
-function hitNote(rf,cf){const ns=D.notes||[];for(let i=ns.length-1;i>=0;i--){const n=ns[i];if(rf>=n.r-0.5&&rf<=n.r+n.h-0.5&&cf>=n.c-0.5&&cf<=n.c+n.w-0.5)return n;}return null;}
-const noteCorner=(n,rf,cf)=>Math.abs(rf-(n.r+n.h-0.5))<0.6&&Math.abs(cf-(n.c+n.w-0.5))<0.6;
 function addNote(h){pushUndo();const id='n'+(D.seq++);const n={id,r:Math.round(h.rf),c:Math.round(h.cf),w:12,h:6,text:tr('Jegyzet')+'\n'+tr('Írd ide a leírást…'),color:NOTE_COL[0][0],target:null};
   D.notes=[...(D.notes||[]),n];ui.sel={kind:'note',id};setTool('select');commit(true);setTimeout(()=>{const t=$('#nText');if(t){t.focus();t.select();}},0);}
 function noteLines(n,maxW){ctx.font=`500 ${Math.max(9,P*0.62)}px ${css('--display')}`;const out=[];
@@ -255,128 +216,21 @@ function drawNotes(){if(!(D.notes||[]).length)return;ctx.save();
     ctx.restore();
     if(sel){ctx.fillStyle=css('--accent');ctx.fillRect(x+w-7,y+h-7,7,7);}}
   ctx.restore();}
-function eraseAt(h,click){
-  const order=cu()?['bridge','wire','part']:['wire','part','bridge'];
-  if(click){const n=hitNote(h.rf,h.cf);if(n){D.notes=D.notes.filter(x=>x!==n);ui.drag.any=true;ui.sel=null;commit(true);return;}}
-  for(const k of order){
-    if(k==='bridge'&&cu()||k==='wire'&&!cu()){const i=hitCut(h.rf,h.cf);if(i>=0){D.cuts.splice(i,1);ui.drag.any=true;ui.sel=null;commit();return;}}
-    if(k==='wire'){const i=hitWire(h.rf,h.cf);if(i>=0){D.wires.splice(i,1);ui.drag.any=true;ui.sel=null;commit();return;}}
-    if(k==='bridge'){const i=hitBridge(h.rf,h.cf);if(i>=0){D.bridges.splice(i,1);ui.drag.any=true;ui.sel=null;commit();return;}}
-    if(k==='part'&&click){const p=hitPart(h.rf,h.cf);if(p){removeParts([p.id]);ui.drag.any=true;ui.sel=null;commit();return;}}
-  }
-}
-function onMove(ev,hAt){
-  const h=hAt||toHole(ev);
-  if(ui.stub&&!ui.drag){const hw=hitWire(h.rf,h.cf);if(hw!==ui.hoverWire){ui.hoverWire=hw;draw();}}const prev=ui.hover;ui.hover=h;const d=ui.drag;
-  if(d&&d.kind==='pan'){const sc=$('#scroll');sc.scrollLeft-=ev.clientX-d.x;sc.scrollTop-=ev.clientY-d.y;d.x=ev.clientX;d.y=ev.clientY;return;}
-  if(d&&d.kind==='box'){d.h1=h;draw();return;}
-  if(d&&(d.kind==='nmove'||d.kind==='nsize')){const dr=Math.round(h.rf-d.h0.rf),dc=Math.round(h.cf-d.h0.cf);
-    const nr=d.kind==='nmove'?Math.max(-NEXT,Math.min(D.board.rows+NEXT-2,d.r0+dr)):d.n.r,nc=d.kind==='nmove'?Math.max(-NEXT,Math.min(D.board.cols+NEXT-2,d.c0+dc)):d.n.c;
-    const nw=d.kind==='nsize'?Math.max(3,Math.min(60,d.w0+dc)):d.n.w,nh=d.kind==='nsize'?Math.max(2,Math.min(60,d.h0n+dr)):d.n.h;
-    if(nr!==d.n.r||nc!==d.n.c||nw!==d.n.w||nh!==d.n.h){if(!d.pushed){pushUndo();d.pushed=true;}Object.assign(d.n,{r:nr,c:nc,w:nw,h:nh});draw();}return;}
-  if(d&&d.kind==='gmove'){let dr=h.r-d.h0.r,dc=h.c-d.h0.c,g=0;
-    while(!groupOk(d.sn,dr,dc)&&(dr||dc)&&g++<300){if(dr)dr-=Math.sign(dr);if(!groupOk(d.sn,dr,dc)&&dc)dc-=Math.sign(dc);}
-    if(!groupOk(d.sn,dr,dc)){dr=d.dr;dc=d.dc;}else if((h.r-d.h0.r!==dr||h.c-d.h0.c!==dc)&&!d.warned){d.warned=true;flashMsg(tr('Tovább nem mozdítható (panel széle)'));}
-    if(dr!==d.dr||dc!==d.dc){if(!d.pushed){pushUndo();d.pushed=true;if(D.settings.autoRoute&&D.links.length){const ids=new Set();for(const o of d.sn.parts)movedLinks(o.p).forEach(x=>ids.add(x));ui.hideAuto=ids;}}
-      d.dr=dr;d.dc=dc;groupApply(d.sn,dr,dc);recompute();renderLeft();}}
-  if(d&&d.kind==='move'){let nr=d.r0+(h.r-d.h0.r),nc=d.c0+(h.c-d.h0.c);
-    if(!partFits({...d.p,r:nr,c:nc})){let g=0;while(!partFits({...d.p,r:nr,c:nc})&&(nr!==d.p.r||nc!==d.p.c)&&g++<200){if(nr!==d.p.r)nr+=Math.sign(d.p.r-nr);if(!partFits({...d.p,r:nr,c:nc})&&nc!==d.p.c)nc+=Math.sign(d.p.c-nc);}if(!d.warned){d.warned=true;flashMsg(tr('A panel szélénél tovább nem mozdítható'));}}
-    if(nr!==d.p.r||nc!==d.p.c){const t={...d.p,r:nr,c:nc};if(partFits(t)){if(!d.pushed){pushUndo();d.pushed=true;if(D.settings.autoRoute&&D.links.length)ui.hideAuto=movedLinks(d.p);}d.p.r=nr;d.p.c=nc;recompute();renderLeft();}}}
-  if(d&&d.kind==='bridge'&&inb(h.r,h.c)){let[r,c]=d.last;let guard=0;while((r!==h.r||c!==h.c)&&guard++<200){let nr=r,nc=c;if(r!==h.r)nr+=Math.sign(h.r-r);else nc+=Math.sign(h.c-c);if(addBridge(r,c,nr,nc))d.n++;r=nr;c=nc;}d.last=[r,c];if(d.n)recompute();}
-  if(d&&d.kind==='erase')eraseAt(h,false);
-  if(!prev||prev.r!==h.r||prev.c!==h.c||ui.placing||ui.wireStart||(ui.tool==='cut'&&String(cutAt(prev))!==String(cutAt(h)))){status();draw();} // csíkvágásnál a lyukon belül is követi, hová kerül
-}
-function endDrag(ev){
-  const pid=ui.holdPtr.get(ev.pointerId);if(pid){ui.pressed[pid]=false;ui.holdPtr.delete(ev.pointerId);recompute();}
-  const d=ui.drag;ui.drag=null;if(!d)return;
-  if((d.kind==='nmove'||d.kind==='nsize')){if(d.pushed){save();renderLeft();}return;}
-  if(d.kind==='move'&&d.pushed){ui.hideAuto=null;ui.moved=new Set([d.p.id]);commit();}
-  if(d.kind==='gmove'&&d.pushed){ui.hideAuto=null;ui.moved=new Set(d.sn.parts.map(o=>o.p.id));commit();}
-  if(d.kind==='box'){const r0=Math.min(d.h0.rf,d.h1.rf),r1=Math.max(d.h0.rf,d.h1.rf),c0=Math.min(d.h0.cf,d.h1.cf),c1=Math.max(d.h0.cf,d.h1.cf);
-    const inR=(r,c)=>r>=r0-0.5&&r<=r1+0.5&&c>=c0-0.5&&c<=c1+0.5;
-    if(r1-r0<0.5&&c1-c0<0.5){if(!d.add)ui.sel=null;}
-    else{const g=d.add&&isGroup()?ui.sel:grp();
-      for(const p of D.parts){const ps=gpins(p);const mr=ps.reduce((s,q)=>s+q.r,0)/ps.length,mc=ps.reduce((s,q)=>s+q.c,0)/ps.length;if(inR(mr,mc))g.parts.add(p.id);}
-      D.bridges.forEach((b,i)=>{if(inR(b[0],b[1])&&inR(b[2],b[3]))g.bridges.add(i);});
-      D.wires.forEach((w,i)=>{if(inR(w.a[0],w.a[1])&&inR(w.b[0],w.b[1]))g.wires.add(i);});
-      ui.sel=gSize(g)?g:null;}
-    renderLeft();draw();}
-  if(d.kind==='bridge'){if(d.n)commit();else HIST.drop();}
-  if(d.kind==='erase'&&!d.any)HIST.drop();
-}
-/* ---------- Érintés: gesztusok ----------
-   egy ujj: koppintás = kattintás; húzás alkatrészen = mozgatás, üres helyen = görgetés (híd/törlés eszköznél az eszköz);
-   hosszan nyomva üres helyen = kijelölő keret; két ujj = nagyítás és görgetés (a félbehagyott művelet visszaáll);
-   lerakáskor az előnézet az ujj fölött jár, felengedéskor kerül le. */
-const T={pts:new Map(),mode:null,start:null,timer:0,last:null,pinch:null,raf:0};
-const PLACE_LIFT=56; // px: lerakáskor ennyivel az ujj fölött az előnézet
-function holeAt(x,y){return toHole({clientX:x,clientY:y});}
-const liftHole=ev=>holeAt(ev.clientX,ev.clientY-PLACE_LIFT);
-function tCancel(){clearTimeout(T.timer);
-  if(T.mode==='active'&&ui.drag){const d=ui.drag;ui.drag=null;
-    if((d.kind==='gmove'&&d.pushed)||d.kind==='bridge'||d.kind==='erase'){restoreSnap(HIST.drop());ui.hideAuto=null;commit(true);}else draw();}
-  if(T.mode==='direct'){for(const [id,pid] of ui.holdPtr){ui.pressed[pid]=false;ui.holdPtr.delete(id);}recompute();}
-  if(T.mode==='place'){ui.hover=null;draw();}
-  T.mode=null;T.start=null;}
-function pinchStart(){const [a,b]=[...T.pts.values()],cx=(a.x+b.x)/2,cy=(a.y+b.y)/2;T.pinch={d0:Math.hypot(a.x-b.x,a.y-b.y)||1,z0:ui.zoom,bp:holeAt(cx,cy),cx,cy};T.mode='pinch';}
-function pinchMove(){if(T.raf)return;T.raf=requestAnimationFrame(()=>{T.raf=0;if(T.mode!=='pinch'||T.pts.size<2)return;
-  const [a,b]=[...T.pts.values()],pc=T.pinch,cx=(a.x+b.x)/2,cy=(a.y+b.y)/2,z=Math.max(0.6,Math.min(2.6,pc.z0*Math.hypot(a.x-b.x,a.y-b.y)/pc.d0));
-  if(Math.round(14*z)!==P){ui.zoom=+z.toFixed(3);resize();}
-  const sc=$('#scroll'),rc=cv.getBoundingClientRect(),[vx,vy]=toScreen(hx(pc.bp.cf),hy(pc.bp.rf));
-  sc.scrollLeft+=rc.left+vx-cx;sc.scrollTop+=rc.top+vy-cy;});}
-function tDown(ev){ui.coarse=true;if(sheetOpen()&&T.pts.size===0){sheet('');}T.pts.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});try{cv.setPointerCapture(ev.pointerId);}catch(e){}
-  if(T.pts.size===2){tCancel();pinchStart();return;}
-  if(T.pts.size>2||T.mode==='pinch')return;
-  const h=toHole(ev);T.start=ev;T.last={x:ev.clientX,y:ev.clientY};
-  if(ui.sim){const p=hitPart(h.rf,h.cf);if(p&&hasPress(p)){onDown(ev);T.mode='direct';}else T.mode='pan';return;}
-  if(ui.placing){ui.hover=liftHole(ev);T.mode='place';status();draw();return;}
-  T.mode='pend';
-  if(ui.tool==='select'&&!hitPart(h.rf,h.cf))
-    T.timer=setTimeout(()=>{if(T.mode!=='pend')return;T.mode='active';const h0=toHole(T.start);ui.hover=h0;ui.drag={kind:'box',h0,h1:h0,add:false};draw();if(navigator.vibrate)try{navigator.vibrate(12);}catch(e){}flashHint(tr('Kijelölő keret: húzd az ujjad'));},450);}
-function tMove(ev){const pt=T.pts.get(ev.pointerId);if(!pt)return;pt.x=ev.clientX;pt.y=ev.clientY;
-  if(T.mode==='pinch'){pinchMove();return;}
-  if(T.mode==='place'){ui.hover=liftHole(ev);status();draw();return;}
-  if(T.mode==='active'||T.mode==='direct'){onMove(ev);return;}
-  if(T.mode==='pend'){const s0=T.start;if(Math.hypot(ev.clientX-s0.clientX,ev.clientY-s0.clientY)<9)return;clearTimeout(T.timer);
-    const h=toHole(s0),onPart=!!hitPart(h.rf,h.cf)||!!hitNote(h.rf,h.cf);
-    if((ui.tool==='select'&&onPart)||ui.tool==='bridge'||ui.tool==='erase'){T.mode='active';onDown(s0);onMove(ev);return;}
-    T.mode='pan';}
-  if(T.mode==='pan'){const sc=$('#scroll');sc.scrollLeft-=ev.clientX-T.last.x;sc.scrollTop-=ev.clientY-T.last.y;T.last={x:ev.clientX,y:ev.clientY};}}
-function tUp(ev,cancel){T.pts.delete(ev.pointerId);
-  if(T.mode==='pinch'){if(!T.pts.size)T.mode=null;return;}
-  clearTimeout(T.timer);const m=T.mode;T.mode=null;
-  if(cancel){T.mode=m;tCancel();return;}
-  if(m==='place'){const h=liftHole(ev);ui.hover=h;onDown(ev,h);draw();}
-  else if(m==='pend'){onDown(T.start);endDrag(ev);}
-  else if(m==='active'||m==='direct')endDrag(ev);
-  T.start=null;}
 let hintTimer;function flashHint(m){const s=$('#status');s.textContent=m;clearTimeout(hintTimer);hintTimer=setTimeout(status,1800);}
-cv.addEventListener('pointerdown',ev=>{if(ev.pointerType==='touch'){ev.preventDefault();tDown(ev);}else if(ev.button===1||ui.space){panStart(ev,cv);}else{ui.coarse=false;onDown(ev);}});
-cv.addEventListener('pointermove',ev=>{if(ev.pointerType==='touch')tMove(ev);else onMove(ev);});
-cv.addEventListener('pointerup',ev=>{if(ev.pointerType==='touch')tUp(ev);else endDrag(ev);});
-cv.addEventListener('pointercancel',ev=>{if(ev.pointerType==='touch')tUp(ev,true);else endDrag(ev);});
-cv.addEventListener('contextmenu',ev=>{if(ui.coarse)ev.preventDefault();});
-cv.addEventListener('pointerleave',()=>{if(!ui.drag){ui.hover=null;status();draw();}});
+/* A panel interakciója (egér, érintés, pásztázás): ui/interact.ts; itt csak a gazda műveletei. */
+const IA=createInteraction({ui,D:()=>D,cv,scroll:$('#scroll'),toHole,boundsOf,inb,partFits,ghostPart,offPinAt,hitPin,hitWire,addBridge,hasPress,isOff,attachPlug,
+  placed:t=>{useInProject(t);libRecent(t);},nextLabel,cutKind:()=>cutKind(),pushUndo,dropUndo:()=>HIST.drop(),restoreSnap,commit,recompute,save,renderLeft,draw,status,setTool,addNote,addLink,removeParts,movedLinks,
+  flashMsg,flashHint,P:()=>P,resize,toScreen,hx:c=>hx(c),hy:r=>hy(r),sheetOpen:()=>sheetOpen(),closeSheet:()=>sheet(''),NEXT});
+IA.attach();
 $('#scroll').addEventListener('wheel',ev=>{if(ev.ctrlKey||ev.metaKey){ev.preventDefault();zoomTo(ui.zoom*Math.pow(1.0015,-Math.max(-120,Math.min(120,ev.deltaY))),ev.clientX,ev.clientY);}},{passive:false});
-/* pásztázás: középső gombbal, szóköz + húzással, vagy a panel melletti üres téren húzva */
-function panStart(ev,el){ev.preventDefault();const sc=$('#scroll');let x=ev.clientX,y=ev.clientY;sc.classList.add('panning');try{el.setPointerCapture(ev.pointerId);}catch(e){}
-  const mv=e=>{sc.scrollLeft-=e.clientX-x;sc.scrollTop-=e.clientY-y;x=e.clientX;y=e.clientY;};
-  const up=()=>{sc.classList.remove('panning');el.removeEventListener('pointermove',mv);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',up);};
-  el.addEventListener('pointermove',mv);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);}
-$('#scroll').addEventListener('pointerdown',ev=>{if(ev.pointerType==='touch')return;if(ev.target===$('#scroll')&&ev.button===0||ev.button===1)panStart(ev,$('#scroll'));},true);
 document.addEventListener('keydown',ev=>{if(ev.code!=='Space'||ev.repeat)return;const t=ev.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.tagName==='BUTTON'||t.closest&&t.closest('#progView,#partView,.pg,dialog'))||ui.part)return;ev.preventDefault();ui.space=true;$('.app').classList.add('space');});
 document.addEventListener('keyup',ev=>{if(ev.code==='Space'){ui.space=false;$('.app').classList.remove('space');}});
 window.addEventListener('blur',()=>{ui.space=false;$('.app').classList.remove('space');});
 
 function nextLabel(type){const pre=DEFS[type].prefix;let n=0;for(const p of D.parts){const m=new RegExp('^'+pre+'(\\d+)$').exec(p.label);if(m)n=Math.max(n,+m[1]);}return pre+(n+1);}
-const grp=(parts,bridges,wires)=>({kind:'group',parts:new Set(parts||[]),bridges:new Set(bridges||[]),wires:new Set(wires||[])});
 const isGroup=()=>ui.sel&&ui.sel.kind==='group';
-const gSize=g=>g.parts.size+g.bridges.size+g.wires.size;
 function selPart(){if(!isGroup()||ui.sel.parts.size!==1||ui.sel.bridges.size||ui.sel.wires.size)return null;const id=[...ui.sel.parts][0];return D.parts.find(p=>p.id===id)||null;}
 function isSelPart(p){return isGroup()&&ui.sel.parts.has(p.id);}
-function groupSnap(g){return{parts:[...g.parts].map(id=>D.parts.find(p=>p.id===id)).filter(Boolean).map(p=>({p,r:p.r,c:p.c})),bridges:[...g.bridges].map(i=>({i,b:[...D.bridges[i]]})),wires:[...g.wires].map(i=>({i,a:[...D.wires[i].a],b:[...D.wires[i].b]}))};}
-function groupOk(sn,dr,dc){return sn.parts.every(o=>partFits({...o.p,r:o.r+dr,c:o.c+dc}))&&sn.bridges.every(o=>inb(o.b[0]+dr,o.b[1]+dc)&&inb(o.b[2]+dr,o.b[3]+dc))&&sn.wires.every(o=>inb(o.a[0]+dr,o.a[1]+dc)&&inb(o.b[0]+dr,o.b[1]+dc));}
-function groupApply(sn,dr,dc){for(const o of sn.parts){o.p.r=o.r+dr;o.p.c=o.c+dc;}for(const o of sn.bridges){const b=D.bridges[o.i];b[0]=o.b[0]+dr;b[1]=o.b[1]+dc;b[2]=o.b[2]+dr;b[3]=o.b[3]+dc;}for(const o of sn.wires){const w=D.wires[o.i];w.a=[o.a[0]+dr,o.a[1]+dc];w.b=[o.b[0]+dr,o.b[1]+dc];}}
 function groupTransform(kind){ // kind: 'rot' | 'mir'
   const g=ui.sel,pts=[];
   for(const id of g.parts){const p=D.parts.find(x=>x.id===id);if(!p)continue;const ps=gpins(p);pts.push([ps.reduce((t,q)=>t+q.r,0)/ps.length,ps.reduce((t,q)=>t+q.c,0)/ps.length]);} // a lábak középpontja körül
@@ -399,7 +253,7 @@ function groupTransform(kind){ // kind: 'rot' | 'mir'
 }
 function rotate(){if(ui.placing){ui.ghost.rot=(ui.ghost.rot+1)&3;draw();return;}if(isGroup()&&gSize(ui.sel))groupTransform('rot');}
 function mirror(){if(ui.placing){ui.ghost.rot=(4-ui.ghost.rot)&3;ui.ghost.mir=!ui.ghost.mir;draw();return;}if(isGroup()&&gSize(ui.sel))groupTransform('mir');}
-function delSel(){if(!ui.sel)return;pushUndo();if(ui.sel.kind==='group'){const g=ui.sel;removeParts(g.parts);D.bridges=D.bridges.filter((b,i)=>!g.bridges.has(i));D.wires=D.wires.filter((w,i)=>!g.wires.has(i));}else if(ui.sel.kind==='wire')D.wires.splice(ui.sel.i,1);else if(ui.sel.kind==='bridge')D.bridges.splice(ui.sel.i,1);else if(ui.sel.kind==='note')D.notes=D.notes.filter(n=>n.id!==ui.sel.id);ui.sel=null;commit();}
+function delSel(){if(!ui.sel)return;pushUndo();if(ui.sel.kind==='group'){const g=ui.sel;removeParts(g.parts);D.bridges=D.bridges.filter((b,i)=>!g.bridges.has(i));D.wires=D.wires.filter((w,i)=>!g.wires.has(i));}else if(ui.sel.kind==='wire')D.wires.splice(ui.sel.i,1);else if(ui.sel.kind==='bridge')D.bridges.splice(ui.sel.i,1);else if(ui.sel.kind==='note')D.notes=D.notes.filter(n=>n.id!==ui.sel.id);else if(ui.sel.kind==='cut'){const h=ui.sel.hit;HIST.drop();IA.deleteCut(h);return;}ui.sel=null;commit();}
 function undo(){const E=editorHistory();if(E){E.go(false);return;}const s=HIST.undo(snap());if(s==null)return;restoreSnap(s);ui.sel=null;commit();}
 function redo(){const E=editorHistory();if(E){E.go(true);return;}const s=HIST.redo(snap());if(s==null)return;restoreSnap(s);ui.sel=null;commit();}
 function setTool(t){ui.tool=t;ui.wireStart=null;ui.linkStart=null;if(t!=='place')ui.placing=null;renderLeft();draw();}
@@ -602,8 +456,9 @@ function renderLeft0(){
   renderLib();
   $('#wireColorRow').hidden=ui.tool!=='wire'||!!ui.placing;
   $('#cutKindRow').hidden=ui.tool!=='cut'||!!ui.placing;
+  {const n=(D.cuts||[]).length,b=$('#cutClear');b.disabled=!n||!!ui.sim;b.textContent=tr('Kézi vágások törlése ({n})',{n});}
   {const ck=cutKind();$('#cutKinds').innerHTML=CUT_KINDS.map(([k,l,h])=>`<button class="btn ${ck===k?'on':''}" data-ck="${k}" aria-pressed="${ck===k}" title="${esc(tr(h))}">${esc(tr(l))}</button>`).join('');}
-  {const g=isGroup()?ui.sel:null,sp=selPart();$('#selSumm').textContent=sp?sp.label:g&&gSize(g)?tr('{n} elem',{n:gSize(g)}):ui.sel&&ui.sel.kind==='wire'?tr('vezeték'):ui.sel&&ui.sel.kind==='bridge'?tr('híd'):ui.sel&&ui.sel.kind==='note'?tr('jegyzet'):'';}
+  {const g=isGroup()?ui.sel:null,sp=selPart();$('#selSumm').textContent=sp?sp.label:g&&gSize(g)?tr('{n} elem',{n:gSize(g)}):ui.sel&&ui.sel.kind==='wire'?tr('vezeték'):ui.sel&&ui.sel.kind==='bridge'?tr('híd'):ui.sel&&ui.sel.kind==='note'?tr('jegyzet'):ui.sel&&ui.sel.kind==='cut'?tr('csíkvágás'):'';}
   $('#swatches').innerHTML=WCOL.map(([c,l0])=>{const l=esc(tr(l0));return `<button class="sw ${ui.wireColor===c?'on':''}" data-col="${c}" title="${l}" aria-label="${l}" style="background:${c}"></button>`;}).join('');
   const pr=$('#props');const p=selPart();
   if(p){const d=DEFS[p.type];const extra=paramUI(p);
@@ -665,6 +520,11 @@ function renderLeft0(){
     $('#nW').onchange=sz;$('#nH').onchange=sz;
     pr.querySelectorAll('[data-ncol]').forEach(b=>b.onclick=()=>{pushUndo();n.color=b.dataset.ncol;save();renderLeft();draw();});
     $('#nTarget').onchange=e=>{pushUndo();n.target=e.target.value||null;save();draw();};$('#pDel').onclick=delSel;
+  } else if(ui.sel&&ui.sel.kind==='cut'&&![...(D.cuts||[]),...(D.auto.cuts||[])].some(x=>sameCut(x,ui.sel.hit.cut))){ui.sel=null;renderLeft();return;
+  } else if(ui.sel&&ui.sel.kind==='cut'){const {src,cut:[r,c,k]}=ui.sel.hit;
+    pr.innerHTML=`<div class="small">${k?tr('Csíkvágás: furat'):tr('Csíkvágás: rés')} <span class="mono">${k?`${r}:${c}`:`${r}:${c} | ${r+1}:${c}`}</span> <span class="muted">(${src==='auto'?tr('automatikus'):tr('kézi')})</span></div>`
+      +(src==='auto'?`<p class="help" style="margin:2px 0 6px">${tr('Az automatikus csíkvágás tette ide, mert a csíkon két különböző hálózat lába van. Törlés után ide nem kerül újra; ha lehet, a program a két láb között máshol vág.')}</p>`:'')
+      +`<div class="row"><button class="btn danger" id="pDel">${tr('Törlés')}</button></div>`;$('#pDel').onclick=delSel;
   } else if(ui.sel&&ui.sel.kind==='bridge'){const b=D.bridges[ui.sel.i];
     pr.innerHTML=`<div class="small">${tr('Híd')} <span class="mono">${b[0]}:${b[1]} – ${b[2]}:${b[3]}</span></div><div class="row"><button class="btn danger" id="pDel">${tr('Törlés')}</button></div>`;$('#pDel').onclick=delSel;
   } else if(ui.linkStart){const q=findPin(ui.linkStart);
@@ -676,6 +536,7 @@ $('#tools').addEventListener('click',e=>{const b=e.target.closest('[data-tool]')
 $('#lib').addEventListener('click',e=>{const ed=e.target.closest('[data-edit]');if(ed){openEditor(editorHost,{type:ed.dataset.edit});return;}
   const fv=e.target.closest('[data-fav]');if(fv){libFavToggle(fv.dataset.fav);renderLib();return;}
   const tl=e.target.closest('[data-tolib]');if(tl){toLibrary(tl.dataset.tolib);return;}const b=e.target.closest('[data-lib]');if(!b)return;const t=b.dataset.lib;ui.placing=ui.placing===t?null:t;ui.ghost={rot:0,mir:false};ui.sel=null;ui.wireStart=null;renderLeft();draw();if(MOB.matches&&ui.placing){sheet('');flashHint(tr('Érintsd meg a panelt, húzd a helyére, és engedd fel'));}});
+$('#cutClear').addEventListener('click',()=>{if(!(D.cuts||[]).length)return;pushUndo();const n=clearManualCuts(D);ui.sel=null;commit();flashHint(tr('{n} kézi vágás törölve. Visszavonás: Ctrl+Z.',{n}));});
 $('#cutKinds').addEventListener('click',e=>{const b=e.target.closest('[data-ck]');if(b){uiPrefSet({cutKind:b.dataset.ck});renderLeft();draw();}});
 $('#swatches').addEventListener('click',e=>{const b=e.target.closest('[data-col]');if(b){ui.wireColor=b.dataset.col;renderLeft();}});
 
@@ -910,7 +771,7 @@ function introUI(){const el=$('#intro');if(!el||!D)return;el.hidden=!(isEmpty()&
 /* állapotsor: üzenet, eszköz, kijelölés, problémák (kattintásra a Problémák fül), szimuláció */
 function sbUpdate(){const tl=$('#sbTool');if(!tl||!D)return;const T=TOOLS.find(x=>x[0]===ui.tool);
   tl.innerHTML=ui.sim?'':ui.placing?tr('Lerakás: {x}',{x:`<b>${esc(DEFS[ui.placing]?tr(DEFS[ui.placing].name):ui.placing)}</b>`}):tr('Eszköz: {x}',{x:`<b>${esc(T?tr(T[1]):ui.tool)}</b>`});
-  let sel='';if(ui.sel){if(ui.sel.kind==='group'){const p=selPart(),n=gSize(ui.sel);sel=p?p.label:n?tr('{n} elem',{n}):'';}else sel={wire:tr('vezeték'),bridge:tr('híd'),note:tr('jegyzet')}[ui.sel.kind]||'';}
+  let sel='';if(ui.sel){if(ui.sel.kind==='group'){const p=selPart(),n=gSize(ui.sel);sel=p?p.label:n?tr('{n} elem',{n}):'';}else sel={wire:tr('vezeték'),bridge:tr('híd'),note:tr('jegyzet'),cut:tr('csíkvágás')}[ui.sel.kind]||'';}
   $('#sbSel').innerHTML=sel?tr('Kijelölve: {x}',{x:`<b>${esc(sel)}</b>`}):'';
   const ne=ISSUES.filter(i=>i.sev==='err').length,nw=isSimple()?0:ISSUES.filter(i=>i.sev==='warn').length,ni=isSimple()?0:ISSUES.length-ne-ISSUES.filter(i=>i.sev==='warn').length,b=$('#sbIss');
   b.className='sb-item sb-btn '+(ne?'err':nw?'warn':'ok');
@@ -1397,8 +1258,13 @@ window.pcb={
   openEditor(type){openEditor(editorHost,type?{type}:{});},
   notes(){return JSON.parse(JSON.stringify(D.notes||[]));},
   importPlan(o){return importPlan(typeof o==='string'?JSON.parse(o):o);},
-  cuts(){return{manual:JSON.parse(JSON.stringify(D.cuts||[])),auto:JSON.parse(JSON.stringify(D.auto.cuts||[]))};},
+  cuts(){return{manual:JSON.parse(JSON.stringify(D.cuts||[])),auto:JSON.parse(JSON.stringify(D.auto.cuts||[])),ban:JSON.parse(JSON.stringify(D.cutBan||[]))};},
   cut(r,c,kind=0){toggleCut([r,c,kind?1:0]);return pcb.cuts();},
+  /** vágás törlése a helye szerint (kézi vagy automatikus; automatikusnál a hely tiltólistára kerül) */
+  uncut(r,c,kind=0){const ct=[r,c,kind?1:0],src=(D.cuts||[]).some(x=>sameCut(x,ct))?'manual':(D.auto.cuts||[]).some(x=>sameCut(x,ct))?'auto':null;if(src)IA.deleteCut({src,cut:ct});return pcb.cuts();},
+  /** kijelölés: a vágás a helye szerint; vissza a kijelölés fajtája */
+  selectCut(r,c,kind=0){const h=IA.hitCut(kind?r:r+0.5,c);ui.sel=h?{kind:'cut',hit:h}:null;renderLeft();draw();return h?h.src:null;},
+  clearCuts(){$('#cutClear').click();return pcb.cuts();},
   pwm(pin,duty,freq){const q=D.parts.flatMap(gpins).find(x=>x.name===pin&&x.role==='gpio');if(!q||!gpioModeOk(q,'pwm'))return false;const k=q.part.id+'.'+q.id;pushUndo();D.gpio[k]='pwm';D.pwm={...(D.pwm||{}),[k]:{...pwmCfg(k),...(duty!=null?{duty}:{}),...(freq!=null?{freq}:{})}};commit();return true;},
   gpio(pin,mode){const q=D.parts.flatMap(gpins).find(x=>x.name===pin&&x.role==='gpio');if(!q||!GPIO_MODES.some(m=>m[0]===mode)||!gpioModeOk(q,mode))return false;D.gpio[q.part.id+'.'+q.id]=mode;commit();return true;},
   slider(label,key,v){const p=D.parts.find(x=>x.label===label);return !!p&&setSlider(p,key,v);},

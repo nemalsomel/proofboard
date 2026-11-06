@@ -69,3 +69,58 @@ test('szekciós panelen alapból nincs automatikus vágás (a regressziós minta
   const r = await pcb<any>(page, `pcb.presetRouted(); const ls = pcb.links(); return { ok: ls.filter(l => l.ok).length, wires: ls.filter(l => l.wire).length, cuts: pcb.cuts().auto.length };`);
   expect(r).toEqual({ ok: 29, wires: 0, cuts: 0 });
 });
+
+test('csíkvágás kijelölése és törlése: Kijelölés eszközzel rákattintva, Delete; kézi vágások törlése gombbal', async ({ page }) => {
+  await pcb(page, small + 'pcb.cut(10, 2, 0); pcb.cut(16, 5, 1); pcb.cut(3, 4, 0);');
+  const at = async (r: number, c: number) => { const p = await pcb<{ x: number; y: number }>(page, `return pcb.reveal(${r}, ${c});`); await page.mouse.move(p.x, p.y); await page.mouse.click(p.x, p.y); };
+  await page.keyboard.press('v');
+  await at(10.5, 2);
+  await expect(page.locator('#props')).toContainText('Csíkvágás: rés');
+  await expect(page.locator('#props')).toContainText('kézi');
+  await page.keyboard.press('Delete');
+  expect((await pcb<any>(page, `return pcb.cuts().manual;`)).some((c: number[]) => c[0] === 10)).toBe(false);
+  await pcb(page, 'pcb.undo();');
+  expect((await pcb<any>(page, `return pcb.cuts().manual;`)).length).toBe(3);
+  // a gomb a Csíkvágás eszköz sávjában: minden kézi vágás
+  await page.keyboard.press('k');
+  await expect(page.locator('#cutClear')).toHaveText('Kézi vágások törlése (3)');
+  await page.click('#cutClear');
+  expect(await pcb(page, `return pcb.cuts().manual;`)).toEqual([]);
+  await expect(page.locator('#cutClear')).toBeDisabled();
+  await pcb(page, 'pcb.undo();');
+  expect((await pcb<any>(page, `return pcb.cuts().manual;`)).length).toBe(3);
+});
+
+test('automatikus vágás törlése: kijelölve, Csíkvágás eszközzel vagy törléssel; ide nem kerül újra, visszavonható', async ({ page }) => {
+  const r = await pcb<any>(page, `pcb.presetRouted(); const d = pcb.get(); d.board.sec = 78; d.auto = { bridges: [], wires: [] }; pcb.load(d); pcb.route(); return pcb.cuts();`);
+  expect(r.auto.length).toBeGreaterThan(20);
+  const [a, b, c] = r.auto as number[][];
+  // kijelölve: a tulajdonságoknál automatikus, magyarázattal; Delete
+  expect(await pcb(page, `return pcb.selectCut(${a[0]}, ${a[1]}, ${a[2]});`)).toBe('auto');
+  await expect(page.locator('#props')).toContainText('automatikus');
+  await expect(page.locator('#props')).toContainText('Törlés után ide nem kerül újra');
+  await page.locator('#props #pDel').click();
+  let s = await pcb<any>(page, `return pcb.cuts();`);
+  expect(s.ban).toEqual([a]);
+  expect(s.auto.some((x: number[]) => x.join() === a.join())).toBe(false);
+  // API (a felület Csíkvágás és Törlés eszköze ugyanezt hívja)
+  await pcb(page, `pcb.uncut(${b[0]}, ${b[1]}, ${b[2]});`);
+  s = await pcb<any>(page, `return pcb.cuts();`);
+  expect(s.ban).toEqual([a, b]);
+  // Csíkvágás eszközzel rákattintva
+  await page.keyboard.press('k');
+  await pcb(page, `pcb.cutKind('gap');`);
+  const p = await pcb<{ x: number; y: number }>(page, `return pcb.reveal(${c[0] + 0.5}, ${c[1]});`);
+  await page.mouse.move(p.x, p.y); await page.mouse.click(p.x, p.y);
+  s = await pcb<any>(page, `return pcb.cuts();`);
+  expect(s.ban).toEqual([a, b, c]);
+  expect(s.manual).toEqual([]);
+  // visszavonás: a vágás visszajön, a tiltás eltűnik
+  await pcb(page, 'pcb.undo();');
+  s = await pcb<any>(page, `return pcb.cuts();`);
+  expect(s.ban).toEqual([a, b]);
+  expect(s.auto.some((x: number[]) => x.join() === c.join())).toBe(true);
+  // kézi vágás ugyanoda feloldja a tiltást
+  await pcb(page, `pcb.cut(${a[0]}, ${a[1]}, ${a[2]});`);
+  expect((await pcb<any>(page, `return pcb.cuts();`)).ban).toEqual([b]);
+});

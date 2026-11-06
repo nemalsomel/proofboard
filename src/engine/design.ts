@@ -62,6 +62,7 @@ export function normalize(d: unknown): Design {
     cuts: normCutList(au.cuts),
   };
   o.cuts = normCutList(r.cuts);
+  { const ban = normCutList(r.cutBan); if (ban.length) o.cutBan = ban; else delete o.cutBan; }
   { const pg = normProgram(r.program); if (pg && pg.nodes.length) o.program = pg; }
   if (r.signal && typeof r.signal === 'object') {
     const s = r.signal as Raw;

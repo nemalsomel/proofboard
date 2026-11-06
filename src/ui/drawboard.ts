@@ -40,6 +40,7 @@ export interface BoardScene {
   /** kapcsolati vonalak nézet: az automatikus hidak halványan */ rats: boolean;
   /** rejtett automatikus elem (pl. kézi → automatikus előnézetnél) */ autoHidden(ids?: readonly string[]): boolean;
   /** csíkvágás eszköznél a kurzor alatti vágás */ cutAt(h: HoverHole): Cut;
+  /** kijelölt csíkvágás */ selCut?(ct: Cut): boolean;
   wireStart: readonly [number, number] | null; wireColor: string;
   /** kapcsolat húzása ettől a lábtól; a programban kijelölt láb */ linkStart: string | null; progHi: string | null;
   findPin(ref: string): { r: number; c: number } | null | undefined;
@@ -181,6 +182,12 @@ export function drawBoard(S: BoardScene): void {
       ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
     }
     ctx.restore();
+    if (S.selCut && S.selCut([r, c, k])) {
+      ctx.save(); ctx.strokeStyle = acc; ctx.lineWidth = 2.5;
+      if (k) { ctx.beginPath(); ctx.arc(hx(c), hy(r), P * 0.5, 0, 7); ctx.stroke(); }
+      else { const y = (hy(r) + hy(r + 1)) / 2; rr(hx(c) - P * 0.62, y - P * 0.24, P * 1.24, P * 0.48, P * 0.2); ctx.stroke(); }
+      ctx.restore();
+    }
   }
   if (S.tool === 'cut' && hv && inb(hv.r, hv.c) && !S.simOn) {
     const ct = S.cutAt(hv);

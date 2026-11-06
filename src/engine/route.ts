@@ -49,7 +49,7 @@ export function suggestCuts(D: Design): Cut[] {
       if (g) { const ref = g.part.id + '.' + g.id; claimed.add(ref); l.gpio = ref; u(a, keyOf(ref)!); }
     } else { const b = keyOf(l.b); if (b) u(a, b); }
   }
-  return planCuts(D.board, D.cuts || [], pins.map(x => ({ r: x.q.r, c: x.q.c, net: f(x.key) })));
+  return planCuts(D.board, D.cuts || [], pins.map(x => ({ r: x.q.r, c: x.q.c, net: f(x.key) })), D.cutBan || []);
 }
 
 interface RouteState {

@@ -779,6 +779,7 @@ html.simple [data-adv]{display:none!important}
 .toolstrip .cutkind .seg .btn{padding:3px 9px;font-size:12px}
 .toolstrip.col:not(.peek) .cutkind .btn:not(.on){display:none}
 .toolstrip.col:not(.peek) .cutkind .btn.on{border-radius:var(--r-md)}
+.toolstrip .cutkind #cutClear{padding:3px 9px;font-size:12px;white-space:nowrap}
 
 /* Eszközsáv csak ikonokkal, ha a nevekkel nem fér ki (a név a súgóban) */
 .toolstrip.icons .tools .btn .tl{display:none}
