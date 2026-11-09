@@ -10,7 +10,7 @@ import type { PartDef, PartInstance } from '../core/schema';
 import { hasErrors, validatePartDef, type Problem } from '../core/validate';
 import type { Cut } from '../engine/board';
 import { sameCut, type CutHit } from '../engine/cuts';
-import { layoutStats, type LayoutStats } from '../engine/compact';
+import { applyCompaction, layoutStats, planCompaction, type CompactOpts, type CompactResult, type LayoutStats } from '../engine/compact';
 import { normalize } from '../engine/design';
 import { hasPress, isOff } from '../engine/defs';
 import { placedPins } from '../engine/geometry';
@@ -74,6 +74,7 @@ export interface PcbApi {
 
   /* kapcsolatok és útvonal */
   /** A terv foglalt területe és kitöltöttsége (tömörség). */ layoutStats(): LayoutStats;
+  /** Tömörítés: a terv (lépések, előtte/utána); `apply` esetén végre is hajtja, egy visszavonási lépésben. */ compact(o?: CompactOpts & { apply?: boolean }): CompactResult;
   /** A kapcsolatok az állapotukkal. */ links(): ApiLink[];
   /** A kapcsolatok kezdő- és végpontja, hídjai. */ linkInfo(): ApiLinkInfo[];
   /** Kapcsolat kiemelése sorszám szerint; az állapotsor szövege. */ selectLink(i: number): string;
@@ -216,6 +217,7 @@ export function createApi(H: ApiHost): PcbApi {
     openEditor(type) { H.openEditor(type); },
 
     layoutStats() { return layoutStats(H.D()); },
+    compact(o = {}) { const r = planCompaction(H.D(), o); if (o.apply && r.moves.length) change(() => { applyCompaction(H.D(), r); if (H.D().settings.autoRoute && H.D().links.length) H.route({ full: true }); return true; }, true); return r; },
     links() { const D = H.D(); return D.links.map(l => ({ ...l, text: H.linkText(l), ...(ui.linkState.get(l.id) || {}) })); },
     linkInfo() { return H.D().links.map(l => { const g = H.linkGeom(l); return { text: H.linkText(l), start: g && g.start, end: g && g.end, endPin: g && g.endPin ? pinLabel(g.endPin) : null, bridges: g ? g.bridges.length : 0 }; }); },
     selectLink(i) { const l = H.D().links[i]; ui.selLink = l ? l.id : null; H.renderLinks(); H.draw(); H.status(); return H.statusText(); },

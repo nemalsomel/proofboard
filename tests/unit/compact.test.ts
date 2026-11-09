@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { layoutStats, partRect } from '../../src/engine/compact';
+import { applyCompaction, compactMetrics, layoutStats, partRect, planCompaction } from '../../src/engine/compact';
+import { presetMacropad, presetRouted } from '../../src/engine/presets';
+import { route } from '../../src/engine/route';
 import { emptyDesign, normalize } from '../../src/engine/design';
 import { placePart } from '../../src/engine/ops';
 import { engineCtx, runTool, summarize } from '../../src/agent/tools';
@@ -44,5 +46,66 @@ describe('tömörség', () => {
     const sum = summarize(ctx.D());
     expect(sum).toMatch(/FIXED by the user/);
     expect(sum).toMatch(/Footprint: rows \d+–\d+/);
+  });
+});
+
+/** Szellős terv: Pico fent, két kör messze lent (a felhasználó képernyőképe nyomán). */
+async function spread() {
+  const ctx = engineCtx(emptyDesign());
+  await runTool(ctx, 'place_part', { type: 'pico', row: 2, col: 2 });
+  await runTool(ctx, 'place_part', { type: 'res', row: 30, col: 22 });
+  await runTool(ctx, 'place_part', { type: 'led', row: 40, col: 20 });
+  await runTool(ctx, 'place_part', { type: 'button', row: 44, col: 4 });
+  await runTool(ctx, 'place_part', { type: 'res', row: 36, col: 8 });
+  for (const [a, b] of [['PICO1.GP15', 'R1.1'], ['R1.2', 'LED1.A'], ['LED1.K', 'GND'], ['S1.A1', 'PICO1.GP2'], ['S1.B1', 'R2.1'], ['R2.2', 'GND']]) await runTool(ctx, 'connect', { from: a, to: b });
+  return ctx.D();
+}
+
+describe('tömörítés', () => {
+  it('szellős terv: kisebb terület, minden kapcsolat bekötve, vezeték nélkül; a vezérlőlap és a gomb a helyén; a terv nem változik', async () => {
+    const D = await spread(), snap = JSON.stringify(D);
+    const r = planCompaction(D, { strength: 0.5, keepControls: false });
+    expect(JSON.stringify(D)).toBe(snap);
+    expect(r.after.linksOk).toBe(6); expect(r.after.wires).toBe(0);
+    expect(r.after.stats.area).toBeLessThan(r.before.stats.area * 0.7);
+    expect(r.after.bridges).toBeLessThan(r.before.bridges);
+    expect(r.kept).toEqual({ PICO1: 'mcu' });
+    // alapból a kezelőszerv (gomb) is marad
+    const r2 = planCompaction(D, { strength: 0.5 });
+    expect(r2.kept.S1).toBe('control');
+    expect(r2.moves.map(m => m.label)).not.toContain('S1');
+    // alkalmazás + útvonal: ugyanaz az eredmény
+    expect(applyCompaction(D, r)).toBe(true);
+    route(D, { full: true });
+    const m = compactMetrics(D);
+    expect([m.stats.area, m.linksOk, m.wires, m.bridges]).toEqual([r.after.stats.area, 6, 0, r.after.bridges]);
+  });
+
+  it('a szorosság számít: szorosabbnál nem nagyobb a terület; determinisztikus', async () => {
+    const D = await spread();
+    const area = (s: number) => planCompaction(D, { strength: s, keepControls: false }).after.stats.area;
+    const [a0, a1] = [area(0), area(1)];
+    expect(a1).toBeLessThanOrEqual(a0);
+    expect(JSON.stringify(planCompaction(D, { strength: 0.7 }))).toBe(JSON.stringify(planCompaction(D, { strength: 0.7 })));
+  });
+
+  it('rögzített, hatókörön kívüli és kézzel bekötött alkatrész nem mozdul', async () => {
+    const D = await spread();
+    D.parts.find(p => p.label === 'R1')!.fixed = true;
+    const r = planCompaction(D, { only: D.parts.filter(p => p.label !== 'R2').map(p => p.id) });
+    expect(r.kept).toMatchObject({ R1: 'fixed', R2: 'scope' });
+    expect(r.moves.map(m => m.label).sort()).toEqual(['LED1']);
+    // a kézi minta: hidakkal bekötve, kapcsolatok nélkül → semmi sem mozdul
+    const M = planCompaction(presetMacropad(), { strength: 1, keepMcu: false, keepControls: false });
+    expect(M.moves).toEqual([]);
+    expect(Object.values(M.kept).every(x => x === 'manual')).toBe(true);
+  });
+
+  it('regresszió: a 29 kapcsolatos minta tömörítés után is 29/29, vezeték nélkül, és nem lesz rosszabb', () => {
+    for (const s of [0, 1]) {
+      const r = planCompaction(presetRouted(), { strength: s });
+      expect([r.after.linksOk, r.after.wires]).toEqual([29, 0]);
+      expect(r.after.bridges + r.after.stats.area * 0.05).toBeLessThanOrEqual(r.before.bridges + r.before.stats.area * 0.05);
+    }
   });
 });
