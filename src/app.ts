@@ -55,7 +55,8 @@ import { icon, hydrateIcons } from './ui/icons';
 import { type Work, type LayoutId, type LayoutState, type RightTab, LAYOUTS, LAYOUT_DEFAULTS, isLayout, parseStore, stateOf, remember as layRemember, switchTo as laySwitch, resetLayout, isCustom } from './ui/layout';
 import { mountFloatWin, parseWin } from './ui/floatwin';
 import { generateCode, type CodeLang } from './engine/codegen';
-import { layoutStats } from './engine/compact';
+import { applyCompaction, layoutStats } from './engine/compact';
+import { COMPACT_DEFAULTS, mountCompactDialog } from './ui/compactdlg';
 import { emptyDesign, normalize, normCutList, rekeyAgainstLibrary, NOTE_COL, BRIEF_MAX } from './engine/design';
 import { swapMcu as swapMcuOf } from './engine/swap';
 import { presetMacropad, presetRouted } from './engine/presets';
@@ -162,7 +163,7 @@ function draw0(){
   const hv=ui.hover,A=ui.sim?AS:A0;
   drawBoard({ctx,dpr,P,M,vrot:VR(),cu:cu(),design:D,A,layout:LAY(),simOn:!!ui.sim,sim:SIM||null,
     colors:{stage:css('--stage'),accent:css('--accent'),muted:css('--muted'),mono:css('--mono'),monoFont:MONO,display:css('--display')},
-    hover:hv,tool:ui.tool,ghost:ui.placing&&hv?(()=>{const g=ghostPart(hv);return{part:g,fits:partFits(g)};})():null,
+    hover:hv,tool:ui.tool,origins:CP_ORIGINS,ghost:ui.placing&&hv?(()=>{const g=ghostPart(hv);return{part:g,fits:partFits(g)};})():null,
     xray:!!ui.xray,pressed:id=>!!ui.pressed[id],phase:id=>ui.phase[id]||0,
     selPart:isSelPart,selBridge:i=>!!(ui.sel&&((ui.sel.kind==='bridge'&&ui.sel.i===i)||!!selG()?.bridges.has(i))),
     selWire:i=>!!(ui.sel&&((ui.sel.kind==='wire'&&ui.sel.i===i)||!!selG()?.wires.has(i))),
@@ -192,6 +193,8 @@ function restoreSnap(s: string|null){if(s==null)return;const id=D&&D.id,o=JSON.p
 /** Visszavonás és újra egy helyen (ui/history.ts): a változás előtti állapot a terv és a saját könyvtár pillanatképe. */
 const HIST=new History(150,()=>undoUI());
 function pushUndo(){HIST.push(snap());}
+/** tömörítés előnézete: az eredeti terv (amíg az előnézet látszik) és a mozduló alkatrészek eredeti helye */
+let CP_ORIG: Design|null=null,CP_ORIGINS: PartInstance[]|null=null;
 /** az agent panelje (az első megnyitáskor jön létre) */
 let AGP: AgentPanel|null=null;
 function commit(noRoute?: boolean){queueMicrotask(progRefresh);syncDefs(D.customParts);const bk=JSON.stringify(D.board);if(!noRoute&&D.settings.autoRoute&&D.links.length)route({moved:ui.moved});ui.moved=null;save();if(bk!==ui.lastBoard){ui.lastBoard=bk;resize();boardUI();}recompute();renderLeft();if(AGP&&ui.rtab==='agent'&&!AGP.busy()&&D.id!==AGP.project())AGP.render();}
@@ -440,7 +443,7 @@ function renderRight0(){
   const ne=ISSUES.filter(i=>i.sev==='err').length,nw=isSimple()?0:ISSUES.filter(i=>i.sev==='warn').length,np=ne+nw;
   for(const t of [$('#tabIss'),$('#bpIssN')]){t.textContent=np?String(np):'';t.classList.toggle('err',ne>0);}
   const SO: Record<string,number>={err:0,warn:1,info:2},SHOWN=ISSUES.map((x,i)=>[x,i] as const).filter(([x])=>!isSimple()||x.sev==='err'); // egyszerű módban csak a hibák
-  $('#issues').innerHTML=SHOWN.length?SHOWN.sort((a,b)=>SO[a[0].sev]-SO[b[0].sev]).map(([x,i])=>`<li data-i="${i}" class="c-${x.sev}"><span class="dot"></span><span style="color:var(--fg)">${esc(x.msg)}</span></li>`).join(''):`<li class="muted" style="cursor:default">${tr('Nincs zárlat vagy bekötési hiba.')}</li>`;
+  $('#issues').innerHTML=SHOWN.length?SHOWN.sort((a,b)=>SO[a[0].sev]-SO[b[0].sev]).map(([x,i])=>`<li data-i="${i}" class="c-${x.sev}"><span class="dot"></span><span style="color:var(--fg)">${esc(x.msg)}</span>${x.act==='compact'?` <button class="btn secondary iss-act" data-act="compact">${tr('Tömörítés…')}</button>`:''}</li>`).join(''):`<li class="muted" style="cursor:default">${tr('Nincs zárlat vagy bekötési hiba.')}</li>`;
   $('#usb').checked=!!D.settings.usb;
   $('#mHold').classList.toggle('on',D.settings.btnMode!=='toggle');$('#mToggle').classList.toggle('on',D.settings.btnMode==='toggle');
   let h='';
@@ -479,7 +482,7 @@ function renderRight0(){
   if(batt.length)h+=batt.map(b=>`<div class="small" style="margin-top:6px">${esc(b.p.label)}: ${b.I>1e-4?tr('töltődik'):b.I<-1e-4?tr('merül'):tr('nincs terhelés')} ${Math.abs(b.I)>1e-4?`(${(Math.abs(b.I)*1000).toFixed(1)} mA)`:''}</div>`).join('');
   $('#simOut').innerHTML=h;
 }
-$('#issues').addEventListener('click',e=>{const li=(e.target as HTMLElement).closest<HTMLElement>('[data-i]');if(!li)return;const x=ISSUES[+li.dataset.i!];if(!x.holes.length)return;ui.flash={holes:x.holes,until:performance.now()+2200};
+$('#issues').addEventListener('click',e=>{if((e.target as HTMLElement).closest('[data-act="compact"]')){openCompact();return;}const li=(e.target as HTMLElement).closest<HTMLElement>('[data-i]');if(!li)return;const x=ISSUES[+li.dataset.i!];if(!x.holes.length)return;ui.flash={holes:x.holes,until:performance.now()+2200};
   const [r,c]=x.holes[0],sc=$('#scroll'),[vx,vy]=toScreen(hx(c),hy(r));sc.scrollTo({left:vpX(vx)-sc.clientWidth/2,top:vpY(vy)-sc.clientHeight/2,behavior:'smooth'});
   const tick=()=>{draw();if(ui.flash&&performance.now()<ui.flash.until)requestAnimationFrame(tick);else draw();};tick();});
 /* csúszka-vezérlők (pl. joystick-tengely): külön tárolóban, hogy húzás közben ne épüljön újra */
@@ -597,6 +600,18 @@ let toastTimer: ReturnType<typeof setTimeout>|undefined;
 /** Rövid értesítés a vászon alján (a régi panelenkénti üzenetsorok helyett). */
 function toast(m: string,err?: boolean){log(m,err);const t=$('#toast');t.textContent=m;t.classList.toggle('err',!!err);t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.hidden=true;},5000);}
 $('#toast').addEventListener('click',()=>{$('#toast').hidden=true;});
+const CPKEY='proofboard.compact';
+const CPD=mountCompactDialog($<HTMLDialogElement>('#dlgCompact'),{
+  D:()=>CP_ORIG||D,
+  selected:()=>{const g=selG();return g?[...g.parts]:[];},
+  preview:(d,origins)=>{if(d){if(!CP_ORIG)CP_ORIG=D;D=d;CP_ORIGINS=origins;}else{if(CP_ORIG)D=CP_ORIG;CP_ORIG=null;CP_ORIGINS=null;}recompute();},
+  apply:r=>{if(CP_ORIG){D=CP_ORIG;CP_ORIG=null;}CP_ORIGINS=null;pushUndo();applyCompaction(D,r);if(D.settings.autoRoute&&D.links.length)route({full:true});commit(true);toast(tr('Tömörítve: {n} alkatrész mozdult. Visszavonás: Ctrl+Z.',{n:r.moves.length}));},
+  loadPrefs:()=>{try{return{...COMPACT_DEFAULTS,...JSON.parse(localStorage.getItem(CPKEY)||'{}')};}catch(e){return{...COMPACT_DEFAULTS};}},
+  savePrefs:p=>{try{localStorage.setItem(CPKEY,JSON.stringify(p));}catch(e){}},
+  tr});
+function openCompact(){if(ui.sim)return;closeMenu();CPD.open();}
+$('#bCompact').onclick=openCompact;
+$('#sbFoot').onclick=openCompact;
 function openDlg(sel: string){const d=$<HTMLDialogElement>(sel);closeMenu();if(!d.open)d.showModal();}
 function closeDlg(sel: string){const d=$<HTMLDialogElement>(sel);if(d&&d.open)d.close();}
 $$<HTMLDialogElement>('dialog.dlg').forEach(d=>{d.addEventListener('click',e=>{if(e.target===d||(e.target as HTMLElement).closest<HTMLElement>('[data-close]'))d.close();});});

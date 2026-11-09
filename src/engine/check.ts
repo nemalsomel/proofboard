@@ -13,9 +13,13 @@ import { fnCaps, fnName, fnWant, GPIO_MODES, hasAdc, hasCap, mcuMux, SPECIAL_CAP
 import { layoutOf, pinLabel, type Netlist } from './netlist';
 import { gpioMode, pwmCfg, type SimResult } from './simulate';
 import type { Design, Hole, NetPin } from './types';
+import { layoutStats } from './compact';
+/** e kitöltés alatt jelez a Problémák a szellős tervre */
+export const SPARSE_FILL = 0.21;
 
 /** err: nem fog működni; warn: gyanús; info: tájékoztatás (pl. lebegő kötelező láb egy részben bekötött alkatrészen). */
-export interface Issue { sev: 'err' | 'warn' | 'info'; msg: string; holes: Hole[] }
+/** `act`: a felület a sorhoz gombot tesz (pl. 'compact': Tömörítés…). */
+export interface Issue { sev: 'err' | 'warn' | 'info'; msg: string; holes: Hole[]; act?: 'compact' }
 export interface CheckCtx {
   /** Fordító az üzenetekhez (alapból magyar). */
   tr?: Tr;
@@ -273,6 +277,10 @@ export function checkAll(D: Design, { A0: A, AS, SIM, linkState, tr = fmt }: Che
       }
     }
   }
+  // szellős terv: az alkatrészek a foglalt terület kis részét töltik ki (tömöríthető)
+  { const st = layoutStats(D);
+    if (st.parts >= 3 && D.links.length >= 2 && st.fill < SPARSE_FILL && st.area >= 0.25 * st.boardArea)
+      iss.push({ sev: 'info', msg: tr('A terv szellős: az alkatrészek a foglalt terület {f}%-át töltik ki – tömörítve kisebb panel és rövidebb bekötés lehet.', { f: Math.round(st.fill * 100) }), holes: [], act: 'compact' }); }
   return iss;
 }
 

@@ -235,6 +235,7 @@
         <button class="btn" data-adv id="bFreeze" title="Az automatikus hidakat kézi hidakká alakítja">Rögzítés kézire</button>
         <button class="btn" data-adv id="bToAuto" title="A kézi bekötésből kapcsolatokat készít, és automatikusan újrahúzza">Kézi → automatikus</button>
         <button class="btn" data-adv id="bUnroute">Auto hidak törlése</button>
+        <button class="btn" id="bCompact" data-icon="compact" title="Az alkatrészek közelebb kerülnek egymáshoz, kisebb területre, rövidebb bekötéssel">Tömörítés…</button>
       </div>
       <ul class="issues" id="links"></ul>
       <div class="lk" id="linkTotal" style="border-top:1px solid var(--line);margin-top:4px;padding-top:8px;justify-content:space-between;flex-wrap:wrap;gap:4px 10px"></div>
@@ -303,6 +304,25 @@
   <header class="dlg-head"><h2 id="dlgExT">Példák</h2><input type="search" id="exSearch" class="ex-search" placeholder="Keresés a példák között" aria-label="Keresés a példák között" autocomplete="off"><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
   <div class="dlg-body ex-body"><div id="examples" class="examples"></div></div>
   <footer class="dlg-foot"><span class="help">A betöltés visszavonható (Ctrl+Z).</span></footer>
+</dialog>
+<dialog class="dlg dlg-sm dlg-side" id="dlgCompact" aria-labelledby="dlgCompactT">
+  <header class="dlg-head"><h2 id="dlgCompactT">Tömörítés</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <div class="dlg-body">
+    <p class="help">Az alkatrészek közelebb kerülnek egymáshoz és a bekötött lábakhoz. A panelon az előnézet látszik, halványan az eredeti helyekkel.</p>
+    <div class="cp-range">
+      <label for="cpStrength">Szorosság</label>
+      <input type="range" id="cpStrength" min="0" max="100" step="5" value="50">
+      <div class="cp-ends"><span>Laza – könnyű forrasztás</span><span>Szoros – kis panel</span></div>
+    </div>
+    <div class="cp-opts">
+      <label class="check"><input type="checkbox" id="cpMcu" checked> A vezérlőlap a helyén marad</label>
+      <label class="check"><input type="checkbox" id="cpCtl" checked> A kezelőszervek (gomb, csúszka, csatlakozó) a helyükön maradnak</label>
+      <label class="check"><input type="checkbox" id="cpRot" checked> Elforgatás is</label>
+      <label class="check" id="cpSelL"><input type="checkbox" id="cpSel"> Csak a kijelöltek</label>
+    </div>
+    <div class="cp-res" id="cpRes" aria-live="polite"></div>
+  </div>
+  <footer class="dlg-foot"><span class="help">Visszavonható (Ctrl+Z).</span><button class="btn ghost" data-close>Mégse</button><button class="btn primary" id="cpApply">Alkalmaz</button></footer>
 </dialog>
 <dialog class="dlg dlg-sm" id="dlgBoard" aria-labelledby="dlgBoardT">
   <header class="dlg-head"><h2 id="dlgBoardT">Panel beállításai</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>

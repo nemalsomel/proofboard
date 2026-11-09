@@ -422,6 +422,22 @@ input:disabled::placeholder{color:var(--muted)}
 .dlg[open]{display:flex;flex-direction:column}
 .dlg.dlg-sm{width:min(420px,calc(100vw - 32px))}
 .dlg::backdrop{background:rgba(10,14,12,.42)}
+/* oldalt nyíló párbeszédablak: a panel (előnézet) látszik mögötte */
+.dlg.dlg-side{margin:84px 24px auto auto;max-height:calc(100vh - 110px)}
+.dlg.dlg-side::backdrop{background:transparent}
+@media (max-width:700px){.dlg.dlg-side{margin:auto auto 12px}}
+.cp-range{display:flex;flex-direction:column;gap:4px}
+.cp-range label{font-weight:600}
+.cp-range input{width:100%}
+.cp-ends{display:flex;justify-content:space-between;font-size:var(--fs-sm);color:var(--muted)}
+.cp-opts{display:flex;flex-direction:column;gap:6px}
+.cp-res table{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+.cp-res th,.cp-res td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+.cp-res th:first-child,.cp-res td:first-child{text-align:left}
+.cp-res .good{color:var(--ok);font-weight:600}
+.cp-res .bad{color:var(--err);font-weight:600}
+.cp-res p{margin:8px 0 0}
+.cp-res.busy{opacity:.55}
 .dlg-head,.dlg-foot{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4)}
 .dlg-head{border-bottom:1px solid var(--line)}
 .dlg-head h2{margin:0;font-size:var(--fs-lg);flex:1}
@@ -911,3 +927,4 @@ html.simple [data-adv]{display:none!important}
 .ag-copy{font-size:12px;padding:2px 8px;gap:4px;color:var(--muted)}
 .ag-copy .ic{width:14px;height:14px}
 .ag-copy.done{color:#2f9e44}
+.issues .iss-act{margin-left:8px;padding:2px 10px;font-size:var(--fs-sm);vertical-align:middle}

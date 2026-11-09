@@ -32,6 +32,7 @@ export interface BoardScene {
   colors: { stage: string; accent: string; muted: string; mono: string; monoFont: string; /** a jegyzetek betűtípusa */ display: string };
   hover: HoverHole | null;
   tool: string;
+  /** tömörítés előnézete: az alkatrészek eredeti helye (halványan) */ origins?: readonly PartInstance[] | null;
   /** lerakás alatt álló alkatrész előnézete (null: nincs lerakás) */ ghost: { part: PartInstance; fits: boolean } | null;
   xray: boolean;
   pressed(id: string): boolean;
@@ -238,6 +239,7 @@ export function drawBoard(S: BoardScene): void {
   if (!C) { drawWires(1); drawPlugs(S, G, 1); }
   drawNotes(S, G);
   // lerakási előnézet
+  if (S.origins) for (const p of S.origins) PNT.drawPart(p, 0.32, false, false);
   if (S.ghost && hv) PNT.drawPart(S.ghost.part, 0.6, false, !S.ghost.fits);
   if (S.tool === 'wire' && S.wireStart && hv) { ctx.setLineDash([5, 4]); ctx.strokeStyle = S.wireColor; ctx.lineWidth = P * 0.18; line(hx(S.wireStart[1]), hy(S.wireStart[0]), hx(hv.c), hy(hv.r)); ctx.setLineDash([]); }
   if (S.tool === 'wire' && S.wireStart) ring(S.wireStart[0], S.wireStart[1], acc);

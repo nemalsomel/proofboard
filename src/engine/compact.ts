@@ -105,8 +105,9 @@ export function planCompaction(D0: Design, o: CompactOpts = {}): CompactResult {
   const gap = s < 0.34 ? 2 : s < 0.67 ? 1 : 0, wMove = 0.25 - 0.22 * s, wArea = 0.02 + 0.1 * s, R = Math.round(4 + 8 * s);
   const keepMcu = o.keepMcu !== false, keepCtl = o.keepControls !== false, rotate = o.rotate !== false, maxPasses = o.maxPasses ?? 40;
   const only = o.only ? new Set(o.only) : null;
+  // „előtte”: ahogy a terv most áll (amit a felhasználó lát); a keresés a teljesen újratervezett állapotból indul
   const D = clone(D0); reroute(D);
-  const before = compactMetrics(D);
+  const cur = compactMetrics(D0), full = compactMetrics(D), before = cur.linksOk >= full.linksOk ? cur : full; // be nem kötött (régi) állapotnál az újratervezett
   const B = D.board, onB = (r: number, c: number) => r >= 0 && c >= 0 && r < B.rows && c < B.cols;
   const LY = buildLayout(B, D.cuts || []); // csak a kézi vágások: az automatikusakat az útvonalkereső újratervezi
   const cellOf = (r: number, c: number) => (onB(r, c) && !LY.drilled(r, c) ? LY.cell(r, c) : -1);

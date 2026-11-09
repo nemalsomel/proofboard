@@ -62,3 +62,62 @@ test('tömörítés az API-n: előbb csak terv, alkalmazva egy visszavonási lé
   await page.click('#bUndo');
   expect(await pcb<string>(page, `return JSON.stringify(pcb.get().parts.map(p => [p.label, p.r, p.c, p.rot]));`)).toBe(before);
 });
+
+test('Tömörítés ablak: a Problémák jelzi; élő előnézet, Mégse visszaáll; a szorosság számít; Alkalmaz egy lépésben visszavonható', async ({ page }) => {
+  await page.evaluate(d => (window as any).pcb.load(d), SPREAD);
+  const pos = () => pcb<string>(page, `return JSON.stringify(pcb.get().parts.map(p => [p.label, p.r, p.c, p.rot]));`);
+  const before = await pos();
+  await pcb(page, `pcb.bottom(true, 'issues');`);
+  const hint = page.locator('#issues li', { hasText: 'A terv szellős' });
+  await expect(hint).toBeVisible();
+  await hint.locator('[data-act="compact"]').click();
+  const dlg = page.locator('#dlgCompact');
+  await expect(dlg).toBeVisible();
+  // alapból a gomb (kezelőszerv) és a Pico a helyén
+  await expect(page.locator('#cpRes')).toContainText('A helyén marad: PICO1 (vezérlőlap), S1 (kezelőszerv)');
+  await expect(page.locator('#cpRes')).toContainText('Mozdul:');
+  expect(await pos()).not.toBe(before); // előnézet
+  // Mégse: vissza az eredetire, nincs visszavonási lépés
+  await dlg.locator('[data-close]').last().click();
+  await expect(dlg).toBeHidden();
+  expect(await pos()).toBe(before);
+  await expect(page.locator('#bUndo')).toBeDisabled();
+  // újra, a gomb is mozdulhat; szoros vs laza
+  await page.click('#bCompact');
+  await page.locator('#cpCtl').uncheck();
+  const area = async () => { await expect(page.locator('#cpRes')).not.toHaveClass(/busy/); return page.locator('#cpRes tbody tr').first().locator('td').last().textContent(); };
+  await page.locator('#cpStrength').fill('0');
+  const loose = await area();
+  await page.locator('#cpStrength').fill('100');
+  const tight = await area();
+  const rows = (s: string | null) => +String(s).split('×')[0];
+  expect(rows(tight)).toBeLessThanOrEqual(rows(loose));
+  await expect(page.locator('#cpRes')).toContainText('S1');
+  await page.click('#cpApply');
+  await expect(dlg).toBeHidden();
+  await expect(page.locator('#toast')).toContainText('Tömörítve');
+  const after = await pos();
+  expect(after).not.toBe(before);
+  expect(await pcb<number>(page, `return pcb.links().filter(l => l.ok).length;`)).toBe(6);
+  await expect(page.locator('#issues li', { hasText: 'A terv szellős' })).toHaveCount(0);
+  await page.click('#bUndo');
+  expect(await pos()).toBe(before);
+  // a beállítás megmarad
+  await page.click('#bCompact');
+  await expect(page.locator('#cpStrength')).toHaveValue('100');
+  await expect(page.locator('#cpCtl')).not.toBeChecked();
+  await page.keyboard.press('Escape');
+  await expect(dlg).toBeHidden();
+  expect(await pos()).toBe(before);
+});
+
+test('Tömörítés ablak: csak a kijelöltek', async ({ page }) => {
+  await page.evaluate(d => (window as any).pcb.load(d), SPREAD);
+  await pcb(page, `pcb.select(['R1', 'LED1']);`);
+  await page.click('#bCompact');
+  await expect(page.locator('#cpSel')).toBeChecked();
+  await expect(page.locator('#cpRes')).not.toHaveClass(/busy/);
+  await expect(page.locator('#cpRes')).toContainText('R2 (nincs kijelölve)');
+  await page.locator('#cpSel').uncheck();
+  await expect(page.locator('#cpRes')).not.toContainText('nincs kijelölve');
+});
