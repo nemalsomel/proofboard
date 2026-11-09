@@ -72,6 +72,9 @@ const P: Record<string, string> = {
   ext: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   install: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
   pulse: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
+  agent: '<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z"/><path d="M12 7.2v5.6M9.2 10h5.6"/>',
+  send: '<path d="M4 12 20 4l-4 16-4-6z"/><path d="m12 14 8-10"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/>',
 };
 export type IconName = keyof typeof P;
 export const ICONS = Object.keys(P) as IconName[];

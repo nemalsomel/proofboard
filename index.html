@@ -125,6 +125,7 @@
     </div>
     <div class="carea" id="carea">
       <div class="scroll" id="scroll"><canvas id="cv"></canvas></div>
+      <div class="agent-bar" id="agentBar" role="status" hidden><span class="dot"></span><span>Az agent dolgozik a terven – a kézi szerkesztés addig szünetel.</span><button class="btn danger" id="agentBarStop">Leállítás</button></div>
       <section class="intro" id="intro" aria-labelledby="introTitle" hidden>
         <div class="intro-card">
           <h1 id="introTitle">Kezdjünk egy panelt</h1>
@@ -204,6 +205,7 @@
       <button class="rtab on" role="tab" data-rtab="design" aria-selected="true" aria-controls="rpDesign">Kapcsolatok</button>
       <button class="rtab" role="tab" data-rtab="sim" aria-selected="false" aria-controls="rpSim">Szimuláció</button>
       <button class="rtab" role="tab" data-rtab="code" aria-selected="false" aria-controls="rpCode">Kód</button>
+      <button class="rtab" role="tab" data-rtab="agent" aria-selected="false" aria-controls="rpAgent">Agent</button>
     </div>
     <div class="rail" id="railR" role="toolbar" aria-label="Jobb oldalsáv (összecsukva)">
       <button class="rail-btn" data-expand="r" title="Kinyitás ( ] )" aria-label="Jobb oldalsáv kinyitása">«</button>
@@ -211,6 +213,7 @@
       <button class="rail-btn" data-rail-rtab="design" title="Kapcsolatok" aria-label="Kapcsolatok" data-icon="list"></button>
       <button class="rail-btn" data-rail-rtab="code" title="Kód" aria-label="Kód" data-icon="code"></button>
       <button class="rail-btn" data-rail-rtab="sim" title="Szimuláció" aria-label="Szimuláció" data-icon="pulse"></button>
+      <button class="rail-btn" data-rail-rtab="agent" title="Agent" aria-label="Agent" data-icon="agent"></button>
     </div>
     <div class="rpane" id="rpProps" data-rpane="props" role="tabpanel" hidden>
       <section class="dock" id="propDock" hidden>
@@ -254,6 +257,9 @@
     </div>
     <div class="rpane" id="rpCode" data-rpane="code" role="tabpanel" hidden>
       <div class="codeview" id="codeView"></div>
+    </div>
+    <div class="rpane" id="rpAgent" data-rpane="agent" role="tabpanel" hidden>
+      <div class="agent-root" id="agentRoot"></div>
     </div>
     <div class="rpane" id="rpSim" data-rpane="sim" role="tabpanel" hidden>
       <section id="simSec">

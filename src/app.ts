@@ -29,6 +29,7 @@ import * as OPS from './engine/ops';
 import { createLinksPanel } from './ui/links';
 import { createPropsPanel } from './ui/props';
 import { createApi } from './ui/api';
+import { mountAgentPanel, type AgentPanel, type AgentPrefs } from './ui/agentpanel';
 import type { UiState } from './ui/state';
 import type { Bridge, Design, Link, NetPin, PlacedPin, Wire } from './engine/types';
 type AutoWire = Wire & { links?: string[] };
@@ -254,7 +255,7 @@ function setSimple(on: boolean,remember=true){on=!!on;document.documentElement.c
   if(on&&ADV_TOOLS.has(ui.tool))setTool('select');
   if(D){renderLib();renderLeft();renderRight();sbUpdate();codeRefresh();}
   if(remember)log(on?tr('Egyszerű mód: a haladó részek rejtve.'):tr('Egyszerű mód kikapcsolva.'));}
-function rtab(name: string,remember=true){if(name==='code'){if(ui.rtab!=='code')ui.rtabBeforeCode=ui.rtab;codeMount();}ui.rtab=name;
+function rtab(name: string,remember=true){if(name==='code'){if(ui.rtab!=='code')ui.rtabBeforeCode=ui.rtab;codeMount();}if(name==='agent')agentMount();ui.rtab=name;
   $$('[data-rtab]').forEach(b=>{const on=b.dataset.rtab===name;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
   $$('[data-rpane]').forEach(p=>{p.hidden=p.dataset.rpane!==name;});
   $$('[data-rail-rtab]').forEach(b=>b.classList.toggle('on',b.dataset.railRtab===name));
@@ -335,6 +336,7 @@ function progTick(dt: number){const P=ui.prog;if(!P||!ui.sim)return;P.t+=dt;prog
 let msgTimer: ReturnType<typeof setTimeout>|undefined;function flashMsg(m: string){const s=$('#status');s.textContent=m;s.style.color='var(--err)';clearTimeout(msgTimer);msgTimer=setTimeout(()=>{s.style.color='';status();},1800);}
 
 document.addEventListener('keydown',ev=>{
+  if(AGP&&AGP.busy()){if(ev.key==='Escape'){ev.preventDefault();AGP.stop();}else if(!(ev.target as HTMLElement|null)?.closest?.('#agentRoot'))ev.preventDefault();return;} // az agent dolgozik: a kézi szerkesztés szünetel
   const t=ev.target as HTMLElement|null;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'))return;
   const k=ev.key.toLowerCase();
   if((ev.ctrlKey||ev.metaKey)&&k==='z'){ev.preventDefault();ev.shiftKey?redo():undo();return;}
@@ -614,7 +616,7 @@ $$('[data-theme-set]').forEach(b=>b.addEventListener('click',()=>setTheme(b.data
 /* Nyelv: a mentett választás, különben a böngésző nyelve (detectLang); a választás megmarad. */
 const LANGKEY='proofboard.lang';
 function langUI(){const v=getLang();$$('[data-lang-set]').forEach(b=>{const on=b.dataset.langSet===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});}
-function applyLang(l: string,remember?: boolean){if(!isLang(l))return;setLang(l);document.documentElement.lang=l;if(D){ISSUES=checkAll();renderLeft();renderRight();renderLinks();renderExamples();boardUI();boardSelects();simBtn();partTabs();pwUpdate();renderFab();renderLog();if(PE)PE.refresh();if(PC)PC.refresh();rerenderEditors();status();sbUpdate();}translateDom(document.body,l);undoUI();langUI();
+function applyLang(l: string,remember?: boolean){if(!isLang(l))return;setLang(l);document.documentElement.lang=l;if(D){ISSUES=checkAll();renderLeft();renderRight();renderLinks();renderExamples();boardUI();boardSelects();simBtn();partTabs();pwUpdate();renderFab();renderLog();if(PE)PE.refresh();if(AGP)AGP.render();if(PC)PC.refresh();rerenderEditors();status();sbUpdate();}translateDom(document.body,l);undoUI();langUI();
   if(remember){try{localStorage.setItem(LANGKEY,l);}catch(e){}}}
 $$('[data-lang-set]').forEach(b=>b.addEventListener('click',()=>applyLang(b.dataset.langSet!,true)));
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>draw());
@@ -938,6 +940,24 @@ function openBoard(){boardUI();openDlg('#dlgBoard');}
 $('#bBoard').onclick=openBoard;$('#boardInfo').onclick=openBoard;
 
 /* ---------- API ---------- */
+/* ---------- Agent: ui/agentpanel.ts (csevegés), agent/ (eszközök, modellhívás) ---------- */
+let AGP: AgentPanel|null=null;
+const AGENT_KEY='proofboard.agent';
+/** a panel képe a modellnek: a vászon (a felhasználó nézete), legfeljebb 1500 px-re kicsinyítve */
+function boardSnapshot(): string|null{
+  try{draw();const k=Math.min(1,1500/Math.max(cv.width,cv.height)),c=document.createElement('canvas');c.width=Math.round(cv.width*k);c.height=Math.round(cv.height*k);
+    const g=c.getContext('2d');if(!g)return null;g.fillStyle=css('--stage')||'#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(cv,0,0,c.width,c.height);return c.toDataURL('image/png').split(',')[1]||null;}catch(e){return null;}
+}
+function agentMount(){if(AGP)return;
+  AGP=mountAgentPanel({root:$<HTMLElement>('#agentRoot'),lang:()=>getLang() as 'hu'|'en',
+    ctx:()=>({D:()=>D,setD:d=>{if(ui.sim)setSim(false);D=normalize(d);syncDefs(D.customParts);ui.sel=null;ui.selLink=null;},commit:()=>commit(),tr,snapshot:boardSnapshot,
+      examples:()=>EXAMPLES.map(e=>({id:e.id,title:tr(e.title),desc:tr(e.desc)})),loadExample:id=>{const ok=loadExample(id);if(ok)HIST.drop();return ok;}}), // a példa saját visszavonási lépése helyett a feladaté marad
+    designKey:()=>JSON.stringify([D.board,D.parts,D.links,D.bridges,D.wires,D.cuts,D.gpio,D.pwm,D.program,D.notes]),
+    begin(stop){pushUndo();ui.sel=null;ui.placing=null;ui.drag=null;$('.app').classList.add('agent-busy');$('#agentBar').hidden=false;$('#agentBarStop').onclick=stop;renderLeft();draw();},
+    end(changed){if(!changed)HIST.drop();$('.app').classList.remove('agent-busy');$('#agentBar').hidden=true;renderLeft();renderLinks();draw();},
+    loadPrefs:()=>{try{return JSON.parse(localStorage.getItem(AGENT_KEY)||sessionStorage.getItem(AGENT_KEY)||'{}') as AgentPrefs;}catch(e){return {};}},
+    savePrefs:(p,remember)=>{try{const j=JSON.stringify(p);if(remember){localStorage.setItem(AGENT_KEY,j);sessionStorage.removeItem(AGENT_KEY);}else{sessionStorage.setItem(AGENT_KEY,j);localStorage.removeItem(AGENT_KEY);}}catch(e){}}});
+}
 /* ---------- API: ui/api.ts (window.pcb) ---------- */
 (window as unknown as {pcb: unknown}).pcb=createApi({ui,D:()=>D,setD:d=>{D=d;},A0:()=>A0,SIM:()=>SIM,issues:()=>ISSUES,lib:()=>LIB,
   pushUndo,dropUndo:()=>HIST.drop(),commit,recompute,renderLeft,renderLinks,draw,status,statusText:()=>statusText()||'',

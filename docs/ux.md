@@ -64,3 +64,10 @@ mi került a felületre, hova, és milyen kérdést hagyott nyitva. A felülvizs
 4. Ugyanaz a fogalom ugyanazzal a szóval szerepel-e mindenhol (kapcsolat, híd, vezeték, kábel)?
 5. A hibák és figyelmeztetések érthetőek-e, és egy kattintással odavisznek-e a hibához?
 6. Billentyűzettel és képernyőolvasóval használható-e a fő folyamat?
+
+## Beépített agent (2026. november)
+- **Hely:** jobb sáv, „Agent” fül (és ikon az összecsukott sávon). Saját Anthropic API-kulccsal (BYOK), a kulcs a böngészőben marad („Megjegyzés ebben a böngészőben”, vagy csak a munkamenetre); modell választható.
+- **Módok:** *Megbeszélés* (olvas, elemez, számol, javasol, nem módosít) és *Megvalósítás* (épít; nagyobb változtatás előtt tervet mutat és rákérdez).
+- **Visszajelzés:** az eszközlépések sorai a csevegésben (✓ / hiba, lenyitva a részletek), a terv élőben változik; futás közben a panel fölött „Az agent dolgozik…” sáv Leállítás gombbal, a panel kerete kiemelt, a kézi szerkesztés szünetel, Esc leállít.
+- **Visszavonás:** egy feladat egy lépés (Ctrl+Z); ha a terv nem változott, nincs visszavonási lépés.
+- **Hibák:** érvénytelen kulcs, egyenleg, sebességkorlát, túlterhelés, hálózat – érthető szöveggel; a beszélgetés utána folytatható.

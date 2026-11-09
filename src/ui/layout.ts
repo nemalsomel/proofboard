@@ -6,7 +6,7 @@
 import { N_ } from '../i18n/i18n';
 export type LayoutId = 'design' | 'prog' | 'sim';
 export type Work = 'board' | 'prog' | 'split';
-export type RightTab = 'design' | 'sim' | 'code';
+export type RightTab = 'design' | 'sim' | 'code' | 'agent';
 export interface LayoutState {
   /** bal sáv összecsukva */ l: boolean;
   /** jobb sáv összecsukva */ r: boolean;
@@ -28,7 +28,7 @@ export const LAYOUT_DEFAULTS: Record<LayoutId, LayoutState> = {
 };
 const IDS = Object.keys(LAYOUT_DEFAULTS) as LayoutId[];
 const WORKS: Work[] = ['board', 'prog', 'split'];
-const RTABS: RightTab[] = ['design', 'sim', 'code'];
+const RTABS: RightTab[] = ['design', 'sim', 'code', 'agent'];
 export const isLayout = (x: unknown): x is LayoutId => IDS.includes(x as LayoutId);
 
 /** Csak az ismert, helyes típusú mezők maradnak meg (régi vagy sérült tárolt állapotból). */
