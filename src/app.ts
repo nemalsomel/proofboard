@@ -312,8 +312,28 @@ function setWork(v: string,remember=true){if(ui.part)partShow(null);if(!['board'
   $('#splitDir').hidden=v!=='split';
   if(remember)layPatch({work:v as Work});resize();draw();toolFit();}
 /* Mindkettő: egymás mellett vagy egymás alatt (a panel felül) */
-function splitDir(vert?: boolean|null){if(vert==null)vert=!$('.app').classList.contains('split-v');$('.app').classList.toggle('split-v',!!vert);const b=$('#splitDir');b.innerHTML=icon(vert?'sideB':'sideR');b.title=vert?tr('Egymás alatt (kattintva: egymás mellett)'):tr('Egymás mellett (kattintva: egymás alatt)');b.setAttribute('aria-pressed',String(!!vert));uiPrefSet({splitV:!!vert});resize();if(PE)PE.refresh();}
+function splitDir(vert?: boolean|null){if(vert==null)vert=!$('.app').classList.contains('split-v');$('.app').classList.toggle('split-v',!!vert);const b=$('#splitDir');b.innerHTML=icon(vert?'sideB':'sideR');b.title=vert?tr('Egymás alatt (kattintva: egymás mellett)'):tr('Egymás mellett (kattintva: egymás alatt)');b.setAttribute('aria-pressed',String(!!vert));uiPrefSet({splitV:!!vert});splitAt(null,false);resize();if(PE)PE.refresh();}
 $('#splitDir').onclick=()=>splitDir();
+/* Mindkettő (és Alkatrész-szerkesztő + panel): a két rész aránya húzható; irányonként megjegyezve */
+const SPLIT_MIN=0.2,SPLIT_MAX=0.8;
+const splitKey=():'h'|'v'=>$('.app').classList.contains('split-v')&&!$('.app').classList.contains('part-split')?'v':'h';
+const splitClamp=(f: number)=>Math.round(Math.min(SPLIT_MAX,Math.max(SPLIT_MIN,Number.isFinite(f)?f:0.5))*1000)/1000;
+function splitAt(f?: number|null,remember=true): number{
+  const k=splitKey(),st={h:0.5,v:0.5,...(uiPref().split||{})} as {h:number;v:number};
+  if(f!=null){st[k]=splitClamp(f);if(remember)uiPrefSet({split:st});}
+  $('#carea').style.setProperty('--split',(splitClamp(st[k])*100)+'%');
+  const g=$('#splitGut');g.setAttribute('aria-orientation',k==='v'?'horizontal':'vertical');g.setAttribute('aria-valuenow',String(Math.round(st[k]*100)));
+  if(f!=null){resize();if(PE)PE.refresh();}
+  return splitClamp(st[k]);
+}
+{const g=$('#splitGut');let raf=0;
+  const frac=(e: PointerEvent)=>{const r=$('#carea').getBoundingClientRect();return splitKey()==='v'?(e.clientY-r.top)/r.height:(e.clientX-r.left)/r.width;};
+  g.addEventListener('pointerdown',e=>{e.preventDefault();g.setPointerCapture(e.pointerId);g.classList.add('on');let last=splitAt();
+    const mv=(ev: PointerEvent)=>{last=splitClamp(frac(ev));$('#carea').style.setProperty('--split',(last*100)+'%');if(!raf)raf=requestAnimationFrame(()=>{raf=0;resize();});};
+    const up=()=>{g.classList.remove('on');g.removeEventListener('pointermove',mv);g.removeEventListener('pointerup',up);g.removeEventListener('pointercancel',up);splitAt(last);};
+    g.addEventListener('pointermove',mv);g.addEventListener('pointerup',up);g.addEventListener('pointercancel',up);});
+  g.addEventListener('dblclick',()=>splitAt(0.5));
+  g.addEventListener('keydown',e=>{const v=splitKey()==='v',d=(v?{ArrowUp:-1,ArrowDown:1}:{ArrowLeft:-1,ArrowRight:1} as Record<string,number>)[e.key];if(!d)return;e.preventDefault();e.stopPropagation();splitAt(splitAt()+d*0.04);});}
 const progHost: ProgHost={
   get:()=>D.program||null,
   set(p,layoutOnly){pushUndo();const n=normProgram(p);if(n&&n.nodes.length)D.program=n;else delete D.program;
@@ -856,7 +876,7 @@ function partShow(id: string|null){queueMicrotask(undoUI);const on=id!=null&&PT.
   if(on){const el=PT.get(id!)!.el;if(v.firstChild!==el)v.replaceChildren(el);}else v.replaceChildren();
   $('.app').classList.toggle('work-part',on);
   // Panel a szerkesztő mellett: a vászon bal fele látszik és használható (a beállítás megmarad)
-  const sp=on&&!!uiPref().partSplit&&!MOB.matches;$('.app').classList.toggle('part-split',sp);
+  const sp=on&&!!uiPref().partSplit&&!MOB.matches;$('.app').classList.toggle('part-split',sp);splitAt(null,false);
   const sb=$('#partSplit');sb.hidden=!on;sb.classList.toggle('on',sp);sb.setAttribute('aria-pressed',String(sp));
   $$('[data-work]').forEach(b=>{const o=!on&&b.dataset.work===ui.work;b.classList.toggle('on',o);b.setAttribute('aria-pressed',String(o));});
   partTabs();if(!on||sp){resize();draw();}toolFit();}
@@ -976,6 +996,7 @@ function agentMount(){if(AGP)return;
   setWork,hasProgEditor:()=>!!PE,pvTab,applyLayout,layoutCur:()=>LAY_S.cur,
   bottom:(open,tab)=>open===undefined&&tab===undefined?{open:$('#bpanel').classList.contains('open'),tab:ui.btab}:bottomPanel(open,tab),
   propWin:()=>({...PW.state(),visible:!$('#propWin').hidden}),logEntries:()=>LOG.entries.map(x=>x.m),
+  split:f=>splitAt(f),
   sides:(k,on)=>k?sideCollapse(k,on):{l:$('.app').classList.contains('colL'),r:$('.app').classList.contains('colR')},
   simple:on=>{if(on!==undefined)setSimple(on);return isSimple();},lang:l=>{if(l!==undefined)applyLang(l,true);return getLang();},
   at:(r,c)=>{const[vx,vy]=toScreen(hx(c),hy(r));const rc=cv.getBoundingClientRect();return{x:rc.left+vx,y:rc.top+vy};},

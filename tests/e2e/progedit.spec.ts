@@ -137,3 +137,43 @@ test('Mindkettő: egymás mellett vagy egymás alatt; a beállítás megmarad', 
   await pcb(page, `pcb.work('split');`);
   expect(await side()).toBe('alatta');
 });
+
+test('Mindkettő: a panel és a program aránya húzható, irányonként megmarad; dupla kattintás: fele-fele', async ({ page }) => {
+  await pcb(page, `pcb.example('prog-blink');`);
+  await page.keyboard.press('3');
+  const g = page.locator('#splitGut');
+  await expect(g).toBeVisible();
+  const ca = (await page.locator('#carea').boundingBox())!;
+  const ratio = async () => { const a = (await page.locator('#scroll').boundingBox())!; return a.width / ca.width; };
+  expect(await ratio()).toBeCloseTo(0.5, 1);
+  // húzás jobbra: a panel 70%
+  const gb = (await g.boundingBox())!;
+  await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(ca.x + ca.width * 0.7, gb.y + gb.height / 2, { steps: 5 });
+  await page.mouse.up();
+  expect(await ratio()).toBeCloseTo(0.7, 1);
+  expect(await pcb(page, `return pcb.split();`)).toBeCloseTo(0.7, 1);
+  const pv = (await page.locator('#progView').boundingBox())!;
+  expect(pv.x).toBeCloseTo(ca.x + ca.width * 0.7, -1);
+  // korlát: legfeljebb 80%
+  expect(await pcb(page, `return pcb.split(0.95);`)).toBe(0.8);
+  // billentyűvel
+  await pcb(page, `pcb.split(0.6);`);
+  await g.focus(); await page.keyboard.press('ArrowLeft');
+  expect(await pcb(page, `return pcb.split();`)).toBeCloseTo(0.56, 2);
+  // egymás alatt: külön arány (alapból fele-fele)
+  await page.click('#splitDir');
+  expect(await pcb(page, `return pcb.split();`)).toBe(0.5);
+  await pcb(page, `pcb.split(0.3);`);
+  const sc = (await page.locator('#scroll').boundingBox())!;
+  expect(sc.height / ca.height).toBeCloseTo(0.3, 1);
+  // újratöltés után megmarad, irányonként
+  await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
+  await pcb(page, `pcb.work('split');`);
+  expect(await pcb(page, `return pcb.split();`)).toBe(0.3);
+  await page.click('#splitDir');
+  expect(await pcb(page, `return pcb.split();`)).toBeCloseTo(0.56, 2);
+  await page.locator('#splitGut').dblclick();
+  expect(await pcb(page, `return pcb.split();`)).toBe(0.5);
+});

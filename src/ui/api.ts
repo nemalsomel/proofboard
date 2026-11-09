@@ -115,6 +115,7 @@ export interface PcbApi {
   propWin(): unknown;
   /** A napló bejegyzései. */ log(): string[];
   /** Oldalsáv összecsukása: k = 'l' | 'r'. */ sides(k?: 'l' | 'r', on?: boolean): unknown;
+  /** Mindkettő nézet: a panel része (0,2–0,8; az aktuális irányban), beállítva vagy lekérdezve. */ split(f?: number): number;
   /** Egyszerű mód. */ simple(on?: boolean): boolean;
   /** Nyelv: 'hu' | 'en'. */ lang(l?: string): string;
   /** A lyuk helye a képernyőn; a reveal előbb odagörget. */ at(r: number, c: number): { x: number; y: number }; reveal(r: number, c: number): { x: number; y: number };
@@ -155,7 +156,7 @@ export interface ApiHost {
   /* nézet */
   setWork(v: string): void; hasProgEditor(): boolean; pvTab(t: string): void;
   applyLayout(id: string): void; layoutCur(): string;
-  bottom(open?: boolean, tab?: string): unknown; propWin(): unknown; logEntries(): string[]; sides(k?: 'l' | 'r', on?: boolean): unknown;
+  bottom(open?: boolean, tab?: string): unknown; propWin(): unknown; logEntries(): string[]; sides(k?: 'l' | 'r', on?: boolean): unknown; split(f?: number): number;
   simple(on?: boolean): boolean; lang(l?: string): string;
   at(r: number, c: number): { x: number; y: number }; reveal(r: number, c: number): { x: number; y: number };
   loadExample(id: string): boolean;
@@ -274,6 +275,7 @@ export function createApi(H: ApiHost): PcbApi {
     propWin() { return H.propWin(); },
     log() { return H.logEntries(); },
     sides(k, on) { return H.sides(k, on); },
+    split(f) { return H.split(f); },
     simple(on) { return H.simple(on); },
     lang(l) { return H.lang(l); },
     at(r, c) { return H.at(r, c); },

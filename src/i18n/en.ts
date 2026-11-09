@@ -1410,4 +1410,6 @@ export const EN: Readonly<Record<string, string>> = {
   "Rögzítés be/ki": "Fix position on/off",
   "Terület: {x}": "Footprint: {x}",
   "A terv által foglalt terület: {r}×{c} lyuk (a panel {a}%-a); az alkatrészek ennek {f}%-át töltik ki.": "Area used by the design: {r}×{c} holes ({a}% of the board); part bodies fill {f}% of it.",
+  "Húzd az arány állításához, dupla kattintás: fele-fele": "Drag to adjust the ratio; double-click: half and half",
+  "A panel és a program aránya": "Board / program ratio",
 };

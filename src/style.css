@@ -308,9 +308,18 @@ input:disabled::placeholder{color:var(--muted)}
 .seg .btn.on{background:var(--primary);color:var(--primary-fg);border-color:var(--primary)}
 .progview{position:absolute;left:0;right:0;top:0;bottom:0;z-index:6;background:var(--panel);display:flex;flex-direction:column;min-height:0}
 .app.work-prog .scroll,.app.work-prog .fab{visibility:hidden}
-.app.work-split .scroll{width:50%;flex:1 1 auto}
-.app.work-split .progview{left:50%;border-left:1px solid var(--line)}
-@media (max-width:1000px){.desk-only{display:none!important}.app.work-split .scroll{width:auto;visibility:hidden}.app.work-split .progview{left:0;border-left:0}}
+.carea{--split:50%}
+.app.work-split .scroll{width:var(--split);flex:1 1 auto}
+.app.work-split .progview{left:var(--split);border-left:1px solid var(--line)}
+/* a panel és a program (vagy az Alkatrész-szerkesztő) határa: húzható */
+.splitgut{display:none;position:absolute;z-index:8;touch-action:none;outline:none}
+.app.work-split:not(.work-part) .splitgut,.app.part-split .splitgut{display:block;top:0;bottom:0;left:var(--split);width:10px;margin-left:-5px;cursor:col-resize}
+.app.work-split.split-v:not(.work-part) .splitgut{top:var(--split);bottom:auto;left:0;right:0;width:auto;height:10px;margin:-5px 0 0;cursor:row-resize}
+.splitgut::after{content:'';position:absolute;left:3px;top:50%;width:4px;height:40px;margin-top:-20px;border-radius:2px;background:var(--line);transition:background .15s}
+.app.work-split.split-v:not(.work-part) .splitgut::after{left:50%;top:3px;width:40px;height:4px;margin:0 0 0 -20px}
+.splitgut:hover::after,.splitgut.on::after,.splitgut:focus-visible::after{background:var(--accent)}
+.splitgut:hover,.splitgut.on,.splitgut:focus-visible{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+@media (max-width:1000px){.desk-only,.app .splitgut{display:none!important}.app.work-split .scroll{width:auto;visibility:hidden}.app.work-split .progview{left:0;border-left:0}}
 /* ---------- Programszerkesztő ---------- */
 .pg-bar{display:flex;gap:6px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap;position:relative;z-index:3}
 .pg-sp{flex:1}
@@ -437,7 +446,7 @@ input:disabled::placeholder{color:var(--muted)}
 @media (max-width:560px){.intro-act{grid-template-columns:1fr}}
 /* szabad vászon: a panel körül üres tér, abba is lehet húzni */
 .scroll{position:relative}
-.app.work-split .intro{right:50%}
+.app.work-split .intro{right:calc(100% - var(--split))}
 .scroll.panning,.scroll.panning #cv,.app.space #cv{cursor:grab}
 .scroll.panning:active,.scroll.panning #cv:active{cursor:grabbing}
 .examples .ex-list{max-height:none}
@@ -525,8 +534,8 @@ input:disabled::placeholder{color:var(--muted)}
 .zoomctl .btn{padding:5px;min-width:30px}
 .zoomctl .zlbl{min-width:52px}
 .toolstrip{max-width:calc(100% - 210px)}
-.app.work-split .toolstrip,.app.work-split .toolstrip.col{left:12px;transform:none;max-width:calc(50% - 24px)}
-.app.work-split .zoomctl{right:calc(50% + 12px)}
+.app.work-split .toolstrip,.app.work-split .toolstrip.col{left:12px;transform:none;max-width:calc(var(--split) - 24px)}
+.app.work-split .zoomctl{right:calc(100% - var(--split) + 12px)}
 .app.work-prog .zoomctl{display:none}
 @media (max-width:1000px){.zoomctl{display:none}.toolstrip{max-width:calc(100% - 16px)}}
 .toolstrip,.toolstrip.col{left:12px;transform:none;max-width:calc(100% - 184px)}
@@ -616,10 +625,10 @@ input:disabled::placeholder{color:var(--muted)}
 .pr-more{display:flex;flex-wrap:wrap;gap:6px}
 .pr-more:empty{display:none}
 /* Mindkettő egymás alatt: a panel felül, a program alatta */
-.app.work-split.split-v .scroll{width:auto;flex:0 0 50%}
-.app.work-split.split-v .progview{left:0;top:50%;border-left:0;border-top:1px solid var(--line)}
-.app.work-split.split-v .toolstrip,.app.work-split.split-v .toolstrip.col{bottom:calc(50% + 22px);max-width:calc(100% - 40px)}
-.app.work-split.split-v .intro{right:0;bottom:50%}
+.app.work-split.split-v .scroll{width:auto;flex:0 0 var(--split)}
+.app.work-split.split-v .progview{left:0;top:var(--split);border-left:0;border-top:1px solid var(--line)}
+.app.work-split.split-v .toolstrip,.app.work-split.split-v .toolstrip.col{bottom:calc(100% - var(--split) + 22px);max-width:calc(100% - 40px)}
+.app.work-split.split-v .intro{right:0;bottom:calc(100% - var(--split))}
 /* Kód a jobb sávban */
 #rpCode{flex:1;min-height:0}
 .codeview{display:flex;flex-direction:column;min-height:0;flex:1;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel2);overflow:hidden}
@@ -753,11 +762,11 @@ input:disabled::placeholder{color:var(--muted)}
 .cg>.pg-canvas{height:max(360px,calc(100vh - 330px))}
 
 /* Panel a szerkesztő mellett: bal fele a vászon, jobb fele az Alkatrész-szerkesztő (egy hasábban) */
-.app.part-split .scroll{width:50%;flex:1 1 auto}
-.app.part-split .partview{left:50%;border-left:1px solid var(--line)}
+.app.part-split .scroll{width:var(--split);flex:1 1 auto}
+.app.part-split .partview{left:var(--split);border-left:1px solid var(--line)}
 .app.part-split #vModes{display:flex}
-.app.part-split .toolstrip,.app.part-split .toolstrip.col{left:12px;transform:none;max-width:calc(50% - 24px)}
-.app.part-split .intro{right:50%}
+.app.part-split .toolstrip,.app.part-split .toolstrip.col{left:12px;transform:none;max-width:calc(var(--split) - 24px)}
+.app.part-split .intro{right:calc(100% - var(--split))}
 .app.part-split .pe-view .pe-body{display:flex;flex-direction:column;overflow:auto}
 .app.part-split .pe-view .pe-vis{overflow:visible;border-right:0;border-bottom:1px solid var(--line)}
 .app.part-split .pe-view .pe-vscroll{overflow:visible}
