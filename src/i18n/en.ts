@@ -1441,4 +1441,6 @@ export const EN: Readonly<Record<string, string>> = {
   "Ezekkel a beállításokkal nincs jobb elrendezés.": "No better layout with these settings.",
   "A helyén marad: {x}": "Stays in place: {x}",
   "A terv szellős: az alkatrészek a foglalt terület {f}%-át töltik ki – tömörítve kisebb panel és rövidebb bekötés lehet.": "The layout is sparse: parts fill {f}% of the used area – compacting could give a smaller board and shorter wiring.",
+  "Tömörítés előnézete": "Compaction preview",
+  "Rögzítés": "Fix in place",
 };

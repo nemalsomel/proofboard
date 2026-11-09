@@ -4,7 +4,7 @@ import { presetMacropad, presetRouted } from '../../src/engine/presets';
 import { route } from '../../src/engine/route';
 import { emptyDesign, normalize } from '../../src/engine/design';
 import { placePart } from '../../src/engine/ops';
-import { engineCtx, runTool, summarize } from '../../src/agent/tools';
+import { engineCtx, partOf, pinOf, runTool, summarize, toolSpecs, TOOLS } from '../../src/agent/tools';
 
 describe('tömörség', () => {
   it('üres terv: nincs foglalt terület', () => {
@@ -107,5 +107,35 @@ describe('tömörítés', () => {
       expect([r.after.linksOk, r.after.wires]).toEqual([29, 0]);
       expect(r.after.bridges + r.after.stats.area * 0.05).toBeLessThanOrEqual(r.before.bridges + r.before.stats.area * 0.05);
     }
+  });
+});
+
+describe('agent: tömörítés és rögzítés', () => {
+  it('plan_compaction nem módosít (Megbeszélés módban is), compact_layout alkalmaz; set_fixed; place_part near', async () => {
+    const ctx = engineCtx(await spread()), snap = JSON.stringify(ctx.D().parts);
+    expect(TOOLS.find(t => t.name === 'plan_compaction')!.mutates).toBe(false);
+    expect(toolSpecs('discuss').map(t => t.name)).toContain('plan_compaction');
+    let r = await runTool(ctx, 'plan_compaction', { strength: 0.5, keep_controls: false });
+    expect(r.text).toMatch(/^Compaction preview \(not applied\)\.\nBefore: \d+×\d+ holes, \d+ bridges, 0 wires, 6\/6 connected\nAfter: +\d+×\d+ holes/);
+    expect(r.text).toMatch(/Stays in place: PICO1 \(controller\)/);
+    expect(JSON.stringify(ctx.D().parts)).toBe(snap);
+    expect((await runTool(ctx, 'plan_compaction', { strength: 3 })).isError).toBe(true);
+    expect((await runTool(ctx, 'plan_compaction', { only: ['X9'] })).text).toMatch(/Unknown label/);
+    r = await runTool(ctx, 'set_fixed', { labels: ['R1'], fixed: true });
+    expect(r.changed).toBe(true); expect(partOf(ctx.D(), 'R1')!.fixed).toBe(true);
+    r = await runTool(ctx, 'compact_layout', { strength: 1, keep_controls: false });
+    expect(r.changed).toBe(true);
+    expect(r.text).toMatch(/^Compacted\./); expect(r.text).toMatch(/R1 \(fixed\)/);
+    expect(partOf(ctx.D(), 'R1')!.r).toBe(30);
+    expect(ctx.D().auto.wires.length).toBe(0);
+    expect(layoutStats(ctx.D()).area).toBeLessThan(layoutStats(JSON.parse(JSON.stringify({ ...ctx.D(), parts: JSON.parse(snap) }))).area);
+    await runTool(ctx, 'set_fixed', { labels: ['R1'], fixed: false });
+    expect(partOf(ctx.D(), 'R1')!.fixed).toBeUndefined();
+    // lerakás egy láb mellé
+    r = await runTool(ctx, 'place_part', { type: 'res', near: 'PICO1.GP20' });
+    expect(r.isError, r.text).toBeFalsy();
+    const gp = pinOf(ctx.D(), 'PICO1.GP20')!.q, np = partOf(ctx.D(), 'R3')!;
+    expect(Math.abs(np.r - gp.r) + Math.abs(np.c - gp.c)).toBeLessThan(8);
+    expect((await runTool(ctx, 'place_part', { type: 'res', near: 'NINCS.1' })).text).toMatch(/Unknown pin or part/);
   });
 });

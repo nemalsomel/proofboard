@@ -12,7 +12,7 @@ import { matchPart } from '../core/library';
 import { fmt, t as translate, type Tr } from '../i18n/i18n';
 import { checkAll, type Issue } from '../engine/check';
 import { generateCode, type CodeLang } from '../engine/codegen';
-import { layoutStats } from '../engine/compact';
+import { applyCompaction, layoutStats, planCompaction, type CompactMetrics, type CompactResult, type KeepReason } from '../engine/compact';
 import { BRIEF_MAX, emptyDesign, normalize } from '../engine/design';
 import { DEFS, hasPress, isMcu, isOff, penv } from '../engine/defs';
 import { placedPins, xf } from '../engine/geometry';
@@ -144,6 +144,25 @@ const fmtV = (v: unknown) => (typeof v === 'number' ? +v.toPrecision(4) : v);
 function paramsText(p: PartInstance): string {
   const E = penv(p), ps = DEFS[p.type].def.params || [];
   return ps.filter(x => x.type !== 'span' && x.type !== 'names').map(x => `${x.key}=${fmtV(E[x.key])}${x.unit ? x.unit : ''}`).join(', ');
+}
+
+/* ---------- Tömörítés ---------- */
+
+const KEEP_EN: Record<KeepReason, string> = { fixed: 'fixed', mcu: 'controller', control: 'control', manual: 'hand-wired', off: 'off-board', scope: 'not in "only"' };
+function compactPlan(D: Design, i: Record<string, unknown>): CompactResult | { error: string } {
+  const s = num(i.strength); if (s != null && (s < 0 || s > 1)) return { error: 'strength must be between 0 and 1.' };
+  let only: string[] | null = null;
+  if (Array.isArray(i.only)) { const ls = i.only.map(str), ps = ls.map(l => partOf(D, l)), miss = ls.filter((_, k) => !ps[k]); if (miss.length) return { error: `Unknown label(s): ${miss.join(', ')}` }; only = ps.map(p => p!.id); }
+  return planCompaction(D, { strength: s ?? 0.5, only, keepMcu: i.keep_mcu !== false, keepControls: i.keep_controls !== false });
+}
+function compactText(r: CompactResult, applied: boolean): string {
+  const m = (x: CompactMetrics) => `${x.stats.box ? x.stats.rows + '×' + x.stats.cols : '-'} holes, ${x.bridges} bridges, ${x.wires} wires, ${x.linksOk}/${x.links} connected`;
+  const kept = Object.entries(r.kept).filter(([, w]) => w !== 'off').map(([l, w]) => `${l} (${KEEP_EN[w]})`);
+  const L = [r.moves.length ? (applied ? 'Compacted.' : 'Compaction preview (not applied).') : 'No better layout found with these settings; nothing changed.',
+    `Before: ${m(r.before)}`, `After:  ${m(r.after)}`];
+  if (r.moves.length) L.push('Moves: ' + r.moves.map(x => `${x.label} ${x.from.r},${x.from.c} → ${x.to.r},${x.to.c}${x.to.rot !== x.from.rot ? ` rot ${x.to.rot * 90}°` : ''}`).join('; '));
+  if (kept.length) L.push('Stays in place: ' + kept.join(', '));
+  return L.join('\n');
 }
 
 /* ---------- Tervösszefoglaló ---------- */
@@ -278,10 +297,11 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'place_part', mutates: true,
-    description: 'Place a new part on the board. Give row/col for the part origin (its pin 1 / first pin at rotation 0), or omit them to place it at the nearest free spot (near "near_row"/"near_col" if given). Rotation is in 90° steps clockwise. Off-board parts (motors, servos) are placed beside the board and get a header plugged in automatically. Fails if the part does not fit or would overlap another part.',
+    description: 'Place a new part on the board. Give row/col for the part origin (its pin 1 / first pin at rotation 0), or omit them to place it at the nearest free spot – preferably with "near" set to the pin it will connect to, so the layout stays compact (or near_row/near_col). Rotation is in 90° steps clockwise. Off-board parts (motors, servos) are placed beside the board and get a header plugged in automatically. Fails if the part does not fit or would overlap another part.',
     input_schema: S.obj({
       type: S.str('part type key'), row: S.int('origin row'), col: S.int('origin column'),
       near_row: S.int('preferred area when row/col omitted'), near_col: S.int('preferred area when row/col omitted'),
+      near: S.str('when row/col omitted: place next to this pin or part (e.g. "PICO1.GP15" or "R1") – use the pin it will connect to'),
       rotation: S.int('0, 90, 180 or 270'), mirror: S.bool('mirror the part'), params: { type: 'object', description: 'parameter values by key (see describe_part_type), e.g. {"ohm": 330}' }, label: S.str('custom label (default: next free, e.g. R2)'),
     }, ['type']),
     run(ctx, i) {
@@ -292,7 +312,9 @@ export const TOOLS: ToolDef[] = [
       let r = num(i.row), c = num(i.col);
       const g = OPS.partAt(D, type, r ?? 0, c ?? 0, { rot, mir, props: pr.props });
       if (r == null || c == null) {
-        const s = freeSpot(D, g, { r: num(i.near_row) ?? r ?? 0, c: num(i.near_col) ?? c ?? 0 });
+        let nr = num(i.near_row) ?? r ?? 0, nc = num(i.near_col) ?? c ?? 0;
+        if (i.near) { const ref = str(i.near), pq = pinOf(D, ref), pp = pq ? null : partOf(D, ref); if (!pq && !pp) return err(`Unknown pin or part "${ref}" in "near".`); [nr, nc] = pq ? [pq.q.r, pq.q.c] : [pp!.r, pp!.c]; }
+        const s = freeSpot(D, g, { r: nr, c: nc });
         if (!s) return err('No free spot where this part fits. Make room or use a bigger board.');
         r = s.r; c = s.c;
       }
@@ -465,6 +487,34 @@ export const TOOLS: ToolDef[] = [
       const D = ctx.D(), t = str(i.text).trim().slice(0, BRIEF_MAX);
       if (t) D.brief = t; else delete D.brief;
       ctx.commit(); return ok(t ? `Project notes saved (${t.split('\n').length} lines).` : 'Project notes cleared.', true);
+    },
+  },
+  {
+    name: 'plan_compaction', mutates: false,
+    description: 'Preview compacting the layout (does not change the design): parts move closer to what they connect to, onto a smaller area, and the wiring is re-routed and checked. Returns before/after area, bridges, wires and connected links, which parts would move and which stay (fixed, controller, controls, hand-wired). strength 0 = loose (2-hole gaps, small moves, easy soldering) … 1 = tight (smallest board). Use it to suggest compaction, then compact_layout to apply.',
+    input_schema: S.obj({ strength: S.num('0 (loose) … 1 (tight), default 0.5'), only: S.arr(S.str('label'), 'only these parts may move (default: all movable)'), keep_mcu: S.bool('keep the controller board in place (default true)'), keep_controls: S.bool('keep buttons, sliders and connectors in place (default true)') }),
+    run(ctx, i) { const r = compactPlan(ctx.D(), i); return 'error' in r ? err(r.error) : ok(compactText(r, false)); },
+  },
+  {
+    name: 'compact_layout', mutates: true,
+    description: 'Compact the layout (same options as plan_compaction) and apply it: parts move closer together and the wiring is re-routed. Never makes the wiring worse; fixed parts stay. Ask before compacting a layout the user arranged by hand.',
+    input_schema: S.obj({ strength: S.num('0 (loose) … 1 (tight), default 0.5'), only: S.arr(S.str('label'), 'only these parts may move (default: all movable)'), keep_mcu: S.bool('keep the controller board in place (default true)'), keep_controls: S.bool('keep buttons, sliders and connectors in place (default true)') }),
+    run(ctx, i) {
+      const D = ctx.D(), r = compactPlan(D, i); if ('error' in r) return err(r.error);
+      if (!r.moves.length) return ok(compactText(r, true));
+      applyCompaction(D, r); if (D.settings.autoRoute && D.links.length) route(D, { full: true }); ctx.commit();
+      return ok(compactText(r, true), true);
+    },
+  },
+  {
+    name: 'set_fixed', mutates: true,
+    description: 'Fix parts in place (or release them). Fixed parts are not moved by compaction or by move_part; the user can still move them by hand. Fix parts whose position matters (buttons on a front panel, connectors at the edge) when the user says so.',
+    input_schema: S.obj({ labels: S.arr(S.str('label'), 'part labels'), fixed: S.bool('true = fix in place, false = release') }, ['labels', 'fixed']),
+    run(ctx, i) {
+      const D = ctx.D(), ls = Array.isArray(i.labels) ? i.labels.map(str) : [], ps = ls.map(l => partOf(D, l));
+      const miss = ls.filter((_, k) => !ps[k]); if (miss.length) return err(`Unknown label(s): ${miss.join(', ')}`);
+      for (const p of ps) { if (i.fixed) p!.fixed = true; else delete p!.fixed; }
+      ctx.commit(); return ok(`${i.fixed ? 'Fixed in place' : 'Released'}: ${ls.join(', ')}.`, true);
     },
   },
   {

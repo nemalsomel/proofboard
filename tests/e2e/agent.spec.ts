@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { SPREAD } from './fixtures';
 
 /*
  * Beépített agent: a modell válaszai rögzítettek (a Playwright fogja el az API-hívást), valódi hívás nincs.
@@ -241,4 +242,29 @@ test('hosszú beszélgetés: a korábbi rész összefoglalóra cserélődik, az 
   expect(m.length).toBe(1);
   expect(JSON.stringify(m[0])).toContain('Summary of the earlier part of this conversation:\\nCél: teszt.');
   expect(JSON.stringify(m[0])).not.toContain('xxxxxxxxxx');
+});
+
+test('tömörítés az agenttel: előnézet, majd alkalmazás; egy lépésben visszavonható, a rögzített marad', async ({ page }) => {
+  await page.evaluate(d => { const x = JSON.parse(JSON.stringify(d)); x.parts.find((p: { label: string }) => p.label === 'R2').fixed = true; (window as any).pcb.load(x); }, SPREAD);
+  const pos = () => page.evaluate(() => JSON.stringify((window as any).pcb.get().parts.map((p: { label: string; r: number; c: number; rot: number }) => [p.label, p.r, p.c, p.rot])));
+  const before = await pos();
+  await setKey(page);
+  const reqs = await fakeApi(page, [
+    toolUse('t1', 'plan_compaction', { strength: 0.7 }, 'Megnézem, mennyit nyerünk.'),
+    toolUse('t2', 'compact_layout', { strength: 0.7 }),
+    say('Tömörítettem: kisebb terület, kevesebb híd.'),
+  ]);
+  await ask(page, 'Túl szellős, tömörítsd.');
+  await expect(page.locator('.ag-msg.a').last()).toContainText('Tömörítettem');
+  await expect(page.locator('.ag-tool.ok').first()).toContainText('Tömörítés előnézete');
+  const res1 = JSON.stringify(reqs[1].body.messages);
+  expect(res1).toContain('Compaction preview (not applied)');
+  expect(res1).toContain('R2 (fixed)');
+  expect(JSON.stringify(reqs[0].body.messages)).toContain('FIXED by the user');
+  const after = await pos();
+  expect(after).not.toBe(before);
+  expect(JSON.parse(after).find((x: unknown[]) => x[0] === 'R2')).toEqual(JSON.parse(before).find((x: unknown[]) => x[0] === 'R2'));
+  expect(await page.evaluate(() => (window as any).pcb.links().filter((l: { ok: boolean }) => l.ok).length)).toBe(6);
+  await page.evaluate(() => (window as any).pcb.undo());
+  expect(await pos()).toBe(before);
 });
