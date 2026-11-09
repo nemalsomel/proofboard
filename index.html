@@ -23,6 +23,7 @@
         <button class="menu-item" role="menuitem" id="bSaveFile" data-icon="save" title="A teljes terv (a benne használt saját alkatrészekkel együtt) fájlba">Mentés fájlba<kbd>Ctrl+S</kbd></button>
         <button class="menu-item" role="menuitem" id="bExamples" data-icon="book">Példák…</button>
         <button class="menu-item" role="menuitem" id="bBoard" data-icon="board">Panel beállításai…</button>
+        <button class="menu-item" role="menuitem" id="bMcp" data-icon="plug" title="Claude Desktop vagy Claude Code vezérelheti a tervet, élőben (MCP)">Claude-kapcsolat…</button>
         <button class="menu-item" role="menuitemcheckbox" aria-checked="false" id="bSimple" data-icon="check" title="A haladó részek elrejtése: csíkvágás, kézi ↔ automatikus bekötés, JSON, PlatformIO, saját alkatrész szerkesztése; a Problémák közül csak a hibák">Egyszerű mód</button>
         <div class="menu-sep" role="separator" data-adv></div>
         <p class="menu-h" data-adv>Saját alkatrészkönyvtár</p>
@@ -47,6 +48,7 @@
         </div>
       </div>
     </div>
+    <button class="mcp-chip" id="mcpChip" hidden><span class="dot"></span><span id="mcpChipT">Claude</span></button>
     <div class="grp seg desk-only" role="group" aria-label="Elrendezés" id="laySw">
       <button class="btn" data-layout="design" data-kbd="Alt+1" title="Tervezés: alkatrészek és bekötés (Alt+1)">Tervezés</button>
       <button class="btn" data-layout="prog" data-kbd="Alt+2" title="Program: a panel és a program egymás mellett (Alt+2)">Program</button>
@@ -125,7 +127,7 @@
     </div>
     <div class="carea" id="carea">
       <div class="scroll" id="scroll"><canvas id="cv"></canvas></div>
-      <div class="agent-bar" id="agentBar" role="status" hidden><span class="dot"></span><span>Az agent dolgozik a terven – a kézi szerkesztés addig szünetel.</span><button class="btn danger" id="agentBarStop">Leállítás</button></div>
+      <div class="agent-bar" id="agentBar" role="status" hidden><span class="dot"></span><span id="agentBarText">Az agent dolgozik a terven – a kézi szerkesztés addig szünetel.</span><button class="btn danger" id="agentBarStop">Leállítás</button></div>
       <section class="intro" id="intro" aria-labelledby="introTitle" hidden>
         <div class="intro-card">
           <h1 id="introTitle">Kezdjünk egy panelt</h1>
@@ -304,6 +306,34 @@
   <header class="dlg-head"><h2 id="dlgExT">Példák</h2><input type="search" id="exSearch" class="ex-search" placeholder="Keresés a példák között" aria-label="Keresés a példák között" autocomplete="off"><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
   <div class="dlg-body ex-body"><div id="examples" class="examples"></div></div>
   <footer class="dlg-foot"><span class="help">A betöltés visszavonható (Ctrl+Z).</span></footer>
+</dialog>
+<dialog class="dlg" id="dlgMcp" aria-labelledby="dlgMcpT">
+  <header class="dlg-head"><h2 id="dlgMcpT">Claude-kapcsolat (MCP)</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <div class="dlg-body mcp-body">
+    <p>A Claude Desktopból vagy a Claude Code-ból is tervezhetsz: a Claude a saját előfizetéseddel dolgozik (API-kulcs nem kell), a változások itt jelennek meg élőben, és visszavonhatók.</p>
+    <h3>1. A proofboard-mcp szerver hozzáadása (egyszer)</h3>
+    <div class="seg" role="group" aria-label="Kliens" id="mcpWhere">
+      <button class="btn on" data-mcp-where="desktop" aria-pressed="true">Claude Desktop</button>
+      <button class="btn" data-mcp-where="code" aria-pressed="false">Claude Code</button>
+    </div>
+    <div class="mcp-how" data-mcp-how="desktop">
+      <p class="help">Beállítások › Fejlesztő › Konfiguráció szerkesztése (claude_desktop_config.json), majd a Claude újraindítása:</p>
+      <pre class="mcp-code" id="mcpCfgDesktop" data-i18n-skip></pre>
+    </div>
+    <div class="mcp-how" data-mcp-how="code" hidden>
+      <p class="help">Terminálban:</p>
+      <pre class="mcp-code" id="mcpCfgCode" data-i18n-skip></pre>
+    </div>
+    <p class="help">Node.js 18 vagy újabb kell hozzá. A szerver csak a saját gépeden figyel (127.0.0.1), és csak a Proofboard oldaláról fogad kapcsolatot.</p>
+    <h3>2. Kapcsolódás</h3>
+    <div class="mcp-row"><button class="btn primary" id="mcpConnect">Csatlakozás</button><span class="mcp-state" id="mcpState" role="status"></span></div>
+    <label class="check"><input type="checkbox" id="mcpRead"> Csak olvasás: a Claude látja és ellenőrzi a tervet, de nem módosíthatja</label>
+    <label class="check"><input type="checkbox" id="mcpAuto"> Csatlakozás automatikusan, amikor megnyitom a Proofboardot</label>
+    <details class="mcp-adv"><summary>Haladó</summary>
+      <div class="mcp-row"><label for="mcpPort">Port</label><input type="number" id="mcpPort" min="1024" max="65535" style="width:8em"><span class="help">A szerveren: --port</span></div>
+    </details>
+    <p class="help">Amíg a Claude dolgozik, a kézi szerkesztés szünetel, és fent sáv jelzi. Egy-egy munkamenet egy lépésben visszavonható (Ctrl+Z).</p>
+  </div>
 </dialog>
 <dialog class="dlg dlg-sm dlg-side" id="dlgCompact" aria-labelledby="dlgCompactT">
   <header class="dlg-head"><h2 id="dlgCompactT">Tömörítés</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>

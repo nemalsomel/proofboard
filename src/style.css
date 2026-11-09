@@ -928,3 +928,18 @@ html.simple [data-adv]{display:none!important}
 .ag-copy .ic{width:14px;height:14px}
 .ag-copy.done{color:#2f9e44}
 .issues .iss-act{margin-left:8px;padding:2px 10px;font-size:var(--fs-sm);vertical-align:middle}
+
+/* Claude-kapcsolat (MCP) */
+.mcp-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--fg);font:600 12.5px var(--display);cursor:pointer;margin-left:6px}
+.mcp-chip[hidden]{display:none}
+.mcp-chip .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.mcp-chip.on .dot{background:var(--ok)}
+.mcp-chip.busy .dot{background:var(--primary);animation:agPulse 1.2s ease-in-out infinite}
+.mcp-body h3{margin:6px 0 0;font-size:var(--fs-md,14px)}
+.mcp-body p{margin:0}
+.mcp-code{margin:0;padding:8px 10px;border-radius:var(--r-md);background:var(--panel2);border:1px solid var(--line);font:12px var(--mono);white-space:pre-wrap;word-break:break-all;position:relative}
+.mcp-code .mcp-copy{position:absolute;top:4px;right:4px;font-size:11px;padding:2px 8px}
+.mcp-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mcp-state{font-size:var(--fs-sm)}
+.mcp-state.ok{color:var(--ok)} .mcp-state.wait{color:var(--warn)} .mcp-state.err{color:var(--err)}
+.mcp-adv summary{cursor:pointer;color:var(--muted);font-size:var(--fs-sm)}

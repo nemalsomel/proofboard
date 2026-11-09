@@ -74,3 +74,10 @@ mi került a felületre, hova, és milyen kérdést hagyott nyitva. A felülvizs
 - **Beszélgetések:** projektenként (a terv azonosítója szerint) mentve, a böngészőben; újratöltéskor a legutóbbi nyílik meg, a „Korábbi beszélgetések” listából megnyitható vagy törölhető (projektenként legfeljebb 20; képek nélkül). Másik terv betöltésekor annak a beszélgetései jönnek.
 - **Hosszú beszélgetés:** a régi eszközeredmények rövidülnek, majd a korábbi rész egy modellhívással összefoglalóra cserélődik (megjegyzés a csevegésben), hogy a kérések ne dráguljanak.
 - **Projektjegyzet:** a terv része (vele mentődik, exportálódik); a panel tetején szerkeszthető, az agent minden beszélgetés elején megkapja, és a `set_project_notes` eszközzel frissíti (a felhasználó egyetértésével). Visszavonható.
+
+## Claude-kapcsolat – MCP (2026. november)
+- **Cél:** a Claude Desktopból / Claude Code-ból (a felhasználó saját előfizetésével, API-kulcs nélkül) is lehessen tervezni, és az eredmény itt, élőben látsszon.
+- **Felépítés:** a `proofboard-mcp` helyi szerver (npx) a Claude felé MCP, az app felé WebSocket-híd (127.0.0.1:47615). Az app csak a „Csatlakozás” gombra (vagy bekapcsolt automatikus csatlakozásnál) kapcsolódik; app nélkül a szerver memóriabeli terven dolgozik, fájlba menthet.
+- **Visszajelzés:** a fejlécben „Claude” jelző (kapcsolódva / várakozás / dolgozik); munka közben a panel fölött a „dolgozik” sáv (a kézi szerkesztés szünetel), a végén üzenet. Egy munkamenet (a hívások 2,5 s szünetig) egy visszavonási lépés; a sáv gombja bontja a kapcsolatot.
+- **Csak olvasás:** a Claude látja, ellenőrzi, szimulálja a tervet, de a módosító hívásokat az app elutasítja.
+- **Ütközések:** amíg a beépített agent fut vagy a Tömörítés ablak nyitva van, az app a Claude hívásait udvariasan elutasítja; új lap kapcsolódásakor a régi leválik.

@@ -32,6 +32,8 @@ jobs:
         run: npm test
       - name: Build (GitHub Pages)
         run: npm run build
+      - name: MCP-szerver (proofboard-mcp) build és füstpróba
+        run: npm run build:mcp
       - name: Playwright böngésző
         run: npx playwright install --with-deps chromium
       - name: E2E tesztek

@@ -57,6 +57,9 @@ import { mountFloatWin, parseWin } from './ui/floatwin';
 import { generateCode, type CodeLang } from './engine/codegen';
 import { applyCompaction, layoutStats } from './engine/compact';
 import { COMPACT_DEFAULTS, mountCompactDialog } from './ui/compactdlg';
+import { MCP_DEFAULTS, mountMcpPanel } from './ui/mcpdlg';
+import { CALL_EXPORT, CALL_IMPORT } from './agent/bridge';
+import { runTool, TOOLS as AGENT_TOOLS, type ToolCtx, type ToolResult } from './agent/tools';
 import { emptyDesign, normalize, normCutList, rekeyAgainstLibrary, NOTE_COL, BRIEF_MAX } from './engine/design';
 import { swapMcu as swapMcuOf } from './engine/swap';
 import { presetMacropad, presetRouted } from './engine/presets';
@@ -987,13 +990,18 @@ function boardSnapshot(): string|null{
   try{draw();const k=Math.min(1,1500/Math.max(cv.width,cv.height)),c=document.createElement('canvas');c.width=Math.round(cv.width*k);c.height=Math.round(cv.height*k);
     const g=c.getContext('2d');if(!g)return null;g.fillStyle=css('--stage')||'#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(cv,0,0,c.width,c.height);return c.toDataURL('image/png').split(',')[1]||null;}catch(e){return null;}
 }
+/** Az agent és az MCP-híd eszközeinek környezete: az élő terv. */
+function toolCtx(): ToolCtx{return {D:()=>D,setD:d=>{if(ui.sim)setSim(false);D=normalize(d);syncDefs(D.customParts);ui.sel=null;ui.selLink=null;},commit:()=>commit(),tr,snapshot:boardSnapshot,
+  examples:()=>EXAMPLES.map(e=>({id:e.id,title:tr(e.title),desc:tr(e.desc)})),loadExample:id=>{const ok=loadExample(id);if(ok)HIST.drop();return ok;}};} // a példa saját visszavonási lépése helyett a feladaté marad
+/** „Dolgozik” állapot: a kézi szerkesztés szünetel, fent sáv jelzi (szöveg, leállító gomb). */
+function busyOn(text: string,stopLabel: string,stop: ()=>void,push=true){if(push)pushUndo();ui.sel=null;ui.placing=null;ui.drag=null;$('.app').classList.add('agent-busy');$('#agentBarText').textContent=text;$('#agentBarStop').textContent=stopLabel;$('#agentBar').hidden=false;$('#agentBarStop').onclick=stop;renderLeft();draw();}
+function busyOff(changed: boolean,pushed=true){if(pushed&&!changed)HIST.drop();$('.app').classList.remove('agent-busy');$('#agentBar').hidden=true;renderLeft();renderLinks();draw();}
 function agentMount(){if(AGP)return;
   AGP=mountAgentPanel({root:$<HTMLElement>('#agentRoot'),lang:()=>getLang() as 'hu'|'en',
-    ctx:()=>({D:()=>D,setD:d=>{if(ui.sim)setSim(false);D=normalize(d);syncDefs(D.customParts);ui.sel=null;ui.selLink=null;},commit:()=>commit(),tr,snapshot:boardSnapshot,
-      examples:()=>EXAMPLES.map(e=>({id:e.id,title:tr(e.title),desc:tr(e.desc)})),loadExample:id=>{const ok=loadExample(id);if(ok)HIST.drop();return ok;}}), // a példa saját visszavonási lépése helyett a feladaté marad
+    ctx:toolCtx,
     designKey:()=>JSON.stringify([D.board,D.parts,D.links,D.bridges,D.wires,D.cuts,D.gpio,D.pwm,D.program,D.notes]),
-    begin(stop){pushUndo();ui.sel=null;ui.placing=null;ui.drag=null;$('.app').classList.add('agent-busy');$('#agentBar').hidden=false;$('#agentBarStop').onclick=stop;renderLeft();draw();},
-    end(changed){if(!changed)HIST.drop();$('.app').classList.remove('agent-busy');$('#agentBar').hidden=true;renderLeft();renderLinks();draw();},
+    begin(stop){busyOn(tr('Az agent dolgozik a terven – a kézi szerkesztés addig szünetel.'),tr('Leállítás'),stop);},
+    end(changed){busyOff(changed);},
     loadPrefs:()=>{try{return JSON.parse(localStorage.getItem(AGENT_KEY)||sessionStorage.getItem(AGENT_KEY)||'{}') as AgentPrefs;}catch(e){return {};}},
     savePrefs:(p,remember)=>{try{const j=JSON.stringify(p);if(remember){localStorage.setItem(AGENT_KEY,j);sessionStorage.removeItem(AGENT_KEY);}else{sessionStorage.setItem(AGENT_KEY,j);localStorage.removeItem(AGENT_KEY);}}catch(e){}},
     projectId:()=>{if(!D.id){D.id='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);save();}return D.id;},
@@ -1002,6 +1010,38 @@ function agentMount(){if(AGP)return;
     brief:()=>D.brief||'',
     setBrief:t=>{pushUndo();if(t)D.brief=t.slice(0,BRIEF_MAX);else delete D.brief;commit(true);}});
 }
+/* ---------- Claude-kapcsolat (MCP-híd): ui/mcpdlg.ts, agent/bridge.ts ---------- */
+/** Egy munkamenet: az egymást követő hívások (köztük legfeljebb MCP_IDLE ms szünet) egy visszavonási lépés. */
+const MCP_IDLE=2500,MCPKEY='proofboard.mcp';
+/** `pushed`: készült-e visszavonási pont (csak az első módosító hívás előtt, hogy az olvasás ne törölje az Újra lépéseit) */
+let MCP_RUN: {changed: boolean; pushed: boolean; timer: ReturnType<typeof setTimeout>|null}|null=null;
+function mcpEnd(){if(!MCP_RUN)return;const r=MCP_RUN;MCP_RUN=null;if(r.timer)clearTimeout(r.timer);busyOff(r.changed,r.pushed);MCPP.busy(false);if(r.changed)toast(tr('A Claude módosította a tervet. Visszavonás: Ctrl+Z.'));}
+async function mcpExec(name: string,input: Record<string,unknown>,readOnly: boolean): Promise<ToolResult>{
+  if(name===CALL_EXPORT)return {text:JSON.stringify(D)};
+  if(AGP&&AGP.busy())return {text:'The user is running the built-in agent in the app right now. Try again in a moment.',isError:true};
+  if(CP_ORIG||$<HTMLDialogElement>('#dlgCompact').open)return {text:'The user has the compaction dialog open in the app. Try again when it is closed.',isError:true};
+  const def=AGENT_TOOLS.find(t=>t.name===name);
+  const mutates=name===CALL_IMPORT||!!(def&&def.mutates)||name==='set_project_notes';
+  if(readOnly&&mutates)return {text:'The app is in read-only mode: the user allows Claude to read and check the design, but not to change it. Suggest the change instead.',isError:true};
+  if(!MCP_RUN){MCP_RUN={changed:false,pushed:false,timer:null};busyOn(tr('A Claude dolgozik a terven – a kézi szerkesztés addig szünetel.'),tr('Leválasztás'),()=>{mcpEnd();MCPP.disconnect();},false);MCPP.busy(true);}
+  const run=MCP_RUN;if(run.timer)clearTimeout(run.timer);
+  if(mutates&&!run.pushed){pushUndo();run.pushed=true;}
+  let r: ToolResult;
+  try{
+    if(name===CALL_IMPORT){const ctx=toolCtx();ctx.setD(normalize(input.design));ctx.commit();r={text:`Opened the design in the app (${D.parts.length} parts).`,changed:true};}
+    else r=await runTool(toolCtx(),name,input);
+  }catch(e){r={text:'Tool failed in the app: '+String(e),isError:true};}
+  if(r.changed)run.changed=true;
+  if(MCP_RUN===run)run.timer=setTimeout(mcpEnd,MCP_IDLE);
+  return r;
+}
+const MCPP=mountMcpPanel($<HTMLDialogElement>('#dlgMcp'),$<HTMLElement>('#mcpChip'),{
+  exec:mcpExec,hello:()=>({version:__APP_VERSION__,design:(D.brief||'').split('\n')[0].slice(0,60)||tr('{n} alkatrész',{n:D.parts.length})}),
+  loadPrefs:()=>{try{return{...MCP_DEFAULTS,...JSON.parse(localStorage.getItem(MCPKEY)||'{}')};}catch(e){return{...MCP_DEFAULTS};}},
+  savePrefs:p=>{try{localStorage.setItem(MCPKEY,JSON.stringify(p));}catch(e){}},
+  dropped:mcpEnd,tr});
+$('#bMcp').onclick=()=>{closeMenu();MCPP.open();};
+
 /* ---------- API: ui/api.ts (window.pcb) ---------- */
 (window as unknown as {pcb: unknown}).pcb=createApi({ui,D:()=>D,setD:d=>{D=d;},A0:()=>A0,SIM:()=>SIM,issues:()=>ISSUES,lib:()=>LIB,
   pushUndo,dropUndo:()=>HIST.drop(),commit,recompute,renderLeft,renderLinks,draw,status,statusText:()=>statusText()||'',
