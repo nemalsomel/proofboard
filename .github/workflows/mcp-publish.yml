@@ -1,7 +1,9 @@
 name: proofboard-mcp kiadás (npm)
 
-# Indítás: `git tag mcp-v0.1.0 && git push origin mcp-v0.1.0` (a verzió egyezzen az mcp/package.json-nal).
-# Kell hozzá az NPM_TOKEN titok (npm „Automation” token) a repó beállításaiban.
+# Indítás: `git tag mcp-v0.1.1 && git push origin mcp-v0.1.1` (a verzió egyezzen az mcp/package.json-nal).
+# Token nélkül, npm Trusted Publishing (OIDC) – egyszeri beállítás az npmjs.com-on: a proofboard-mcp csomag
+# Settings › Trusted Publisher › GitHub Actions: nemalsomel / proofboard, munkafolyamat: mcp-publish.yml.
+# (Az első kiadás kézzel, 2FA-val: `npm run build:mcp && cd mcp && npm publish --access public`.)
 on:
   push:
     tags: ['mcp-v*']
@@ -28,7 +30,7 @@ jobs:
       - name: Verzió ellenőrzése
         if: startsWith(github.ref, 'refs/tags/')
         run: test "mcp-v$(node -p "require('./mcp/package.json').version")" = "${GITHUB_REF_NAME}"
-      - run: npm publish --provenance --access public
+      - name: npm 11.5.1+ (Trusted Publishing)
+        run: npm install -g npm@latest
+      - run: npm publish --access public
         working-directory: mcp
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
