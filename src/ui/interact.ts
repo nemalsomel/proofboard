@@ -34,7 +34,7 @@ export interface InteractState {
   placing: string | null; ghost: Ghost;
   wireStart: Hole | null; wireColor: string; linkStart: string | null;
   pressed: Record<string, boolean>; holdPtr: Map<number, string>;
-  hideAuto: Set<string> | null; moved?: Set<string> | null;
+  /** útvonal-újratervezés közben rejtett automatikus elemek: a kapcsolatok, vagy mind ('all') */ hideAuto: Set<string> | 'all' | null; moved?: Set<string> | null;
   zoom: number;
 }
 

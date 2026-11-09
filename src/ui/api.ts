@@ -26,6 +26,7 @@ import type { Design, Hole, Link, Note } from '../engine/types';
 import { PARTS } from '../parts/builtin';
 import { EXAMPLES } from './examples';
 import { grp, type Group } from './hit';
+import type { ProgRun } from './state';
 
 /* ---------- Eredménytípusok ---------- */
 
@@ -124,7 +125,7 @@ export interface PcbApi {
 export interface ApiUiState {
   sel: unknown; selLink?: string | null; moved?: Set<string> | null;
   pressed: Record<string, boolean>; linkState: Map<string, LinkState>;
-  sim: boolean; prog?: { t: number; rt: { vals: Map<string, unknown> }; out: { errors: Map<string, string>; gpio: Record<string, string>; pwm: Record<string, unknown> } } | null;
+  sim: boolean; prog?: ProgRun | null;
   progAuto?: boolean; work?: string; pvTab?: string; blinkSim?: SimResult | null;
 }
 
