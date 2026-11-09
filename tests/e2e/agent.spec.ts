@@ -156,3 +156,89 @@ test('angol felületen angolul, és a rendszerprompt angol választ kér', async
   await expect(page.locator('.ag-msg.a')).toContainText('Hello!');
   expect(String(((reqs[0].body.system as Array<{ text: string }>)[0]).text)).toContain('Reply in English');
 });
+
+test('beszélgetések: újratöltés után visszajön, listából megnyitható, törölhető; az új beszélgetés elmenti az előzőt', async ({ page }) => {
+  await setKey(page);
+  await fakeApi(page, [say('Első válasz.'), say('Második válasz.')]);
+  await ask(page, 'Első kérdés');
+  await expect(page.locator('.ag-msg.a').last()).toContainText('Első válasz');
+  const pid = await page.evaluate(() => (window as any).pcb.get().id);
+  expect(pid).toMatch(/^p\w+/);
+  await page.click('#agNew');
+  await expect(page.locator('.ag-msg')).toHaveCount(0);
+  await ask(page, 'Második kérdés');
+  await expect(page.locator('.ag-msg.a').last()).toContainText('Második válasz');
+  // újratöltés: a legutóbbi beszélgetés nyílik meg, a terv azonosítója megmarad
+  await page.reload();
+  await page.waitForFunction(() => !!(window as any).pcb);
+  await page.click('.right [data-rtab="agent"]');
+  expect(await page.evaluate(() => (window as any).pcb.get().id)).toBe(pid);
+  await expect(page.locator('.ag-msg.u')).toHaveText(['Második kérdés']);
+  await expect(page.locator('.ag-msg.a').last()).toContainText('Második válasz');
+  // lista: két beszélgetés, a régebbi megnyitható
+  await page.click('#agHist');
+  await expect(page.locator('.ag-hrow')).toHaveCount(2);
+  await expect(page.locator('.ag-hrow.on')).toContainText('Második kérdés');
+  await page.locator('.ag-hopen', { hasText: 'Első kérdés' }).click();
+  await expect(page.locator('#agHistList')).toBeHidden();
+  await expect(page.locator('.ag-msg.u')).toHaveText(['Első kérdés']);
+  // a folytatásban az előzmények mennek
+  const reqs = await fakeApi(page, [say('Folytatás.')]);
+  await ask(page, 'Még valami');
+  await expect(page.locator('.ag-msg.a').last()).toContainText('Folytatás');
+  expect(JSON.stringify(reqs[0].body.messages)).toContain('Első kérdés');
+  // törlés
+  await page.click('#agHist');
+  await page.locator('.ag-hrow', { hasText: 'Második kérdés' }).locator('[data-chatdel]').click();
+  await expect(page.locator('.ag-hrow')).toHaveCount(1);
+  // másik terv (új): üres beszélgetés, saját lista
+  await page.evaluate(() => { const d = (window as any).pcb.get(); delete d.id; (window as any).pcb.load(d); });
+  await expect(page.locator('.ag-msg')).toHaveCount(0);
+  await page.click('#agHist');
+  await expect(page.locator('#agHistList')).toContainText('még nincs mentett beszélgetés');
+  expect(await page.evaluate(() => (window as any).pcb.get().id)).not.toBe(pid);
+});
+
+test('projektjegyzet: a felhasználó szerkeszti, az agent megkapja és frissíti; visszavonható', async ({ page }) => {
+  await setKey(page);
+  await page.click('#agBriefBox summary');
+  await page.fill('#agBrief', 'Cél: villogó LED a GP15-ön.');
+  await page.locator('#agBrief').blur();
+  expect(await page.evaluate(() => (window as any).pcb.get().brief)).toBe('Cél: villogó LED a GP15-ön.');
+  const reqs = await fakeApi(page, [toolUse('t1', 'set_project_notes', { text: 'Cél: villogó LED a GP15-ön.\n- Előtét: 330 Ω' }, 'Feljegyzem.'), say('Feljegyeztem.')]);
+  await ask(page, 'Jegyezd fel, hogy 330 Ω-os előtét lesz.');
+  await expect(page.locator('.ag-msg.a').last()).toContainText('Feljegyeztem');
+  expect(JSON.stringify((reqs[0].body.messages as unknown[])[0])).toContain('Project notes (kept by you and the user');
+  expect(JSON.stringify((reqs[0].body.messages as unknown[])[0])).toContain('villogó LED a GP15');
+  await expect(page.locator('#agBrief')).toHaveValue('Cél: villogó LED a GP15-ön.\n- Előtét: 330 Ω');
+  await expect(page.locator('.ag-tool.ok')).toContainText('Projektjegyzet');
+  await page.evaluate(() => (window as any).pcb.undo());
+  expect(await page.evaluate(() => (window as any).pcb.get().brief)).toBe('Cél: villogó LED a GP15-ön.');
+});
+
+test('hosszú beszélgetés: a korábbi rész összefoglalóra cserélődik, az agent az összefoglalót kapja', async ({ page }) => {
+  await setKey(page);
+  // egy nagyon hosszú, mentett beszélgetés
+  await page.evaluate(() => {
+    const pid = (window as any).pcb.get().id || (() => { const d = (window as any).pcb.get(); d.id = 'proj-hosszu'; (window as any).pcb.load(d); return 'proj-hosszu'; })();
+    const big = 'x'.repeat(320000), now = Date.now();
+    const chat = { id: 'c1', title: 'Hosszú', created: now, updated: now, usage: { in: 0, out: 0 },
+      messages: [{ role: 'user', content: [{ type: 'text', text: big }] }, { role: 'assistant', content: [{ type: 'text', text: 'ok' }] }],
+      entries: [{ k: 'user', text: 'Hosszú' }, { k: 'text', text: 'ok' }] };
+    localStorage.setItem('proofboard.agent.chats.' + pid, JSON.stringify([chat]));
+  });
+  await page.reload();
+  await page.waitForFunction(() => !!(window as any).pcb);
+  await page.click('.right [data-rtab="agent"]');
+  await expect(page.locator('.ag-msg.u')).toHaveText(['Hosszú']);
+  const reqs = await fakeApi(page, [say('Cél: teszt. Döntés: nincs.'), say('Rendben.')]);
+  await ask(page, 'Folytassuk');
+  await expect(page.locator('.ag-msg.a').last()).toContainText('Rendben');
+  await expect(page.locator('.ag-msg.info')).toContainText('összefoglalva');
+  expect(reqs.length).toBe(2);
+  expect(reqs[0].body.tools).toBeUndefined(); // az összefoglaló kérés
+  const m = reqs[1].body.messages as Array<{ content: unknown }>;
+  expect(m.length).toBe(1);
+  expect(JSON.stringify(m[0])).toContain('Summary of the earlier part of this conversation:\\nCél: teszt.');
+  expect(JSON.stringify(m[0])).not.toContain('xxxxxxxxxx');
+});

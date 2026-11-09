@@ -26,6 +26,9 @@ type Raw = Record<string, any>;
 const hole = (x: unknown): Hole => { const a = x as number[]; return [Number(a[0]), Number(a[1])]; };
 
 /** JSON-ból (mentett, régebbi vagy kézzel írt terv) érvényes terv; ismeretlen alkatrésztípusnál hibát dob. A saját alkatrészeket regisztrálja. */
+/** a projektjegyzet legnagyobb hossza (karakter) */
+export const BRIEF_MAX = 4000;
+
 export function normalize(d: unknown): Design {
   if (!d || typeof d !== 'object') throw new Error('nem objektum');
   const r = d as Raw, o = emptyDesign();
@@ -63,6 +66,8 @@ export function normalize(d: unknown): Design {
   };
   o.cuts = normCutList(r.cuts);
   { const ban = normCutList(r.cutBan); if (ban.length) o.cutBan = ban; else delete o.cutBan; }
+  if (typeof r.id === 'string' && /^[\w-]{4,64}$/.test(r.id)) o.id = r.id;
+  if (typeof r.brief === 'string' && r.brief.trim()) o.brief = r.brief.slice(0, BRIEF_MAX);
   { const pg = normProgram(r.program); if (pg && pg.nodes.length) o.program = pg; }
   if (r.signal && typeof r.signal === 'object') {
     const s = r.signal as Raw;

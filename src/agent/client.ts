@@ -142,3 +142,55 @@ export function repairHistory(messages: Message[]): void {
   const uses = last.content.filter((b): b is ToolUseBlock => b.type === 'tool_use');
   if (uses.length) messages.push({ role: 'user', content: uses.map(u => toolResultBlock(u.id, { text: 'Not executed: the task was stopped.', isError: true })) });
 }
+
+/* ---------- Hosszú beszélgetés: méret, rövidítés, összefoglalás ---------- */
+
+/** A beszélgetés becsült mérete tokenben (kb. 3,5 karakter / token; a képek kb. 1600 tokenesek). */
+export function historyTokens(messages: Message[]): number {
+  let chars = 0, imgs = 0;
+  for (const m of messages) {
+    if (typeof m.content === 'string') { chars += m.content.length; continue; }
+    for (const b of m.content) {
+      if (b.type === 'text') chars += b.text.length;
+      else if (b.type === 'tool_use') chars += JSON.stringify(b.input).length + b.name.length;
+      else if (b.type === 'image') imgs++;
+      else if (b.type === 'tool_result') for (const x of b.content) { if (x.type === 'text') chars += x.text.length; else imgs++; }
+    }
+  }
+  return Math.round(chars / 3.5) + imgs * 1600;
+}
+
+/**
+ * Rövidítés: a legutóbbi `keepTurns` felhasználói körnél régebbi eszközeredmények szövege `maxChars`-ra rövidül,
+ * a képek kimaradnak. A beszélgetés szerkezete (eszközhívás – eredmény párok) nem változik.
+ */
+export function pruneHistory(messages: Message[], keepTurns = 2, maxChars = 300): Message[] {
+  const userTurns = messages.map((m, i) => (m.role === 'user' && (typeof m.content === 'string' || m.content.some(b => b.type === 'text')) ? i : -1)).filter(i => i >= 0);
+  const cut = userTurns.length > keepTurns ? userTurns[userTurns.length - keepTurns] : 0;
+  return messages.map((m, i) => {
+    if (i >= cut || typeof m.content === 'string') return m;
+    return { ...m, content: m.content.map(b => b.type !== 'tool_result' ? b : { ...b, content: b.content.filter(x => x.type === 'text').map(x => ({ ...x, text: x.text.length > maxChars ? x.text.slice(0, maxChars) + ' …[shortened]' : x.text })) }) };
+  });
+}
+
+/** Az összefoglalás kérése (a modellnek szól). */
+export const SUMMARY_PROMPT = 'Summarise our conversation so far for your own future reference, in the language we used. Include: the goal, decisions made (parts, values, pins, supply), what has been built on the board, open questions and next steps. Be concise (max ~25 lines). Do not call tools.';
+
+/** A beszélgetés összefoglalója egy modellhívással (eszközök nélkül); hiba esetén `null`. */
+export async function summarizeHistory(o: Pick<RunOpts, 'apiKey' | 'model' | 'system' | 'messages' | 'signal' | 'fetch'>): Promise<string | null> {
+  const f = o.fetch || fetch.bind(globalThis), msgs = pruneHistory(o.messages, 1, 200);
+  const last = msgs[msgs.length - 1];
+  const ask: Block = { type: 'text', text: SUMMARY_PROMPT };
+  const messages: Message[] = last && last.role === 'user' ? [...msgs.slice(0, -1), { role: 'user', content: [...(typeof last.content === 'string' ? [{ type: 'text' as const, text: last.content }] : last.content), ask] }] : [...msgs, { role: 'user', content: [ask] }];
+  try {
+    const res = await f(API_URL, {
+      method: 'POST', signal: o.signal,
+      headers: { 'content-type': 'application/json', 'x-api-key': o.apiKey, 'anthropic-version': API_VERSION, 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: o.model, max_tokens: 1500, system: o.system, messages: compactImages(messages) }),
+    });
+    if (!res.ok) return null;
+    const r = await res.json() as ApiResponse;
+    const t = r.content.filter((b): b is TextBlock => b.type === 'text').map(b => b.text).join('\n').trim();
+    return t || null;
+  } catch { return null; }
+}

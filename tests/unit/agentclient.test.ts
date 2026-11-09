@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { API_URL, errorOf, repairHistory, runAgent, type AgentEvent, type Message } from '../../src/agent/client';
+import { API_URL, errorOf, historyTokens, pruneHistory, repairHistory, runAgent, summarizeHistory, SUMMARY_PROMPT, type AgentEvent, type Message } from '../../src/agent/client';
 import { emptyDesign } from '../../src/engine/design';
 import { engineCtx, runTool, toolSpecs } from '../../src/agent/tools';
 
@@ -90,5 +90,35 @@ describe('agent-ciklus (Messages API)', () => {
     expect(msgs.length).toBe(3);
     expect(JSON.stringify(msgs[2])).toMatch(/"tool_use_id":"a".*"is_error":true/);
     repairHistory(msgs); expect(msgs.length).toBe(3);
+  });
+
+  it('hosszú beszélgetés: méretbecslés, a régi eszközeredmények rövidülnek, a szerkezet marad', () => {
+    const big = 'x'.repeat(5000), img = { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/png' as const, data: 'AAA' } };
+    const turn = (n: number): Message[] => [
+      { role: 'user', content: [{ type: 'text', text: 'kérés ' + n }] },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'u' + n, name: 'get_design', input: {} }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'u' + n, content: [{ type: 'text', text: big }, img] }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'válasz ' + n }] },
+    ];
+    const msgs = [...turn(1), ...turn(2), ...turn(3)];
+    expect(historyTokens(msgs)).toBeGreaterThan(3 * (5000 / 3.5));
+    const p = pruneHistory(msgs, 2, 100);
+    expect(p.length).toBe(msgs.length);
+    const r1 = (p[2].content as Array<{ content: Array<{ type: string; text?: string }> }>)[0].content;
+    expect(r1.map(x => x.type)).toEqual(['text']); // a kép kimaradt
+    expect(r1[0].text!.length).toBeLessThan(150);
+    expect(JSON.stringify(p[6])).toBe(JSON.stringify(msgs[6])); // a legutóbbi két kör érintetlen
+    expect(historyTokens(p)).toBeLessThan(historyTokens(msgs));
+  });
+
+  it('összefoglalás: egy modellhívás eszközök nélkül; hibánál null', async () => {
+    const { f, calls } = fakeApi([text('Cél: villogó LED. Döntés: GP15, 330 Ω.')]);
+    const msgs: Message[] = [{ role: 'user', content: 'x' }, { role: 'assistant', content: [{ type: 'text', text: 'y' }] }];
+    const s = await summarizeHistory({ apiKey: 'k', model: 'm', system: 'S', messages: msgs, fetch: f });
+    expect(s).toBe('Cél: villogó LED. Döntés: GP15, 330 Ω.');
+    expect(calls[0].body.tools).toBeUndefined();
+    expect(JSON.stringify((calls[0].body.messages as Message[]).slice(-1))).toContain(SUMMARY_PROMPT.slice(0, 30));
+    expect(msgs.length).toBe(2); // az eredeti nem változik
+    expect(await summarizeHistory({ apiKey: 'k', model: 'm', system: 'S', messages: msgs, fetch: fakeApi([{ status: 529, body: '' }]).f })).toBeNull();
   });
 });

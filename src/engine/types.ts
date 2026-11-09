@@ -32,6 +32,8 @@ export interface Design {
   auto: { bridges: AutoBridge[]; wires: Wire[]; cuts?: Cut[] };
   cuts?: Cut[];
   /** törölt automatikus vágások helye: az automatikus csíkvágás ide nem tesz újat */ cutBan?: Cut[];
+  /** projektazonosító (az agent-beszélgetések ehhez kötődnek; az első használatkor keletkezik) */ id?: string;
+  /** projektjegyzet: mit építünk, a fontos döntések (az agent minden beszélgetésben megkapja, és frissítheti) */ brief?: string;
   customParts: Record<string, PartDef>;
   notes: Note[];
   gpio: Record<string, string>;

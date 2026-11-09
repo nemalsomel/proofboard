@@ -29,7 +29,7 @@ import * as OPS from './engine/ops';
 import { createLinksPanel } from './ui/links';
 import { createPropsPanel } from './ui/props';
 import { createApi } from './ui/api';
-import { mountAgentPanel, type AgentPanel, type AgentPrefs } from './ui/agentpanel';
+import { mountAgentPanel, type AgentPanel, type AgentPrefs, type StoredChat } from './ui/agentpanel';
 import type { UiState } from './ui/state';
 import type { Bridge, Design, Link, NetPin, PlacedPin, Wire } from './engine/types';
 type AutoWire = Wire & { links?: string[] };
@@ -55,7 +55,7 @@ import { icon, hydrateIcons } from './ui/icons';
 import { type Work, type LayoutId, type LayoutState, type RightTab, LAYOUTS, LAYOUT_DEFAULTS, isLayout, parseStore, stateOf, remember as layRemember, switchTo as laySwitch, resetLayout, isCustom } from './ui/layout';
 import { mountFloatWin, parseWin } from './ui/floatwin';
 import { generateCode, type CodeLang } from './engine/codegen';
-import { emptyDesign, normalize, normCutList, rekeyAgainstLibrary, NOTE_COL } from './engine/design';
+import { emptyDesign, normalize, normCutList, rekeyAgainstLibrary, NOTE_COL, BRIEF_MAX } from './engine/design';
 import { swapMcu as swapMcuOf } from './engine/swap';
 import { presetMacropad, presetRouted } from './engine/presets';
 import { route as routeOf, suggestCuts as suggestCutsOf, manualToAuto as manualToAutoOf, autoCutOn as autoCutOnOf } from './engine/route';
@@ -187,11 +187,13 @@ function hitPart(rf: number,cf: number){return hitPartOf(D,boundsOf,rf,cf);}
 function hitWire(rf: number,cf: number){return hitWireOf(D,rf,cf,ui.coarse?0.5:0.32,stubOf,(w,i)=>wireFull(w,i,false));}
 /* Visszavonás: a terv és a saját könyvtár együtt (a könyvtár szerkesztése is visszavonható). */
 const snap=()=>JSON.stringify({D,L:LIB});
-function restoreSnap(s: string|null){if(s==null)return;const o=JSON.parse(s);if(o&&o.D&&o.L){D=o.D;setLib(o.L);}else D=o;}
+function restoreSnap(s: string|null){if(s==null)return;const id=D&&D.id,o=JSON.parse(s);if(o&&o.D&&o.L){D=o.D;setLib(o.L);}else D=o;if(id&&!D.id)D.id=id;} // a projektazonosító a visszavonáskor is megmarad (az agent-beszélgetések ehhez kötődnek)
 /** Visszavonás és újra egy helyen (ui/history.ts): a változás előtti állapot a terv és a saját könyvtár pillanatképe. */
 const HIST=new History(150,()=>undoUI());
 function pushUndo(){HIST.push(snap());}
-function commit(noRoute?: boolean){queueMicrotask(progRefresh);syncDefs(D.customParts);const bk=JSON.stringify(D.board);if(!noRoute&&D.settings.autoRoute&&D.links.length)route({moved:ui.moved});ui.moved=null;save();if(bk!==ui.lastBoard){ui.lastBoard=bk;resize();boardUI();}recompute();renderLeft();}
+/** az agent panelje (az első megnyitáskor jön létre) */
+let AGP: AgentPanel|null=null;
+function commit(noRoute?: boolean){queueMicrotask(progRefresh);syncDefs(D.customParts);const bk=JSON.stringify(D.board);if(!noRoute&&D.settings.autoRoute&&D.links.length)route({moved:ui.moved});ui.moved=null;save();if(bk!==ui.lastBoard){ui.lastBoard=bk;resize();boardUI();}recompute();renderLeft();if(AGP&&ui.rtab==='agent'&&!AGP.busy()&&D.id!==AGP.project())AGP.render();}
 function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(D));}catch(e){}}
 function sameSec(r1: number,c1: number,r2: number,c2: number){const L=LAY();return L.cell(r1,c1)===L.cell(r2,c2);}
 function addBridge(r1: number,c1: number,r2: number,c2: number){return OPS.addBridge(D,r1,c1,r2,c2);}
@@ -255,7 +257,7 @@ function setSimple(on: boolean,remember=true){on=!!on;document.documentElement.c
   if(on&&ADV_TOOLS.has(ui.tool))setTool('select');
   if(D){renderLib();renderLeft();renderRight();sbUpdate();codeRefresh();}
   if(remember)log(on?tr('Egyszerű mód: a haladó részek rejtve.'):tr('Egyszerű mód kikapcsolva.'));}
-function rtab(name: string,remember=true){if(name==='code'){if(ui.rtab!=='code')ui.rtabBeforeCode=ui.rtab;codeMount();}if(name==='agent')agentMount();ui.rtab=name;
+function rtab(name: string,remember=true){if(name==='code'){if(ui.rtab!=='code')ui.rtabBeforeCode=ui.rtab;codeMount();}if(name==='agent'){agentMount();AGP!.render();}ui.rtab=name;
   $$('[data-rtab]').forEach(b=>{const on=b.dataset.rtab===name;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
   $$('[data-rpane]').forEach(p=>{p.hidden=p.dataset.rpane!==name;});
   $$('[data-rail-rtab]').forEach(b=>b.classList.toggle('on',b.dataset.railRtab===name));
@@ -941,7 +943,6 @@ $('#bBoard').onclick=openBoard;$('#boardInfo').onclick=openBoard;
 
 /* ---------- API ---------- */
 /* ---------- Agent: ui/agentpanel.ts (csevegés), agent/ (eszközök, modellhívás) ---------- */
-let AGP: AgentPanel|null=null;
 const AGENT_KEY='proofboard.agent';
 /** a panel képe a modellnek: a vászon (a felhasználó nézete), legfeljebb 1500 px-re kicsinyítve */
 function boardSnapshot(): string|null{
@@ -956,7 +957,12 @@ function agentMount(){if(AGP)return;
     begin(stop){pushUndo();ui.sel=null;ui.placing=null;ui.drag=null;$('.app').classList.add('agent-busy');$('#agentBar').hidden=false;$('#agentBarStop').onclick=stop;renderLeft();draw();},
     end(changed){if(!changed)HIST.drop();$('.app').classList.remove('agent-busy');$('#agentBar').hidden=true;renderLeft();renderLinks();draw();},
     loadPrefs:()=>{try{return JSON.parse(localStorage.getItem(AGENT_KEY)||sessionStorage.getItem(AGENT_KEY)||'{}') as AgentPrefs;}catch(e){return {};}},
-    savePrefs:(p,remember)=>{try{const j=JSON.stringify(p);if(remember){localStorage.setItem(AGENT_KEY,j);sessionStorage.removeItem(AGENT_KEY);}else{sessionStorage.setItem(AGENT_KEY,j);localStorage.removeItem(AGENT_KEY);}}catch(e){}}});
+    savePrefs:(p,remember)=>{try{const j=JSON.stringify(p);if(remember){localStorage.setItem(AGENT_KEY,j);sessionStorage.removeItem(AGENT_KEY);}else{sessionStorage.setItem(AGENT_KEY,j);localStorage.removeItem(AGENT_KEY);}}catch(e){}},
+    projectId:()=>{if(!D.id){D.id='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);save();}return D.id;},
+    loadChats:pid=>{try{const v=JSON.parse(localStorage.getItem(AGENT_KEY+'.chats.'+pid)||'[]');return Array.isArray(v)?v as StoredChat[]:[];}catch(e){return [];}},
+    saveChats:(pid,list)=>{try{if(list.length)localStorage.setItem(AGENT_KEY+'.chats.'+pid,JSON.stringify(list));else localStorage.removeItem(AGENT_KEY+'.chats.'+pid);return true;}catch(e){return false;}},
+    brief:()=>D.brief||'',
+    setBrief:t=>{pushUndo();if(t)D.brief=t.slice(0,BRIEF_MAX);else delete D.brief;commit(true);}});
 }
 /* ---------- API: ui/api.ts (window.pcb) ---------- */
 (window as unknown as {pcb: unknown}).pcb=createApi({ui,D:()=>D,setD:d=>{D=d;},A0:()=>A0,SIM:()=>SIM,issues:()=>ISSUES,lib:()=>LIB,

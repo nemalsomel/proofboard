@@ -1,10 +1,12 @@
 /**
  * Agent csevegőpanel (jobb sáv, „Agent” fül): saját API-kulcs és modell, Megbeszélés / Megvalósítás mód,
- * üzenetek, az eszközlépések sorai, bevitel, Küldés / Leállítás, új beszélgetés. A modellhívások ciklusa az
+ * üzenetek, az eszközlépések sorai, bevitel, Küldés / Leállítás, a projekt beszélgetései (mentve, listából
+ * megnyithatók), a projektjegyzet szerkesztője. Hosszú beszélgetésnél a régi eszközeredmények rövidülnek, majd a
+ * korábbi rész összefoglalóra cserélődik, hogy a kérések ne dráguljanak. A modellhívások ciklusa az
  * `agent/client.ts`, az eszközök az `agent/tools.ts`; a gazda (`app.ts`) adja az élő terv környezetét, a
  * visszavonást (egy feladat = egy lépés) és a „vezérlés alatt” jelzést (`AgentHost`).
  */
-import { DEFAULT_MODEL, MODELS, repairHistory, runAgent, type AgentError, type Block, type Message } from '../agent/client';
+import { compactImages, DEFAULT_MODEL, historyTokens, MODELS, pruneHistory, repairHistory, runAgent, summarizeHistory, type AgentError, type Block, type Message } from '../agent/client';
 import { systemPrompt, type AgentMode } from '../agent/prompt';
 import { runTool, summarize, TOOLS, toolSpecs, type ToolCtx, type ToolResult } from '../agent/tools';
 import { N_, t as tr } from '../i18n/i18n';
@@ -21,6 +23,9 @@ export interface AgentHost {
   /** feladat kezdete: visszavonási pont, „Agent dolgozik” jelzés, kézi szerkesztés szünetel */ begin(stop: () => void): void;
   /** feladat vége: ha nem változott a terv, a visszavonási pont eldobódik */ end(changed: boolean): void;
   loadPrefs(): AgentPrefs; savePrefs(p: AgentPrefs, remember: boolean): void;
+  /** a projekt azonosítója (a beszélgetések ehhez kötődnek; ha a tervnek még nincs, kap) */ projectId(): string;
+  /** a projekt mentett beszélgetései, és a mentésük (sikertelen mentésnél false) */ loadChats(pid: string): StoredChat[]; saveChats(pid: string, list: StoredChat[]): boolean;
+  /** a projektjegyzet (a terv része) és a módosítása (visszavonható) */ brief(): string; setBrief(t: string): void;
   /** tesztben cserélhető hálózati hívás */ fetch?: typeof fetch;
 }
 
@@ -29,7 +34,7 @@ const TOOL_HU: Record<string, string> = {
   get_design: N_('Terv áttekintése'), list_part_types: N_('Alkatrészek keresése'), describe_part_type: N_('Alkatrész adatai'), get_part: N_('Alkatrész lábai'),
   place_part: N_('Lerakás'), move_part: N_('Mozgatás'), set_params: N_('Paraméterek'), remove_parts: N_('Törlés'), connect: N_('Kapcsolat'), disconnect: N_('Kapcsolat törlése'),
   route: N_('Útvonalak'), get_problems: N_('Problémák'), simulate: N_('Szimuláció'), set_gpio_mode: N_('GPIO mód'), add_note: N_('Jegyzet'), generate_code: N_('Kód'),
-  get_board_image: N_('Panelkép'), list_examples: N_('Példák'), load_example: N_('Példa betöltése'), new_design: N_('Új terv'),
+  get_board_image: N_('Panelkép'), list_examples: N_('Példák'), load_example: N_('Példa betöltése'), new_design: N_('Új terv'), set_project_notes: N_('Projektjegyzet'),
 };
 
 const esc = (s: unknown) => String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]!));
@@ -88,14 +93,32 @@ function errorText(e: AgentError): string {
   }
 }
 
-type Entry =
+/** Egy mentett beszélgetés: a modellnek szóló előzmények (képek nélkül), a felület sorai, az összefoglaló. */
+export interface StoredChat {
+  id: string; title: string; created: number; updated: number;
+  messages: Message[]; entries: Entry[]; usage: { in: number; out: number };
+  /** a korábbi, összefoglalóra cserélt rész */ summary?: string;
+}
+/** projektenként ennyi beszélgetés marad meg (a legrégebbiek törlődnek) */
+export const MAX_CHATS = 20;
+/** e fölött a régi eszközeredmények rövidülnek, illetve a korábbi rész összefoglalóra cserélődik (becsült token) */
+export const PRUNE_AT = 40000, SUMMARIZE_AT = 80000;
+
+/** Mentésre: a képek kimaradnak, a hosszú eszközeredmények rövidülnek. */
+export function chatForStorage(c: StoredChat): StoredChat {
+  const strip = (m: Message): Message => (typeof m.content === 'string' ? m : { ...m, content: m.content.map(b => (b.type === 'tool_result' ? { ...b, content: b.content.map(x => (x.type === 'image' ? { type: 'text' as const, text: '[board image]' } : x)) } : b)) });
+  return { ...c, messages: compactImages(c.messages).map(strip), entries: c.entries.map(e => (e.k === 'tool' && e.result ? { ...e, result: { ...e.result, image: undefined, text: e.result.text.length > 3000 ? e.result.text.slice(0, 3000) + '…' : e.result.text } } : e)) };
+}
+
+export type Entry =
   | { k: 'user'; text: string }
   | { k: 'text'; text: string }
   | { k: 'tool'; id: string; name: string; input: unknown; result?: ToolResult }
   | { k: 'error'; text: string }
   | { k: 'info'; text: string };
 
-export interface AgentPanel { render(): void; busy(): boolean; stop(): void; send(text: string): Promise<void>; entries(): number }
+export interface AgentPanel { render(): void; busy(): boolean; stop(): void; send(text: string): Promise<void>; entries(): number;
+  /** a megnyitott beszélgetések projektje (ha a terv azonosítója ettől eltér, a panel rajzolása átvált) */ project(): string }
 
 export function mountAgentPanel(H: AgentHost): AgentPanel {
   const root = H.root;
@@ -103,6 +126,7 @@ export function mountAgentPanel(H: AgentHost): AgentPanel {
     <div class="ag-head">
       <div class="grp seg" id="agMode" role="group"><button class="btn" data-mode="discuss"></button><button class="btn" data-mode="build"></button></div>
       <span class="sp"></span>
+      <button class="btn icon ghost" id="agHist" aria-expanded="false">${icon('list')}</button>
       <button class="btn icon ghost" id="agNew">${icon('plus')}</button>
       <button class="btn icon ghost" id="agCfg">${icon('key')}</button>
     </div>
@@ -115,6 +139,9 @@ export function mountAgentPanel(H: AgentHost): AgentPanel {
       <p class="help" id="agKeyHelp"></p>
       <div class="row"><button class="btn primary" id="agSave" type="submit"></button><button class="btn ghost" id="agForget" type="button"></button></div>
     </form>
+    <div class="ag-hist" id="agHistList" hidden></div>
+    <details class="ag-brief" id="agBriefBox"><summary><span id="agBriefL"></span> <span class="small muted" id="agBriefN"></span></summary>
+      <textarea id="agBrief" rows="5" spellcheck="true"></textarea><p class="help" id="agBriefHelp"></p></details>
     <div class="ag-log" id="agLog" aria-live="polite"></div>
     <div class="ag-input">
       <textarea id="agText" rows="3"></textarea>
@@ -126,6 +153,24 @@ export function mountAgentPanel(H: AgentHost): AgentPanel {
   const $ = <T extends HTMLElement = HTMLElement>(s: string) => root.querySelector<T>(s)!;
   let prefs: AgentPrefs = H.loadPrefs(), remember = true;
   let messages: Message[] = [], entries: Entry[] = [], running: AbortController | null = null, lastKey = '', usage = { in: 0, out: 0 };
+  /** a megnyitott beszélgetés (mentéskor) és a projekt, amelyhez tartozik */
+  let chatId = '', created = 0, summary: string | undefined, pid = '';
+  const newId = () => 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  function open(c: StoredChat | null) {
+    messages = c ? c.messages : []; entries = c ? c.entries : []; usage = c ? { ...c.usage } : { in: 0, out: 0 }; summary = c ? c.summary : undefined;
+    chatId = c ? c.id : ''; created = c ? c.created : 0; lastKey = '';
+  }
+  /** a projekt beszélgetései: a legutóbbi nyílik meg */
+  function switchProject(p: string) { pid = p; const list = H.loadChats(p).sort((a, b) => b.updated - a.updated); open(list[0] || null); }
+  /** a beszélgetés mentése (ha van mit) */
+  function persist() {
+    if (!entries.length) return;
+    if (!chatId) { chatId = newId(); created = Date.now(); }
+    const first = entries.find(e => e.k === 'user') as { text: string } | undefined, title = (first ? first.text : '…').replace(/\s+/g, ' ').slice(0, 70);
+    const c = chatForStorage({ id: chatId, title, created, updated: Date.now(), messages, entries, usage, ...(summary ? { summary } : {}) });
+    let list = [c, ...H.loadChats(pid).filter(x => x.id !== chatId)].sort((a, b) => b.updated - a.updated).slice(0, MAX_CHATS);
+    while (!H.saveChats(pid, list) && list.length > 1) list = list.slice(0, -1); // betelt a tárhely: a legrégebbiek mennek
+  }
   const mode = (): AgentMode => prefs.mode || 'build';
   const model = () => prefs.model || DEFAULT_MODEL;
 
@@ -134,7 +179,10 @@ export function mountAgentPanel(H: AgentHost): AgentPanel {
     $('#agMode').setAttribute('aria-label', tr('Agent mód'));
     $('[data-mode="discuss"]').textContent = tr('Megbeszélés'); $('[data-mode="discuss"]').title = tr('Megbeszélés: az agent olvassa és elemzi a tervet, javasol, de nem módosít');
     $('[data-mode="build"]').textContent = tr('Megvalósítás'); $('[data-mode="build"]').title = tr('Megvalósítás: az agent módosíthatja a tervet (egy feladat egy lépésben visszavonható)');
-    for (const [id, l] of [['#agNew', tr('Új beszélgetés')], ['#agCfg', tr('API-kulcs és modell')]]) { $(id).title = l; $(id).setAttribute('aria-label', l); }
+    for (const [id, l] of [['#agNew', tr('Új beszélgetés')], ['#agCfg', tr('API-kulcs és modell')], ['#agHist', tr('Korábbi beszélgetések')]]) { $(id).title = l; $(id).setAttribute('aria-label', l); }
+    $('#agBriefL').textContent = tr('Projektjegyzet');
+    $('#agBrief').setAttribute('placeholder', tr('Mit építünk, és mire jutottunk? Pl. „Motorvezérlő ESP32-C3-mal, 1 cellás akkuról; DRV8833 meghajtó; IN1 = GPIO4, IN2 = GPIO5.”'));
+    $('#agBriefHelp').textContent = tr('A terv része: az agent minden beszélgetés elején megkapja, és a fontos döntéseket ide jegyzi. Te is szerkesztheted.');
     $('#agKeyL').textContent = tr('Anthropic API-kulcs'); $('#agModelL').textContent = tr('Modell'); $('#agRememberL').textContent = tr('Megjegyzés ebben a böngészőben');
     $('#agKeyHelp').innerHTML = tr('A kulcs csak ebben a böngészőben marad; a kérések közvetlenül az Anthropic API-hoz mennek, a használat díját a saját fiókod fizeti. Kulcsot a {x} oldalon kaphatsz.', { x: '<a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>' });
     $('#agSave').textContent = tr('Mentés'); $('#agForget').textContent = tr('Kulcs törlése');
@@ -150,14 +198,25 @@ export function mountAgentPanel(H: AgentHost): AgentPanel {
     return `<details class="ag-tool ${st}"><summary>${icon(st === 'err' ? 'warn' : st === 'ok' ? 'check' : 'pulse')}<b>${esc(tr(TOOL_HU[e.name] || e.name))}</b> <span class="muted">${esc(detail)}</span></summary>${r ? `<pre>${esc(r.text.length > 4000 ? r.text.slice(0, 4000) + '…' : r.text)}</pre>` : ''}</details>${r && r.isError ? `<div class="ag-terr small">${esc(first)}</div>` : ''}`;
   }
 
+  function histHtml(): string {
+    const list = H.loadChats(pid).sort((a, b) => b.updated - a.updated);
+    if (!list.length) return `<div class="small muted">${tr('Ehhez a projekthez még nincs mentett beszélgetés.')}</div>`;
+    const when = (t: number) => new Date(t).toLocaleString(H.lang() === 'hu' ? 'hu-HU' : 'en-GB', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return list.map(c => `<div class="ag-hrow${c.id === chatId ? ' on' : ''}"><button class="ag-hopen" data-chat="${c.id}"><span class="t">${esc(c.title)}</span><span class="small muted">${when(c.updated)} · ${tr('{n} üzenet', { n: c.entries.filter(e => e.k === 'user').length })}</span></button><button class="btn icon ghost" data-chatdel="${c.id}" title="${esc(tr('Beszélgetés törlése'))}" aria-label="${esc(tr('Beszélgetés törlése'))}">${icon('trash')}</button></div>`).join('');
+  }
+
   function render() {
     relabel();
+    { const p = H.projectId(); if (p !== pid && !running) switchProject(p); } // másik terv (betöltés, példa): annak a beszélgetései
+    const hl = $('#agHistList'); if (!hl.hidden) hl.innerHTML = histHtml();
+    { const b = H.brief(), ta = $<HTMLTextAreaElement>('#agBrief'); if (document.activeElement !== ta) ta.value = b; $('#agBriefN').textContent = b ? tr('{n} sor', { n: b.split('\n').length }) : tr('üres'); }
     const hasKey = !!prefs.key, busy = !!running;
     $('#agSetup').hidden = hasKey && !root.classList.contains('cfg');
     if (!$('#agSetup').hidden) { $<HTMLInputElement>('#agKey').value = prefs.key || ''; $<HTMLSelectElement>('#agModel').value = model(); $<HTMLInputElement>('#agRemember').checked = remember; $('#agForget').hidden = !prefs.key; }
     root.querySelectorAll<HTMLElement>('[data-mode]').forEach(b => { const on = b.dataset.mode === mode(); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); (b as HTMLButtonElement).disabled = busy; });
     $<HTMLTextAreaElement>('#agText').disabled = !hasKey; $<HTMLButtonElement>('#agSend').disabled = !hasKey || busy;
-    $('#agSend').hidden = busy; $('#agStop').hidden = !busy; $<HTMLButtonElement>('#agNew').disabled = busy;
+    $('#agSend').hidden = busy; $('#agStop').hidden = !busy; $<HTMLButtonElement>('#agNew').disabled = busy; $<HTMLButtonElement>('#agHist').disabled = busy;
+    $<HTMLTextAreaElement>('#agBrief').disabled = busy;
     const log = $('#agLog');
     log.innerHTML = entries.length ? entries.map((e, idx) =>
       e.k === 'user' ? `<div class="ag-msg u">${esc(e.text).replace(/\n/g, '<br>')}</div>`
@@ -180,18 +239,25 @@ export function mountAgentPanel(H: AgentHost): AgentPanel {
   async function send(text: string) {
     text = text.trim(); if (!text || running || !prefs.key) return;
     repairHistory(messages);
+    const ac = new AbortController(); running = ac;
+    let changed = false;
+    H.begin(() => ac.abort());
+    entries.push({ k: 'user', text }); render();
+    // hosszú beszélgetés: előbb a régi eszközeredmények rövidülnek, ha az sem elég, a korábbi rész összefoglalóra cserélődik
+    if (historyTokens(messages) > PRUNE_AT) messages = pruneHistory(messages);
+    if (historyTokens(messages) > SUMMARIZE_AT) {
+      const s = await summarizeHistory({ apiKey: prefs.key, model: model(), system: systemPrompt({ mode: mode(), lang: H.lang() }), messages, signal: ac.signal, fetch: H.fetch });
+      if (s) { summary = (summary ? summary + '\n\n' : '') + s; messages = []; lastKey = ''; entries.push({ k: 'info', text: tr('A beszélgetés korábbi része összefoglalva (az agent az összefoglalót látja), hogy a kérések ne dráguljanak.') }); render(); }
+    }
     // a terv állapota: az elején, és ha a felhasználó közben módosított
     const key = H.designKey(), blocks: Block[] = [];
+    if (!messages.length && summary) blocks.push({ type: 'text', text: `Summary of the earlier part of this conversation:\n${summary}` });
     if (!messages.length || key !== lastKey) blocks.push({ type: 'text', text: `${messages.length ? 'The design was changed by the user. Current design:' : 'Current design:'}\n${summarize(H.ctx().D(), H.ctx().tr)}` });
     blocks.push({ type: 'text', text });
     const last = messages[messages.length - 1];
     if (last && last.role === 'user' && typeof last.content !== 'string' && !last.content.some(b => b.type === 'tool_result')) last.content.push(...blocks); // sikertelen előző kérés: összevonás
     else messages.push({ role: 'user', content: blocks });
-    entries.push({ k: 'user', text });
-    const ac = new AbortController(); running = ac;
-    let changed = false;
-    H.begin(() => ac.abort());
-    render();
+    persist();
     await runAgent({
       apiKey: prefs.key, model: model(), system: systemPrompt({ mode: mode(), lang: H.lang() }), tools: toolSpecs('build'), messages, signal: ac.signal, fetch: H.fetch,
       exec, onEvent(e) {
@@ -206,13 +272,23 @@ export function mountAgentPanel(H: AgentHost): AgentPanel {
     running = null; repairHistory(messages); lastKey = H.designKey();
     H.end(changed);
     if (changed) entries.push({ k: 'info', text: tr('A változtatások egy lépésben visszavonhatók (Ctrl+Z).') });
+    { const np = H.projectId(); if (np !== pid) { H.saveChats(pid, H.loadChats(pid).filter(c => c.id !== chatId)); pid = np; } } // az agent új tervet nyitott: a beszélgetés vele megy
+    persist();
     render();
   }
 
   /* események */
   root.querySelector('#agMode')!.addEventListener('click', e => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-mode]'); if (!b || running) return; prefs = { ...prefs, mode: b.dataset.mode as AgentMode }; H.savePrefs(prefs, remember); render(); });
   $('#agCfg').onclick = () => { root.classList.toggle('cfg'); render(); if (!$('#agSetup').hidden) $('#agKey').focus(); };
-  $('#agNew').onclick = () => { if (running) return; messages = []; entries = []; usage = { in: 0, out: 0 }; lastKey = ''; render(); $('#agText').focus(); };
+  $('#agNew').onclick = () => { if (running) return; persist(); open(null); $('#agHistList').hidden = true; $('#agHist').setAttribute('aria-expanded', 'false'); render(); $('#agText').focus(); };
+  $('#agHist').onclick = () => { if (running) return; const h = $('#agHistList'); h.hidden = !h.hidden; $('#agHist').setAttribute('aria-expanded', String(!h.hidden)); render(); };
+  $('#agHistList').addEventListener('click', e => {
+    const t = e.target as HTMLElement, o = t.closest<HTMLElement>('[data-chat]'), d = t.closest<HTMLElement>('[data-chatdel]');
+    if (running) return;
+    if (d) { const id = d.dataset.chatdel!; H.saveChats(pid, H.loadChats(pid).filter(c => c.id !== id)); if (id === chatId) open(null); render(); return; }
+    if (o) { persist(); open(H.loadChats(pid).find(c => c.id === o.dataset.chat) || null); $('#agHistList').hidden = true; $('#agHist').setAttribute('aria-expanded', 'false'); render(); }
+  });
+  $('#agBrief').addEventListener('change', () => { const v = $<HTMLTextAreaElement>('#agBrief').value.trim(); if (v !== H.brief()) { H.setBrief(v); render(); } });
   $('#agSetup').addEventListener('submit', e => {
     e.preventDefault(); const k = $<HTMLInputElement>('#agKey').value.trim(); remember = $<HTMLInputElement>('#agRemember').checked;
     prefs = { ...prefs, key: k || undefined, model: $<HTMLSelectElement>('#agModel').value }; H.savePrefs(prefs, remember); root.classList.remove('cfg'); render(); if (k) $('#agText').focus();
@@ -235,5 +311,5 @@ export function mountAgentPanel(H: AgentHost): AgentPanel {
   $('#agSend').onclick = () => { const v = ta.value; ta.value = ''; void send(v); };
   $('#agStop').onclick = () => { if (running) running.abort(); };
   render();
-  return { render, busy: () => !!running, stop: () => { if (running) running.abort(); }, send, entries: () => entries.length };
+  return { render, busy: () => !!running, stop: () => { if (running) running.abort(); }, send, entries: () => entries.length, project: () => pid };
 }

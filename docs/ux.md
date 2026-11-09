@@ -71,3 +71,6 @@ mi került a felületre, hova, és milyen kérdést hagyott nyitva. A felülvizs
 - **Visszajelzés:** az eszközlépések sorai a csevegésben (✓ / hiba, lenyitva a részletek), a terv élőben változik; futás közben a panel fölött „Az agent dolgozik…” sáv Leállítás gombbal, a panel kerete kiemelt, a kézi szerkesztés szünetel, Esc leállít.
 - **Visszavonás:** egy feladat egy lépés (Ctrl+Z); ha a terv nem változott, nincs visszavonási lépés.
 - **Hibák:** érvénytelen kulcs, egyenleg, sebességkorlát, túlterhelés, hálózat – érthető szöveggel; a beszélgetés utána folytatható.
+- **Beszélgetések:** projektenként (a terv azonosítója szerint) mentve, a böngészőben; újratöltéskor a legutóbbi nyílik meg, a „Korábbi beszélgetések” listából megnyitható vagy törölhető (projektenként legfeljebb 20; képek nélkül). Másik terv betöltésekor annak a beszélgetései jönnek.
+- **Hosszú beszélgetés:** a régi eszközeredmények rövidülnek, majd a korábbi rész egy modellhívással összefoglalóra cserélődik (megjegyzés a csevegésben), hogy a kérések ne dráguljanak.
+- **Projektjegyzet:** a terv része (vele mentődik, exportálódik); a panel tetején szerkeszthető, az agent minden beszélgetés elején megkapja, és a `set_project_notes` eszközzel frissíti (a felhasználó egyetértésével). Visszavonható.

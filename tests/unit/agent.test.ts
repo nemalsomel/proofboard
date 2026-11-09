@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptyDesign } from '../../src/engine/design';
+import { emptyDesign, normalize } from '../../src/engine/design';
 import { engineCtx, partOf, pinOf, runTool, summarize, toolSpecs, TOOLS } from '../../src/agent/tools';
 import { systemPrompt } from '../../src/agent/prompt';
 
@@ -128,5 +128,20 @@ describe('agent-eszközök', () => {
     expect(d).toMatch(/Mode: Discuss/); expect(d).toMatch(/Reply in Hungarian/); expect(d).toMatch(/Board: X/);
     const b = systemPrompt({ mode: 'build', lang: 'en' });
     expect(b).toMatch(/Mode: Build/); expect(b).toMatch(/ask for confirmation/); expect(b).toMatch(/Reply in English/);
+  });
+
+  it('projektjegyzet: az eszköz beírja, az összefoglaló elején látszik, mindkét módban használható; a terv megőrzi', async () => {
+    const ctx = engineCtx(emptyDesign());
+    expect(summarize(ctx.D())).toMatch(/^Project notes: none yet/);
+    const r = await call(ctx, 'set_project_notes', { text: 'Cél: motorvezérlő ESP32-C3-mal.\n- Táp: 1S Li-ion' });
+    expect(r.changed).toBe(true);
+    expect(ctx.D().brief).toBe('Cél: motorvezérlő ESP32-C3-mal.\n- Táp: 1S Li-ion');
+    expect(summarize(ctx.D())).toMatch(/^Project notes .*\nCél: motorvezérlő/);
+    expect(TOOLS.find(t => t.name === 'set_project_notes')!.mutates).toBe(false);
+    const n = normalize(JSON.parse(JSON.stringify({ ...ctx.D(), id: 'proj-1234' })));
+    expect([n.id, n.brief]).toEqual(['proj-1234', ctx.D().brief]);
+    expect(normalize({ ...emptyDesign(), id: 'rossz id!', brief: '  ' }).id).toBeUndefined();
+    await call(ctx, 'set_project_notes', { text: '' });
+    expect(ctx.D().brief).toBeUndefined();
   });
 });

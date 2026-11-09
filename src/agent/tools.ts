@@ -12,7 +12,7 @@ import { matchPart } from '../core/library';
 import { fmt, t as translate, type Tr } from '../i18n/i18n';
 import { checkAll, type Issue } from '../engine/check';
 import { generateCode, type CodeLang } from '../engine/codegen';
-import { emptyDesign, normalize } from '../engine/design';
+import { BRIEF_MAX, emptyDesign, normalize } from '../engine/design';
 import { DEFS, hasPress, isMcu, isOff, penv } from '../engine/defs';
 import { placedPins, xf } from '../engine/geometry';
 import { simulateFor } from '../engine/headless';
@@ -158,6 +158,7 @@ export function analyzeDesign(D: Design, tr: Tr = fmt): Analysis {
 export function summarize(D: Design, tr: Tr = fmt): string {
   const { issues, states } = analyzeDesign(D, tr), b = D.board, L: string[] = [];
   const kind = b.sec >= b.rows ? 'full-length vertical strips (stripboard)' : b.sec <= 1 ? 'isolated pads (dot grid, no strips)' : `vertical strips cut into sections of ${b.sec} rows`;
+  L.push(D.brief ? `Project notes (kept by you and the user; update with set_project_notes):\n${D.brief}` : 'Project notes: none yet (record the goal and key decisions with set_project_notes once agreed).');
   L.push(`Board: ${b.rows} rows × ${b.cols} columns, ${kind}. Holes are (row, col), 0-based; a strip is one column.`);
   L.push(`Settings: auto-routing ${D.settings.autoRoute ? 'on' : 'off'}, automatic strip cuts ${D.settings.autoCut === false ? 'off' : 'on'}.`);
   if (!D.parts.length) L.push('Parts: none.');
@@ -454,6 +455,16 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: 'set_project_notes', mutates: false,
+    description: 'Replace the project notes: a short, durable description of what is being built and the key decisions (supply voltage, controller, chosen parts and values, pin assignments, open questions). It is saved with the design and given to you at the start of every conversation. Keep it under ~20 lines, plain text or simple markdown; rewrite it fully each time (it is not appended). Update it when the user agrees on something important. Allowed in both modes.',
+    input_schema: S.obj({ text: S.str('the complete new notes') }, ['text']),
+    run(ctx, i) {
+      const D = ctx.D(), t = str(i.text).trim().slice(0, BRIEF_MAX);
+      if (t) D.brief = t; else delete D.brief;
+      ctx.commit(); return ok(t ? `Project notes saved (${t.split('\n').length} lines).` : 'Project notes cleared.', true);
+    },
+  },
+  {
     name: 'list_examples', mutates: false,
     description: 'List the built-in example designs (id, title, description).',
     input_schema: S.obj({}),
@@ -481,7 +492,7 @@ export const TOOLS: ToolDef[] = [
 export async function runTool(ctx: ToolCtx, name: string, input: unknown): Promise<ToolResult> {
   const t = TOOLS.find(x => x.name === name); if (!t) return err(`Unknown tool "${name}".`);
   const inp = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
-  for (const k of t.input_schema.required || []) if (inp[k] == null || inp[k] === '') return err(`Missing required input "${k}".`);
+  for (const k of t.input_schema.required || []) if (inp[k] == null) return err(`Missing required input "${k}".`);
   try { return await t.run(ctx, inp); } catch (e) { return err(`Tool failed: ${(e as Error).message}`); }
 }
 
