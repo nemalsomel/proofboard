@@ -1,6 +1,7 @@
 name: proofboard-mcp kiadás (npm)
 
-# Indítás: `git tag mcp-v0.1.1 && git push origin mcp-v0.1.1` (a verzió egyezzen az mcp/package.json-nal).
+# Indítás: az mcp/package.json verziójának emelése után `git tag mcp-vX.Y.Z` + push (a tag egyezzen a verzióval),
+# vagy az Actions fülön „Run workflow” (ekkor a verzió az mcp/package.json-ból).
 # Token nélkül, npm Trusted Publishing (OIDC) – egyszeri beállítás az npmjs.com-on: a proofboard-mcp csomag
 # Settings › Trusted Publisher › GitHub Actions: nemalsomel / proofboard, munkafolyamat: mcp-publish.yml.
 # (Az első kiadás kézzel, 2FA-val: `npm run build:mcp && cd mcp && npm publish --access public`.)
