@@ -360,6 +360,8 @@ export const EN: Readonly<Record<string, string>> = {
   "source": "source",
   "anód": "anode",
   "katód": "cathode",
+  "anód +": "anode +",
+  "katód −": "cathode −",
   "tekercs": "coil",
   "töltés": "charge",
   "ellenállás": "resistor",

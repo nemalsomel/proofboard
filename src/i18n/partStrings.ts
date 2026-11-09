@@ -14,6 +14,9 @@ export function partStrings(defs: Readonly<Record<string, PartDef>>): string[] {
       for (const o of (p as { options?: Array<{ label?: string }> }).options || []) add(o.label);
     }
     for (const c of d.controls || []) add((c as { label?: string }).label);
+    // lábnevek: csak a szavakat tartalmazók (anód, katód…), a jelölések (GP15, VCC, 1Qn) nem fordulnak
+    for (const q of d.pins || []) { const n = (q as { name?: string }).name; if (typeof n === 'string' && /[a-záéíóöőúüű]{3,}/.test(n)) add(n); }
+    for (const v of Object.values(d.pinTable || {})) if (/[a-záéíóöőúüű]{3,}/.test(v[0])) add(v[0]);
     const m = (d.meta || {}) as { help?: string; pinNotes?: Record<string, string> };
     add(m.help);
     for (const v of Object.values(m.pinNotes || {})) add(v);

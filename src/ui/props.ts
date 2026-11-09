@@ -42,7 +42,7 @@ export function pinsHtml(rows: PinRow[], open: boolean, state: Map<string, LinkS
       : r.link ? `<span class="muted">${tr('kapcsolat')}${(state.get(r.link.id) || { ok: false }).ok ? ', ' + tr('bekötve') : `, <span class="c-err">${tr('nincs bekötve')}</span>`}</span>`
         : r.net.length ? `<span class="muted" title="${esc(r.net.join(', '))}">${tr('háló')}: ${esc(r.net.slice(0, 3).join(', '))}${r.net.length > 3 ? ` +${r.net.length - 3}` : ''}</span>`
           : `<span class="c-warn">${tr('lebeg (sehova sincs kötve)')}</span>`;
-    return `<div class="pin${r.floating && r.on ? ' float' : ''}"><div class="pin-n"><b>${esc(r.name)}</b>${ROLE_HU[r.role] ? `<span class="muted small"> ${esc(tr(ROLE_HU[r.role]))}</span>` : ''}</div>${select(r)}<div class="pin-s small">${st}</div></div>`;
+    return `<div class="pin${r.floating && r.on ? ' float' : ''}"><div class="pin-n"><b>${esc(tr(r.name))}</b>${ROLE_HU[r.role] ? `<span class="muted small"> ${esc(tr(ROLE_HU[r.role]))}</span>` : ''}</div>${select(r)}<div class="pin-s small">${st}</div></div>`;
   }).join('')}</div></details>`;
 }
 
