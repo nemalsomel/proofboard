@@ -89,3 +89,18 @@ test('a „dolgozik” sáv Leválasztás gombja bontja a kapcsolatot', async ({
   await expect.poll(() => S.connected()).toBe(false);
   expect(await parts(page)).toEqual(['R1']); // a már megtett lépés marad (visszavonható)
 });
+
+test('saját alkatrész a Claude-tól: a könyvtárba és a tervbe kerül, lerakható', async ({ page }) => {
+  await connect(page);
+  const d = await S.call('get_part_definition', { type: 'res' });
+  const def = JSON.parse(d.text.slice(d.text.indexOf('\n') + 1));
+  def.name = 'Álló ellenállás';
+  const r = await S.call('save_custom_part', { definition: def });
+  expect(r.isError, r.text).toBeFalsy();
+  const key = /custom part "([^"]+)"/.exec(r.text)![1];
+  expect(await page.evaluate(k => Object.keys((window as any).pcb.library()).includes(k), key)).toBe(true);
+  expect(await page.evaluate(k => k in (window as any).pcb.get().customParts, key)).toBe(true);
+  await expect(page.locator('#lib')).toContainText('Álló ellenállás');
+  expect((await S.call('place_part', { type: key, row: 10, col: 10 })).isError).toBeFalsy();
+  expect(await parts(page)).toEqual(['R1']);
+});

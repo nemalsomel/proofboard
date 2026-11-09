@@ -51,4 +51,6 @@ The app connects only when you press *Connect* (or enable auto-connect), and you
 `bridge_status`, `open_design_file`, `save_design_file`, and the Proofboard design tools: `get_design`, `list_part_types`,
 `describe_part_type`, `get_part`, `place_part`, `move_part`, `set_params`, `remove_parts`, `connect`, `disconnect`, `route`,
 `get_problems`, `simulate`, `set_gpio_mode`, `add_note`, `generate_code`, `get_board_image` (live only), `set_project_notes`,
-`plan_compaction`, `compact_layout`, `set_fixed`, `list_examples` / `load_example` (live only), `new_design`.
+`plan_compaction`, `compact_layout`, `set_fixed`, `get_part_definition`, `save_custom_part` (your own part types; in the app they go to
+your part library), `list_examples` / `load_example` (live only), `new_design`. When the app is connected, it sends its own tool list,
+so a newer app version brings new tools without reinstalling the server.

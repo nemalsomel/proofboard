@@ -1481,4 +1481,6 @@ export const EN: Readonly<Record<string, string>> = {
   "Ehhez Node.js 18 vagy újabb kell; a fájl után a Claude-ot újra kell indítani.": "Requires Node.js 18 or newer; restart Claude after editing the file.",
   "Terminálban (Node.js 18 vagy újabb kell hozzá):": "In a terminal (requires Node.js 18 or newer):",
   "A szerver csak a saját gépeden figyel (127.0.0.1), és csak a Proofboard oldaláról fogad kapcsolatot.": "The server only listens on your own computer (127.0.0.1) and only accepts connections from the Proofboard page.",
+  "Alkatrészleírás": "Part definition",
+  "Saját alkatrész mentése": "Save custom part",
 };

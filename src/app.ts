@@ -992,7 +992,10 @@ function boardSnapshot(): string|null{
 }
 /** Az agent és az MCP-híd eszközeinek környezete: az élő terv. */
 function toolCtx(): ToolCtx{return {D:()=>D,setD:d=>{if(ui.sim)setSim(false);D=normalize(d);syncDefs(D.customParts);ui.sel=null;ui.selLink=null;},commit:()=>commit(),tr,snapshot:boardSnapshot,
-  examples:()=>EXAMPLES.map(e=>({id:e.id,title:tr(e.title),desc:tr(e.desc)})),loadExample:id=>{const ok=loadExample(id);if(ok)HIST.drop();return ok;}};} // a példa saját visszavonási lépése helyett a feladaté marad
+  examples:()=>EXAMPLES.map(e=>({id:e.id,title:tr(e.title),desc:tr(e.desc)})),loadExample:id=>{const ok=loadExample(id);if(ok)HIST.drop();return ok;}, // a példa saját visszavonási lépése helyett a feladaté marad
+  library:()=>LIB,
+  /** mint az Alkatrész-szerkesztő mentése (könyvtár + terv), de visszavonási pont nélkül: a feladaté/munkameneté számít */
+  saveCustomPart:(t,def)=>{setLib({...LIB,[t]:def});saveLib();D.customParts={...D.customParts,[t]:def};renderLib();}};}
 /** „Dolgozik” állapot: a kézi szerkesztés szünetel, fent sáv jelzi (szöveg, leállító gomb). */
 function busyOn(text: string,stopLabel: string,stop: ()=>void,push=true){if(push)pushUndo();ui.sel=null;ui.placing=null;ui.drag=null;$('.app').classList.add('agent-busy');$('#agentBarText').textContent=text;$('#agentBarStop').textContent=stopLabel;$('#agentBar').hidden=false;$('#agentBarStop').onclick=stop;renderLeft();draw();}
 function busyOff(changed: boolean,pushed=true){if(pushed&&!changed)HIST.drop();$('.app').classList.remove('agent-busy');$('#agentBar').hidden=true;renderLeft();renderLinks();draw();}
@@ -1036,7 +1039,7 @@ async function mcpExec(name: string,input: Record<string,unknown>,readOnly: bool
   return r;
 }
 const MCPP=mountMcpPanel($<HTMLDialogElement>('#dlgMcp'),$<HTMLElement>('#mcpChip'),{
-  exec:mcpExec,hello:()=>({version:__APP_VERSION__,design:(D.brief||'').split('\n')[0].slice(0,60)||tr('{n} alkatrész',{n:D.parts.length})}),
+  exec:mcpExec,hello:()=>({tools:AGENT_TOOLS.map(t=>({name:t.name,description:t.description,input_schema:t.input_schema})),version:__APP_VERSION__,design:(D.brief||'').split('\n')[0].slice(0,60)||tr('{n} alkatrész',{n:D.parts.length})}),
   loadPrefs:()=>{try{return{...MCP_DEFAULTS,...JSON.parse(localStorage.getItem(MCPKEY)||'{}')};}catch(e){return{...MCP_DEFAULTS};}},
   savePrefs:p=>{try{localStorage.setItem(MCPKEY,JSON.stringify(p));}catch(e){}},
   dropped:mcpEnd,tr});

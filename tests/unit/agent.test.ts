@@ -145,3 +145,30 @@ describe('agent-eszközök', () => {
     expect(ctx.D().brief).toBeUndefined();
   });
 });
+
+describe('saját alkatrész az agenttel', () => {
+  it('leírás lekérése, módosított másolat mentése, lerakás; beépített nem írható felül; hibás leírás nem mentődik', async () => {
+    const ctx = engineCtx(emptyDesign());
+    const r0 = await call(ctx, 'get_part_definition', { type: 'res' });
+    expect(r0.text).toMatch(/^res \(built-in/);
+    const def = JSON.parse(r0.text.slice(r0.text.indexOf('\n') + 1));
+    def.name = 'Ellenállás álló';
+    let r = await call(ctx, 'save_custom_part', { definition: def, type: 'res' });
+    expect(r.isError).toBe(true); expect(r.text).toMatch(/built-in part and cannot be changed/);
+    r = await call(ctx, 'save_custom_part', { definition: { ...def, pins: 'rossz' } });
+    expect(r.isError).toBe(true); expect(r.text).toMatch(/has errors; nothing was saved/);
+    expect(Object.keys(ctx.D().customParts)).toEqual([]);
+    r = await call(ctx, 'save_custom_part', { definition: def });
+    expect(r.isError, r.text).toBeFalsy(); expect(r.changed).toBe(true);
+    const key = /custom part "([^"]+)"/.exec(r.text)![1];
+    expect(ctx.D().customParts[key].name).toBe('Ellenállás álló');
+    r = await call(ctx, 'place_part', { type: key, row: 10, col: 10 });
+    expect(r.isError, r.text).toBeFalsy();
+    // frissítés kulccsal; a gazda menti (könyvtár)
+    const saved: string[] = [];
+    const ctx2 = engineCtx(ctx.D(), { saveCustomPart: (k, d) => { saved.push(k + ':' + d.name); ctx.D().customParts = { ...ctx.D().customParts, [k]: d }; } });
+    r = await call(ctx2, 'save_custom_part', { type: key, definition: { ...def, name: 'Ellenállás álló 2' } });
+    expect(r.text).toMatch(/^Updated custom part/); expect(saved).toEqual([key + ':Ellenállás álló 2']);
+    expect((await call(ctx2, 'get_part_definition', { type: key })).text).toMatch(/custom part/);
+  });
+});

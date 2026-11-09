@@ -8,13 +8,16 @@
  * lyuk (sor, oszlop), 0-tól. A csíkok függőlegesek: egy oszlop egy csík, `sec` soronként szakaszolva.
  */
 import type { PartInstance } from '../core/schema';
-import { matchPart } from '../core/library';
+import { matchPart, typeKeyFor } from '../core/library';
+import type { PartDef } from '../core/schema';
+import { hasErrors, validatePartDef } from '../core/validate';
+import { PARTS } from '../parts/builtin';
 import { fmt, t as translate, type Tr } from '../i18n/i18n';
 import { checkAll, type Issue } from '../engine/check';
 import { generateCode, type CodeLang } from '../engine/codegen';
 import { applyCompaction, layoutStats, planCompaction, type CompactMetrics, type CompactResult, type KeepReason } from '../engine/compact';
 import { BRIEF_MAX, emptyDesign, normalize } from '../engine/design';
-import { DEFS, hasPress, isMcu, isOff, penv } from '../engine/defs';
+import { DEFS, hasPress, isMcu, isOff, penv, syncDefs } from '../engine/defs';
 import { placedPins, xf } from '../engine/geometry';
 import { simulateFor } from '../engine/headless';
 import { linkStates, linkText } from '../engine/links';
@@ -46,6 +49,9 @@ export interface ToolCtx {
   /** panelkép (base64 PNG), ha a gazda tud rajzolni */ snapshot?(): Promise<string | null> | string | null;
   /** példák: azonosító, cím, leírás, és a betöltésük */ examples?(): Array<{ id: string; title: string; desc: string }>;
   loadExample?(id: string): boolean;
+  /** saját alkatrész mentése (a felületen a saját könyvtárba és a tervbe); a típuskulcs. Alapból csak a tervbe. */
+  saveCustomPart?(type: string, def: PartDef): void;
+  /** a saját könyvtár alkatrészei (a terven kívüliek is) */ library?(): Record<string, PartDef>;
 }
 
 export interface ToolDef {
@@ -145,6 +151,9 @@ function paramsText(p: PartInstance): string {
   const E = penv(p), ps = DEFS[p.type].def.params || [];
   return ps.filter(x => x.type !== 'span' && x.type !== 'names').map(x => `${x.key}=${fmtV(E[x.key])}${x.unit ? x.unit : ''}`).join(', ');
 }
+
+/** a saját alkatrészek: a könyvtár és a terv (a terv felülírja) */
+const customDefs = (ctx: ToolCtx): Record<string, PartDef> => ({ ...(ctx.library ? ctx.library() : {}), ...(ctx.D().customParts || {}) });
 
 /* ---------- Tömörítés ---------- */
 
@@ -487,6 +496,34 @@ export const TOOLS: ToolDef[] = [
       const D = ctx.D(), t = str(i.text).trim().slice(0, BRIEF_MAX);
       if (t) D.brief = t; else delete D.brief;
       ctx.commit(); return ok(t ? `Project notes saved (${t.split('\n').length} lines).` : 'Project notes cleared.', true);
+    },
+  },
+  {
+    name: 'get_part_definition', mutates: false,
+    description: 'The full JSON definition (PartDef) of a part type – built-in or custom – to study or to use as the starting point of a new custom part (save_custom_part). Fields: name, cat, fp, prefix, pins [{id, name, role, lr, lc, caps}], params, model (electrical elements: resistor, diode, source, …), controls (press, slider), draw/body, meta.help.',
+    input_schema: S.obj({ type: S.str('part type key') }, ['type']),
+    run(ctx, i) {
+      const k = str(i.type), d = customDefs(ctx)[k] || PARTS[k]; if (!d) return err(`Unknown part type "${k}". Use list_part_types.`);
+      return ok(`${k} (${k in PARTS ? 'built-in – save changes as a new custom part' : 'custom part'}):\n${JSON.stringify(d, null, 1)}`);
+    },
+  },
+  {
+    name: 'save_custom_part', mutates: true,
+    description: 'Create or update a custom part type (the user\'s own parts, e.g. a potentiometer with another resistance or footprint). Start from get_part_definition of a similar part, change what is needed, and save. Give "type" to update an existing custom part; omit it to create a new one (a key is made from the name). Built-in types cannot be overwritten – save a copy under a new name. The definition is validated; errors are returned and nothing is saved. Placed parts of an updated type change with it.',
+    input_schema: S.obj({ definition: { type: 'object', description: 'the complete PartDef (as returned by get_part_definition, edited)' }, type: S.str('existing custom part key to update (omit for a new part)') }, ['definition']),
+    run(ctx, i) {
+      const def = i.definition as PartDef, k0 = i.type == null ? null : str(i.type);
+      if (k0 && k0 in PARTS) return err(`"${k0}" is a built-in part and cannot be changed. Save the edited copy as a new part (omit "type", give it a new name).`);
+      const cur = customDefs(ctx);
+      if (k0 && !cur[k0]) return err(`No custom part "${k0}". Omit "type" to create a new one.`);
+      const probs = validatePartDef(def, en);
+      if (hasErrors(probs)) return err('The definition has errors; nothing was saved:\n' + probs.map(p => `- ${p.level}: ${p.path ? p.path + ': ' : ''}${p.msg}`).join('\n'));
+      const k = k0 || typeKeyFor(def.name, x => x in DEFS || x in cur);
+      if (ctx.saveCustomPart) ctx.saveCustomPart(k, def);
+      else { const D = ctx.D(); D.customParts = { ...D.customParts, [k]: def }; }
+      syncDefs(ctx.D().customParts); ctx.commit();
+      const warns = probs.filter(p => p.level === 'warn');
+      return ok(`${k0 ? 'Updated' : 'Saved new'} custom part "${k}" (${def.name}). Place it with place_part type "${k}".${warns.length ? '\nWarnings: ' + warns.map(p => (p.path ? p.path + ': ' : '') + p.msg).join('; ') : ''}`, true);
     },
   },
   {

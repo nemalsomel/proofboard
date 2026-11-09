@@ -10,7 +10,7 @@ import { resolve } from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { BRIDGE_PORT, BRIDGE_PROTO, CALL_EXPORT, CALL_IMPORT, parseMsg, type AppMsg, type ServerMsg } from '../../src/agent/bridge';
+import { BRIDGE_PORT, BRIDGE_PROTO, CALL_EXPORT, CALL_IMPORT, parseMsg, type AppMsg, type BridgeTool, type ServerMsg } from '../../src/agent/bridge';
 import { engineCtx, runTool, TOOLS, type ToolResult } from '../../src/agent/tools';
 import { syncDefs } from '../../src/engine/defs';
 import { emptyDesign, normalize } from '../../src/engine/design';
@@ -30,7 +30,7 @@ export interface ServerOpts {
 
 const INSTRUCTIONS = `Proofboard is a perfboard/stripboard circuit designer and simulator. These tools build and check a design: place parts, connect pins (wiring is routed automatically), simulate, check problems, generate code.
 Call bridge_status first. If the Proofboard app is connected, every change appears live in the user's browser and the user can undo it; otherwise you work on an in-memory design (save it with save_design_file, or ask the user to open ${APP_URL}, then File › Claude connection… › Connect).
-Refer to parts by label ("R1") and pins as "R1.2" or "PICO1.GP15". Place parts next to the pin they connect to (place_part "near"); keep layouts compact (plan_compaction / compact_layout). Ask before large changes or replacing the user's design.`;
+Refer to parts by label ("R1") and pins as "R1.2" or "PICO1.GP15". Missing a part type? Copy a similar one (get_part_definition), edit and save it (save_custom_part). Place parts next to the pin they connect to (place_part "near"); keep layouts compact (plan_compaction / compact_layout). Ask before large changes or replacing the user's design.`;
 
 const LOCAL_TOOLS = [
   { name: 'bridge_status', description: 'Whether the Proofboard app is connected (live editing in the user\'s browser) or the server works on an in-memory design. Call this first.', input_schema: { type: 'object', properties: {}, additionalProperties: false } },
@@ -42,8 +42,12 @@ export function createProofboardServer(o: ServerOpts) {
   const log = o.log || (() => {});
   const head = engineCtx(emptyDesign());
   let app: WebSocket | null = null, appInfo = '', seq = 0;
+  /** a kapcsolódó app eszközei (ha küldte): az app újabb lehet a szervernél, ilyenkor az ő listája számít */
+  let appTools: BridgeTool[] | null = null;
   const pending = new Map<number, { res: (r: ToolResult) => void; timer: ReturnType<typeof setTimeout> }>();
-  const mcp = new Server({ name: 'proofboard', version: o.version }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
+  const mcp = new Server({ name: 'proofboard', version: o.version }, { capabilities: { tools: { listChanged: true } }, instructions: INSTRUCTIONS });
+  const toolList = (): BridgeTool[] => [...LOCAL_TOOLS, ...(app && appTools ? appTools : TOOLS)];
+  const listChanged = () => { try { void mcp.sendToolListChanged().catch(() => {}); } catch { /* nincs még kliens */ } };
   const clientName = () => { const c = mcp.getClientVersion(); return c ? c.name : undefined; };
   const send = (ws: WebSocket, m: ServerMsg) => { if (ws.readyState === 1) ws.send(JSON.stringify(m)); };
 
@@ -81,7 +85,7 @@ export function createProofboardServer(o: ServerOpts) {
   }
 
   mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [...LOCAL_TOOLS, ...TOOLS].map(t => ({ name: t.name, description: t.description, inputSchema: t.input_schema as { type: 'object'; [k: string]: unknown } })),
+    tools: toolList().map(t => ({ name: t.name, description: t.description, inputSchema: t.input_schema as { type: 'object'; [k: string]: unknown } })),
   }));
   mcp.setRequestHandler(CallToolRequestSchema, async req => {
     const r = await call(req.params.name, (req.params.arguments || {}) as Record<string, unknown>);
@@ -106,17 +110,20 @@ export function createProofboardServer(o: ServerOpts) {
             if (m.proto !== BRIDGE_PROTO || m.app !== 'proofboard') { send(ws, { t: 'bye', reason: `Unsupported protocol ${m.proto}; update proofboard-mcp.` }); ws.close(); return; }
             if (app && app !== ws) { send(app, { t: 'bye', reason: 'Another Proofboard tab connected.' }); app.close(); }
             hello = true; app = ws; appInfo = `Proofboard ${m.version}, design: ${m.design}`; log(`App connected: ${appInfo}`);
+            const before = JSON.stringify(toolList().map(t => t.name));
+            appTools = Array.isArray(m.tools) && m.tools.length ? m.tools.filter(t => t && typeof t.name === 'string' && !LOCAL_TOOLS.some(l => l.name === t.name)) : null;
+            if (JSON.stringify(toolList().map(t => t.name)) !== before) listChanged();
             send(ws, { t: 'welcome', proto: BRIDGE_PROTO, server: 'proofboard-mcp', version: o.version, client: clientName() });
           } else if (m.t === 'result' && hello) { const p = pending.get(m.id); if (p) { clearTimeout(p.timer); pending.delete(m.id); p.res(m.result); } }
         });
-        ws.on('close', () => { if (app === ws) { app = null; log('App disconnected.'); dropPending('The Proofboard app disconnected before answering.'); } });
+        ws.on('close', () => { if (app === ws) { const had = !!appTools; app = null; appTools = null; log('App disconnected.'); dropPending('The Proofboard app disconnected before answering.'); if (had) listChanged(); } });
       });
     });
   }
 
   return {
     mcp, call, listen,
-    tools: () => [...LOCAL_TOOLS, ...TOOLS].map(t => t.name),
+    tools: () => toolList().map(t => t.name),
     connected: () => !!app,
     headless: head,
     async close() { dropPending('Server closing.'); for (const c of wss ? [...wss.clients] : []) c.terminate(); await new Promise<void>(r => (wss ? wss.close(() => r()) : r())); wss = null; await mcp.close().catch(() => {}); },

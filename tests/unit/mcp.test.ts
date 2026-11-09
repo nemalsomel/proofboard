@@ -105,4 +105,24 @@ describe('MCP-szerver', () => {
     r = await client.callTool({ name: 'get_board_image', arguments: {} });
     expect((r.content as Array<{ type: string }>).map(x => x.type)).toEqual(['text', 'image']);
   });
+
+  it('az app eszközlistája: az újabb app új eszköze a szerveren is megjelenik (tools/list_changed), leváláskor eltűnik', async () => {
+    const { S, port } = await server();
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'k', version: '1' });
+    let changed = 0;
+    await Promise.all([S.mcp.connect(st), client.connect(ct)]);
+    closers.push(() => client.close());
+    const { ToolListChangedNotificationSchema } = await import('@modelcontextprotocol/sdk/types.js');
+    client.setNotificationHandler(ToolListChangedNotificationSchema, async () => { changed++; });
+    const tools = [{ name: 'zz_uj_eszkoz', description: 'új eszköz az appban', input_schema: { type: 'object', properties: {} } }, { name: 'get_design', description: 'x', input_schema: { type: 'object', properties: {} } }];
+    const c = connectBridge(`ws://127.0.0.1:${port}`, { exec: async n => ({ text: 'app: ' + n }), hello: () => ({ version: '2', design: 'x', tools }), onState: () => {} }, { retryMs: 50 });
+    closers.push(() => c.close());
+    await until(() => changed > 0);
+    expect((await client.listTools()).tools.map(t => t.name)).toEqual(['bridge_status', 'open_design_file', 'save_design_file', 'zz_uj_eszkoz', 'get_design']);
+    expect((await S.call('zz_uj_eszkoz', {})).text).toBe('app: zz_uj_eszkoz');
+    c.close();
+    await until(() => changed > 1);
+    expect((await client.listTools()).tools.map(t => t.name)).toContain('place_part');
+  });
 });

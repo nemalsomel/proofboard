@@ -3,7 +3,7 @@
  * szerverhez (élő híd), csak olvasás, automatikus csatlakozás; a fejléc jelzője (chip) az állapottal.
  */
 import type { Tr } from '../i18n/i18n';
-import { BRIDGE_PORT, connectBridge, type BridgeClient, type BridgeState } from '../agent/bridge';
+import { BRIDGE_PORT, connectBridge, type BridgeClient, type BridgeState, type BridgeTool } from '../agent/bridge';
 import type { ToolResult } from '../agent/tools';
 
 export interface McpPrefs { port: number; auto: boolean; readOnly: boolean }
@@ -11,7 +11,7 @@ export const MCP_DEFAULTS: McpPrefs = { port: BRIDGE_PORT, auto: false, readOnly
 
 export interface McpHost {
   exec(name: string, input: Record<string, unknown>, readOnly: boolean): Promise<ToolResult>;
-  hello(): { version: string; design: string };
+  hello(): { version: string; design: string; tools?: BridgeTool[] };
   loadPrefs(): McpPrefs; savePrefs(p: McpPrefs): void;
   /** a kapcsolat megszűnt (a futó munkamenet lezárása) */ dropped(): void;
   tr: Tr;

@@ -20,17 +20,20 @@ export type ServerMsg =
   | { t: 'bye'; reason: string };
 /** app → szerver */
 export type AppMsg =
-  | { t: 'hello'; proto: number; app: 'proofboard'; version: string; design: string }
+  /** `tools`: az app eszközei (név, leírás, séma) – így az app frissítésével a szerver eszközlistája is frissül */
+  | { t: 'hello'; proto: number; app: 'proofboard'; version: string; design: string; tools?: BridgeTool[] }
   | { t: 'result'; id: number; result: ToolResult };
 
 export function parseMsg<T>(data: unknown): T | null {
   try { const o = JSON.parse(String(data)) as { t?: unknown }; return o && typeof o.t === 'string' ? (o as T) : null; } catch { return null; }
 }
 
+export interface BridgeTool { name: string; description: string; input_schema: unknown }
+
 export type BridgeState = 'off' | 'connecting' | 'connected' | 'waiting';
 export interface BridgeHost {
   /** eszközhívás végrehajtása a gazda élő tervén */ exec(name: string, input: Record<string, unknown>): Promise<ToolResult>;
-  /** a kapcsolódáskor elküldött adatok */ hello(): { version: string; design: string };
+  /** a kapcsolódáskor elküldött adatok */ hello(): { version: string; design: string; tools?: BridgeTool[] };
   /** állapotváltozás; `info`: a szerver és az MCP-kliens neve, ha ismert */ onState(s: BridgeState, info: { server?: string; client?: string; error?: string }): void;
 }
 export interface BridgeClient { state(): BridgeState; close(): void; /** a kapcsolódó MCP-kliens neve (pl. Claude Desktop) */ client(): string | undefined }
@@ -52,7 +55,7 @@ export function connectBridge(url: string, H: BridgeHost, o: { WS?: WSCtor; retr
     let sock: WebSocket;
     try { sock = new WS(url); } catch (e) { set('waiting', String(e)); timer = setTimeout(open, retry); return; }
     ws = sock;
-    sock.onopen = () => { const h = H.hello(); sock.send(JSON.stringify({ t: 'hello', proto: BRIDGE_PROTO, app: 'proofboard', version: h.version, design: h.design } satisfies AppMsg)); };
+    sock.onopen = () => { const h = H.hello(); sock.send(JSON.stringify({ t: 'hello', proto: BRIDGE_PROTO, app: 'proofboard', version: h.version, design: h.design, ...(h.tools ? { tools: h.tools } : {}) } satisfies AppMsg)); };
     sock.onmessage = ev => {
       const m = parseMsg<ServerMsg>(ev.data); if (!m) return;
       if (m.t === 'welcome') { server = `${m.server} ${m.version}`; client = m.client; set('connected'); }
