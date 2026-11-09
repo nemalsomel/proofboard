@@ -1,6 +1,7 @@
 // A megépített proofboard-mcp füstpróbája: stdio-n inicializálás, eszközlista, egy hívás (felület nélkül, híd nélkül).
 import { spawn } from 'node:child_process';
-const p = spawn(process.execPath, [new URL('./dist/proofboard-mcp.mjs', import.meta.url).pathname, '--no-bridge'], { stdio: ['pipe', 'pipe', 'inherit'] });
+import { fileURLToPath } from 'node:url';
+const p = spawn(process.execPath, [fileURLToPath(new URL('./dist/proofboard-mcp.mjs', import.meta.url)), '--no-bridge'], { stdio: ['pipe', 'pipe', 'inherit'] });
 const send = o => p.stdin.write(JSON.stringify(o) + '\n');
 let buf = ''; const got = new Map();
 p.stdout.on('data', d => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, i); buf = buf.slice(i + 1); const m = JSON.parse(l); if (m.id) got.set(m.id, m); } });
