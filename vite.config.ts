@@ -34,6 +34,8 @@ const pwa = VitePWA({
   workbox: {
     globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
     cleanupOutdatedCaches: true,
+    // a Claude Desktop-bővítmény letöltése a hálózatról menjen, ne az app oldala jöjjön helyette
+    navigateFallbackDenylist: [/\.mcpb$/],
     // a betűtípusok a Google Fonts-ról: első használat után offline is megvannak
     runtimeCaching: [
       { urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/, handler: 'StaleWhileRevalidate', options: { cacheName: 'google-fonts-css' } },

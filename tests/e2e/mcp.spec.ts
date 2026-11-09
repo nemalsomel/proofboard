@@ -19,6 +19,11 @@ async function connect(page: Page) {
   await expect(page.locator('#dlgMcp')).toBeVisible();
   await expect(page.locator('#mcpCfgDesktop')).toContainText('"proofboard-mcp"');
   await expect(page.locator('#mcpCfgDesktop')).toContainText(`"--port"`);
+  // a Claude Desktop-bővítmény letölthető az app mellől (zip: PK…)
+  await expect(page.locator('#mcpDl')).toHaveAttribute('href', 'proofboard.mcpb');
+  const dl = await page.request.get('./proofboard.mcpb');
+  expect(dl.status()).toBe(200);
+  expect((await dl.body()).subarray(0, 2).toString()).toBe('PK');
   await page.click('#mcpConnect');
   await expect(page.locator('#mcpState')).toContainText('Kapcsolódva');
   await expect(page.locator('#mcpChip')).toBeVisible();

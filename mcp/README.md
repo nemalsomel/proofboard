@@ -14,15 +14,17 @@ Claude uses your own Claude subscription – no API key is needed.
 
 ## Setup
 
-Requires Node.js 18+.
+**Claude Desktop (easiest)** – download the extension from the app (*File › Claude connection…* › *Download the Claude
+Desktop extension*, or https://nemalsomel.github.io/proofboard/proofboard.mcpb), double-click it and choose *Install*.
+No Node.js needed. The bridge port can be changed in the extension's settings.
 
-**Claude Desktop** – Settings › Developer › Edit Config (`claude_desktop_config.json`), then restart Claude:
+**Claude Desktop, manual** – requires Node.js 18+; add to `claude_desktop_config.json`, then restart Claude:
 
 ```json
 { "mcpServers": { "proofboard": { "command": "npx", "args": ["-y", "proofboard-mcp"] } } }
 ```
 
-**Claude Code:**
+**Claude Code** (Node.js 18+):
 
 ```sh
 claude mcp add proofboard -- npx -y proofboard-mcp

@@ -4,7 +4,7 @@
   "description": "MCP server for Proofboard (perfboard/stripboard designer & simulator): lets Claude design and check circuits, live in the browser app or headless.",
   "type": "module",
   "bin": { "proofboard-mcp": "dist/proofboard-mcp.mjs" },
-  "files": ["dist", "README.md"],
+  "files": ["dist/proofboard-mcp.mjs", "README.md"],
   "engines": { "node": ">=18" },
   "keywords": ["mcp", "claude", "perfboard", "stripboard", "electronics", "proofboard"],
   "repository": { "type": "git", "url": "git+https://github.com/nemalsomel/proofboard.git", "directory": "mcp" },

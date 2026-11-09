@@ -943,3 +943,4 @@ html.simple [data-adv]{display:none!important}
 .mcp-state{font-size:var(--fs-sm)}
 .mcp-state.ok{color:var(--ok)} .mcp-state.wait{color:var(--warn)} .mcp-state.err{color:var(--err)}
 .mcp-adv summary{cursor:pointer;color:var(--muted);font-size:var(--fs-sm)}
+a.btn{text-decoration:none;display:inline-flex;align-items:center;gap:6px}

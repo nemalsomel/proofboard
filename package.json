@@ -14,9 +14,10 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check": "npm run typecheck && npm test && npm run build && npm run build:mcp && npm run test:e2e",
-    "build:mcp": "node mcp/build.mjs && node mcp/smoke.mjs"
+    "build:mcp": "node mcp/build.mjs && node mcp/smoke.mjs && node mcp/pack-mcpb.mjs"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@playwright/test": "1.56.0",
     "@types/node": "^22.20.5",

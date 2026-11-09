@@ -317,14 +317,18 @@
       <button class="btn" data-mcp-where="code" aria-pressed="false">Claude Code</button>
     </div>
     <div class="mcp-how" data-mcp-how="desktop">
-      <p class="help">Beállítások › Fejlesztő › Konfiguráció szerkesztése (claude_desktop_config.json), majd a Claude újraindítása:</p>
-      <pre class="mcp-code" id="mcpCfgDesktop" data-i18n-skip></pre>
+      <div class="mcp-row"><a class="btn primary" id="mcpDl" href="proofboard.mcpb" download="proofboard.mcpb" data-icon="load">Claude Desktop-bővítmény letöltése</a><span class="help">proofboard.mcpb</span></div>
+      <p class="help">Kattints duplán a letöltött fájlra, és a Claude Desktopban válaszd a Telepítést (vagy: Beállítások › Desktop app › Extensions › Manage, és húzd oda a fájlt). Node.js nem kell hozzá.</p>
+      <details class="mcp-adv"><summary>Kézi beállítás (claude_desktop_config.json)</summary>
+        <pre class="mcp-code" id="mcpCfgDesktop" data-i18n-skip></pre>
+        <p class="help">Ehhez Node.js 18 vagy újabb kell; a fájl után a Claude-ot újra kell indítani.</p>
+      </details>
     </div>
     <div class="mcp-how" data-mcp-how="code" hidden>
-      <p class="help">Terminálban:</p>
+      <p class="help">Terminálban (Node.js 18 vagy újabb kell hozzá):</p>
       <pre class="mcp-code" id="mcpCfgCode" data-i18n-skip></pre>
     </div>
-    <p class="help">Node.js 18 vagy újabb kell hozzá. A szerver csak a saját gépeden figyel (127.0.0.1), és csak a Proofboard oldaláról fogad kapcsolatot.</p>
+    <p class="help">A szerver csak a saját gépeden figyel (127.0.0.1), és csak a Proofboard oldaláról fogad kapcsolatot.</p>
     <h3>2. Kapcsolódás</h3>
     <div class="mcp-row"><button class="btn primary" id="mcpConnect">Csatlakozás</button><span class="mcp-state" id="mcpState" role="status"></span></div>
     <label class="check"><input type="checkbox" id="mcpRead"> Csak olvasás: a Claude látja és ellenőrzi a tervet, de nem módosíthatja</label>

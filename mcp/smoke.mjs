@@ -1,6 +1,7 @@
 // A megépített proofboard-mcp füstpróbája: stdio-n inicializálás, eszközlista, egy hívás (felület nélkül, híd nélkül).
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { writeFileSync } from 'node:fs';
 const p = spawn(process.execPath, [fileURLToPath(new URL('./dist/proofboard-mcp.mjs', import.meta.url)), '--no-bridge'], { stdio: ['pipe', 'pipe', 'inherit'] });
 const send = o => p.stdin.write(JSON.stringify(o) + '\n');
 let buf = ''; const got = new Map();
@@ -14,4 +15,6 @@ while (got.size < 3 && Date.now() - t0 < 10000) await new Promise(r => setTimeou
 p.kill();
 const n = got.get(2)?.result?.tools?.length, txt = got.get(3)?.result?.content?.[0]?.text || '';
 if (!(n > 20) || !/^Placed LED1/.test(txt)) { console.error('proofboard-mcp smoke FAILED', { n, txt }); process.exit(1); }
+// az eszközlista a .mcpb leírásához (mcp/pack-mcpb.mjs)
+writeFileSync(fileURLToPath(new URL('./dist/tools.json', import.meta.url)), JSON.stringify(got.get(2).result.tools.map(t => ({ name: t.name, description: t.description }))));
 console.log(`proofboard-mcp smoke ok: ${n} tools, "${txt.slice(0, 40)}…"`);
