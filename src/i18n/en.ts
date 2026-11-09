@@ -1393,4 +1393,6 @@ export const EN: Readonly<Record<string, string>> = {
   "Az agenthez saját Anthropic API-kulcs kell. Add meg fent; a kulcs csak ebben a böngészőben tárolódik.": "The agent needs your own Anthropic API key. Enter it above; it is stored only in this browser.",
   "{i} be / {o} ki token": "{i} in / {o} out tokens",
   "A változtatások egy lépésben visszavonhatók (Ctrl+Z).": "The changes can be undone in one step (Ctrl+Z).",
+  "Válasz másolása (markdown)": "Copy reply (markdown)",
+  "Nem sikerült másolni": "Could not copy",
 };

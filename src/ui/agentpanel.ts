@@ -34,7 +34,7 @@ const TOOL_HU: Record<string, string> = {
 
 const esc = (s: unknown) => String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]!));
 
-/** Egyszerű, biztonságos markdown: bekezdés, felsorolás, félkövér, dőlt, kód, kódblokk, címsor. */
+/** Egyszerű, biztonságos markdown: bekezdés, felsorolás, félkövér, dőlt, kód, kódblokk, címsor, táblázat, vízszintes vonal. */
 export function mdToHtml(src: string): string {
   const out: string[] = [], blocks = src.replace(/\r/g, '').split(/```/);
   blocks.forEach((b, i) => {
@@ -44,7 +44,24 @@ export function mdToHtml(src: string): string {
     const flush = () => { if (list) { out.push(`<${ol ? 'ol' : 'ul'}>${list.map(x => `<li>${x}</li>`).join('')}</${ol ? 'ol' : 'ul'}>`); list = null; } };
     let para: string[] = [];
     const flushP = () => { if (para.length) { out.push(`<p>${para.join('<br>')}</p>`); para = []; } };
-    for (const line of b.split('\n')) {
+    const lines = b.split('\n');
+    /** táblázatsor cellái: | a | b | → ['a','b'] (a szélső | elhagyható; \| a cellán belül) */
+    const cells = (x: string) => x.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map(c => c.trim().replace(/\\\|/g, '|'));
+    const isSep = (x: string) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(x) && x.includes('-');
+    for (let li = 0; li < lines.length; li++) {
+      const line = lines[li];
+      // táblázat: fejléc | elválasztó (---) | sorok
+      if (line.includes('|') && li + 1 < lines.length && isSep(lines[li + 1])) {
+        flush(); flushP();
+        const head = cells(line), al = cells(lines[li + 1]).map(c => (/^:-+:$/.test(c) ? 'center' : /-:$/.test(c) ? 'right' : ''));
+        const rows: string[][] = []; li += 2;
+        while (li < lines.length && lines[li].includes('|') && lines[li].trim()) { rows.push(cells(lines[li])); li++; }
+        li--;
+        const td = (tag: string, c: string, k: number) => `<${tag}${al[k] ? ` style="text-align:${al[k]}"` : ''}>${inline(c)}</${tag}>`;
+        out.push(`<div class="ag-tablewrap"><table class="ag-table"><thead><tr>${head.map((c, k) => td('th', c, k)).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${head.map((_, k) => td('td', r[k] ?? '', k)).join('')}</tr>`).join('')}</tbody></table></div>`);
+        continue;
+      }
+      if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flush(); flushP(); out.push('<hr>'); continue; }
       const m = /^\s*([-*•]|\d+[.)])\s+(.*)$/.exec(line), h = /^#{1,4}\s+(.*)$/.exec(line);
       if (m) { flushP(); const o = /\d/.test(m[1]); if (list && o !== ol) flush(); ol = o; (list ||= []).push(inline(m[2])); continue; }
       flush();
@@ -142,9 +159,9 @@ export function mountAgentPanel(H: AgentHost): AgentPanel {
     $<HTMLTextAreaElement>('#agText').disabled = !hasKey; $<HTMLButtonElement>('#agSend').disabled = !hasKey || busy;
     $('#agSend').hidden = busy; $('#agStop').hidden = !busy; $<HTMLButtonElement>('#agNew').disabled = busy;
     const log = $('#agLog');
-    log.innerHTML = entries.length ? entries.map(e =>
+    log.innerHTML = entries.length ? entries.map((e, idx) =>
       e.k === 'user' ? `<div class="ag-msg u">${esc(e.text).replace(/\n/g, '<br>')}</div>`
-        : e.k === 'text' ? `<div class="ag-msg a">${mdToHtml(e.text)}</div>`
+        : e.k === 'text' ? `<div class="ag-msg a">${mdToHtml(e.text)}<div class="ag-msg-acts"><button class="btn ghost ag-copy" data-copy="${idx}" title="${esc(tr('Válasz másolása (markdown)'))}">${icon('copy')}<span>${esc(tr('Másolás'))}</span></button></div></div>`
           : e.k === 'tool' ? toolLine(e)
             : `<div class="ag-msg ${e.k === 'error' ? 'err' : 'info'} small">${esc(e.text)}</div>`).join('')
       + (busy ? `<div class="ag-busy small muted">${icon('pulse')} ${tr('Dolgozik…')}</div>` : '')
@@ -201,6 +218,18 @@ export function mountAgentPanel(H: AgentHost): AgentPanel {
     prefs = { ...prefs, key: k || undefined, model: $<HTMLSelectElement>('#agModel').value }; H.savePrefs(prefs, remember); root.classList.remove('cfg'); render(); if (k) $('#agText').focus();
   });
   $('#agForget').onclick = () => { prefs = { ...prefs, key: undefined }; H.savePrefs(prefs, remember); root.classList.add('cfg'); render(); };
+  /* válasz másolása: a modell szövege markdownként (táblázat, felsorolás megmarad beillesztéskor) */
+  async function copyText(text: string): Promise<boolean> {
+    try { await navigator.clipboard.writeText(text); return true; } catch { /* régi böngésző vagy nincs engedély */ }
+    try { const t = document.createElement('textarea'); t.value = text; t.style.position = 'fixed'; t.style.opacity = '0'; document.body.appendChild(t); t.select(); const ok = document.execCommand('copy'); t.remove(); return ok; } catch { return false; }
+  }
+  $('#agLog').addEventListener('click', async e => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-copy]'); if (!b) return;
+    const x = entries[+b.dataset.copy!]; if (!x || x.k !== 'text') return;
+    const ok = await copyText(x.text), sp = b.querySelector('span')!;
+    b.classList.toggle('done', ok); sp.textContent = ok ? tr('Másolva') : tr('Nem sikerült másolni');
+    setTimeout(() => { b.classList.remove('done'); sp.textContent = tr('Másolás'); }, 1600);
+  });
   const ta = $<HTMLTextAreaElement>('#agText');
   ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); const v = ta.value; ta.value = ''; void send(v); } });
   $('#agSend').onclick = () => { const v = ta.value; ta.value = ''; void send(v); };

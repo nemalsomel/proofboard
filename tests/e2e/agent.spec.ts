@@ -61,6 +61,11 @@ test('kulcs megadása, majd feladat: az agent lerak és beköt, a terv él; egy 
   await ask(page, 'Tegyél le egy ellenállást és egy LED-et, és kösd össze.');
   await expect(page.locator('.ag-msg.a').last()).toContainText('Kész: R1 (330 Ω)');
   await expect(page.locator('.ag-msg.a b').first()).toHaveText('R1'); // markdown
+  // a válasz másolható (markdownként)
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.locator('.ag-msg.a').last().locator('.ag-copy').click();
+  await expect(page.locator('.ag-msg.a').last().locator('.ag-copy')).toContainText('Másolva');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Kész: **R1** (330 Ω) és **LED1** lerakva, összekötve.');
   await expect(page.locator('.ag-tool.ok')).toHaveCount(3);
   await expect(page.locator('.ag-tool').first()).toContainText('Lerakás');
   expect(await page.evaluate(() => (window as any).pcb.get().parts.map((p: { label: string }) => p.label))).toEqual(['R1', 'LED1']);

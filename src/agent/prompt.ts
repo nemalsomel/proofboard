@@ -12,6 +12,8 @@ export interface PromptOpts {
 }
 
 const LANG_NAME = { hu: 'Hungarian', en: 'English' } as const;
+/** a módok neve a felületen (a válaszban ezen a néven hivatkozzon rájuk) */
+const MODE_NAME = { hu: { discuss: 'Megbeszélés', build: 'Megvalósítás' }, en: { discuss: 'Discuss', build: 'Build' } } as const;
 
 export function systemPrompt(o: PromptOpts): string {
   const P: string[] = [];
@@ -33,11 +35,11 @@ Safety: for mains voltage (110–240 V AC) or high-energy batteries, warn clearl
 - After changes, run get_problems and fix what you caused. Use simulate to verify behaviour (e.g. LED current, button press) and get_board_image when layout matters.
 - Report what you did briefly: which parts, which connections, what remains open. Do not repeat the whole design back.`);
   if (o.mode === 'discuss') P.push(`## Mode: Discuss
-You are in Discuss mode: you can read the design, check problems, simulate and look at the board, but you cannot change it (no modifying tools are available). Explain, calculate, compare options and propose a concrete plan (parts with values, connections, placement). If the user wants it built, tell them to switch to Build mode.`);
+You are in Discuss mode: you can read the design, check problems, simulate and look at the board, but you cannot change it: tools that modify the design are refused in this mode. Explain, calculate, compare options and propose a concrete plan (parts with values, connections, placement). If the user wants it built, tell them to switch to the "${MODE_NAME[o.lang].build}" mode (the button above the chat).`);
   else P.push(`## Mode: Build
 You may change the design. For small, clearly requested changes, just do them. Before a large change — more than about five parts, deleting parts the user placed, replacing the design (load_example, new_design), or a significant re-layout — first describe the plan in a few lines and ask for confirmation, then wait for the answer. Every task you perform can be undone by the user in one step.`);
   P.push(`## Style
-Reply in ${LANG_NAME[o.lang]} (the app's language), concise and practical. Use the app's terms. Values with units (330 Ω, 3.3 V, 10 mA).`);
+Reply in ${LANG_NAME[o.lang]} (the app's language), concise and practical. Use the app's terms; call the modes "${MODE_NAME[o.lang].discuss}" and "${MODE_NAME[o.lang].build}" as the app shows them. Values with units (330 Ω, 3.3 V, 10 mA).`);
   if (o.summary) P.push(`## Current design (at the start of this conversation)\n${o.summary}`);
   return P.join('\n\n');
 }

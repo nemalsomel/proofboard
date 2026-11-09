@@ -883,3 +883,12 @@ html.simple [data-adv]{display:none!important}
 .agent-bar .dot{width:9px;height:9px;border-radius:50%;background:var(--primary);flex:none;animation:agPulse 1.2s ease-in-out infinite}
 .agent-busy #scroll{pointer-events:none;box-shadow:inset 0 0 0 3px color-mix(in srgb,var(--primary) 55%,transparent)}
 .agent-busy .left,.agent-busy .toolstrip,.agent-busy #rpProps,.agent-busy #rpDesign,.agent-busy #rpSim{pointer-events:none;opacity:.6}
+.ag-tablewrap{overflow-x:auto;margin:4px 0 8px}
+.ag-table{border-collapse:collapse;font-size:12.5px;width:100%}
+.ag-table th,.ag-table td{border:1px solid var(--line);padding:4px 7px;text-align:left;vertical-align:top}
+.ag-table th{background:var(--panel);font-weight:600}
+.ag-msg hr{border:0;border-top:1px solid var(--line);margin:8px 0}
+.ag-msg-acts{display:flex;justify-content:flex-end;margin:4px -4px -4px 0}
+.ag-copy{font-size:12px;padding:2px 8px;gap:4px;color:var(--muted)}
+.ag-copy .ic{width:14px;height:14px}
+.ag-copy.done{color:#2f9e44}
