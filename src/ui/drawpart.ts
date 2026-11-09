@@ -182,6 +182,17 @@ export function makePainter(V: PaintView) {
     }
   }
 
+  /** Rögzített alkatrész jele: kis lakat a test sarkánál (a nézet forgatásától függetlenül állva). */
+  function lockMark(p: PartInstance, b: { r0: number; c1: number }): void {
+    const [x, y] = L(p, b.r0 - 0.15, b.c1 + 0.15), s = Math.max(9, P * 0.75);
+    ctx.save(); ctx.globalAlpha = 1; ctx.translate(x, y); ctx.rotate(-V.angle);
+    ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.beginPath(); ctx.arc(0, 0, s * 0.72, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#495057'; ctx.fillStyle = '#495057'; ctx.lineWidth = Math.max(1.2, s * 0.13);
+    ctx.beginPath(); ctx.arc(0, -s * 0.12, s * 0.22, Math.PI, 0); ctx.stroke();
+    ctx.fillRect(-s * 0.32, -s * 0.12, s * 0.64, s * 0.46);
+    ctx.restore();
+  }
+
   /** Egy alkatrész: test, lábak, lábfeliratok; kijelölve vagy rossz helyen (lerakáskor) keret. */
   function drawPart(p: PartInstance, alpha: number, selected: boolean, bad = false): void {
     const CD = DEFS[p.type], def = CD.def, b = CD.bounds(p), C = V.cu && !bad && alpha < 1, XR = !C && (V.xray || !!p.xray), S = V.sim;
@@ -221,6 +232,7 @@ export function makePainter(V: PaintView) {
         else text(p, q.lr + PL.off, q.lc, q.name, Math.max(7, P * 0.42), colr, null, o.halo);
       }
     });
+    if (p.fixed && !bad && P >= 8) lockMark(p, b);
     if (selected || bad) {
       poly(p, b.r0 - 0.2, b.r1 + 0.2, b.c0 - 0.2, b.c1 + 0.2); ctx.setLineDash([5, 4]);
       ctx.strokeStyle = bad ? '#e03131' : V.accent; ctx.lineWidth = 2; ctx.globalAlpha = 1; ctx.stroke(); ctx.setLineDash([]);

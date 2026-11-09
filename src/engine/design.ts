@@ -44,7 +44,7 @@ export function normalize(d: unknown): Design {
   o.parts = ((r.parts || []) as Raw[]).map((p, i) => {
     if (!DEFS[p.type]) throw new Error('ismeretlen alkatrész: ' + p.type);
     return { id: p.id || 'p' + (1000 + i), type: p.type, label: p.label || DEFS[p.type].prefix + (i + 1), r: p.r | 0, c: p.c | 0, rot: (p.rot | 0) & 3, mir: !!p.mir,
-      ...(p.xray ? { xray: true } : {}), ...(typeof p.plug === 'string' && p.plug ? { plug: p.plug } : {}), props: { ...DEFS[p.type].props, ...(p.props || {}) } };
+      ...(p.xray ? { xray: true } : {}), ...(p.fixed ? { fixed: true } : {}), ...(typeof p.plug === 'string' && p.plug ? { plug: p.plug } : {}), props: { ...DEFS[p.type].props, ...(p.props || {}) } };
   });
   for (const p of o.parts) if (p.plug && !o.parts.some(x => x.id === p.plug)) delete p.plug; // a csatlakozó már nincs meg
   o.bridges = ((r.bridges || []) as unknown[]).filter(b => Array.isArray(b) && b.length === 4).map(b => (b as unknown[]).map(Number) as Bridge);

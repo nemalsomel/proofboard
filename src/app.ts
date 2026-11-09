@@ -55,6 +55,7 @@ import { icon, hydrateIcons } from './ui/icons';
 import { type Work, type LayoutId, type LayoutState, type RightTab, LAYOUTS, LAYOUT_DEFAULTS, isLayout, parseStore, stateOf, remember as layRemember, switchTo as laySwitch, resetLayout, isCustom } from './ui/layout';
 import { mountFloatWin, parseWin } from './ui/floatwin';
 import { generateCode, type CodeLang } from './engine/codegen';
+import { layoutStats } from './engine/compact';
 import { emptyDesign, normalize, normCutList, rekeyAgainstLibrary, NOTE_COL, BRIEF_MAX } from './engine/design';
 import { swapMcu as swapMcuOf } from './engine/swap';
 import { presetMacropad, presetRouted } from './engine/presets';
@@ -642,6 +643,8 @@ function introUI(){const el=$('#intro');if(!el||!D)return;el.hidden=!(isEmpty()&
 function sbUpdate(){const tl=$('#sbTool');if(!tl||!D)return;const T=TOOLS.find(x=>x[0]===ui.tool);
   tl.innerHTML=ui.sim?'':ui.placing?tr('Lerakás: {x}',{x:`<b>${esc(DEFS[ui.placing]?tr(DEFS[ui.placing].name):ui.placing)}</b>`}):tr('Eszköz: {x}',{x:`<b>${esc(T?tr(T[1]):ui.tool)}</b>`});
   let sel='';if(ui.sel){if(ui.sel.kind==='group'){const p=selPart(),n=gSize(ui.sel);sel=p?p.label:n?tr('{n} elem',{n}):'';}else sel={wire:tr('vezeték'),bridge:tr('híd'),note:tr('jegyzet'),cut:tr('csíkvágás')}[ui.sel.kind]||'';}
+  {const st=layoutStats(D),f=$('#sbFoot');f.innerHTML=st.box?tr('Terület: {x}',{x:`<b>${st.rows}×${st.cols}</b>`})+` · ${Math.round(st.fill*100)}%`:'';
+    f.title=st.box?tr('A terv által foglalt terület: {r}×{c} lyuk (a panel {a}%-a); az alkatrészek ennek {f}%-át töltik ki.',{r:st.rows,c:st.cols,a:Math.round(st.area/st.boardArea*100),f:Math.round(st.fill*100)}):'';}
   $('#sbSel').innerHTML=sel?tr('Kijelölve: {x}',{x:`<b>${esc(sel)}</b>`}):'';
   const ne=ISSUES.filter(i=>i.sev==='err').length,nw=isSimple()?0:ISSUES.filter(i=>i.sev==='warn').length,ni=isSimple()?0:ISSUES.length-ne-ISSUES.filter(i=>i.sev==='warn').length,b=$('#sbIss');
   b.className='sb-item sb-btn '+(ne?'err':nw?'warn':'ok');

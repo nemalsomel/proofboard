@@ -10,6 +10,7 @@ import type { PartDef, PartInstance } from '../core/schema';
 import { hasErrors, validatePartDef, type Problem } from '../core/validate';
 import type { Cut } from '../engine/board';
 import { sameCut, type CutHit } from '../engine/cuts';
+import { layoutStats, type LayoutStats } from '../engine/compact';
 import { normalize } from '../engine/design';
 import { hasPress, isOff } from '../engine/defs';
 import { placedPins } from '../engine/geometry';
@@ -72,6 +73,7 @@ export interface PcbApi {
   /** Az Alkatrész-szerkesztő megnyitása. */ openEditor(type?: string): void;
 
   /* kapcsolatok és útvonal */
+  /** A terv foglalt területe és kitöltöttsége (tömörség). */ layoutStats(): LayoutStats;
   /** A kapcsolatok az állapotukkal. */ links(): ApiLink[];
   /** A kapcsolatok kezdő- és végpontja, hídjai. */ linkInfo(): ApiLinkInfo[];
   /** Kapcsolat kiemelése sorszám szerint; az állapotsor szövege. */ selectLink(i: number): string;
@@ -212,6 +214,7 @@ export function createApi(H: ApiHost): PcbApi {
     addPart(def) { const problems = validatePartDef(def); if (hasErrors(problems)) return { type: null, problems }; return { type: H.saveCustom(def), problems }; },
     openEditor(type) { H.openEditor(type); },
 
+    layoutStats() { return layoutStats(H.D()); },
     links() { const D = H.D(); return D.links.map(l => ({ ...l, text: H.linkText(l), ...(ui.linkState.get(l.id) || {}) })); },
     linkInfo() { return H.D().links.map(l => { const g = H.linkGeom(l); return { text: H.linkText(l), start: g && g.start, end: g && g.end, endPin: g && g.endPin ? pinLabel(g.endPin) : null, bridges: g ? g.bridges.length : 0 }; }); },
     selectLink(i) { const l = H.D().links[i]; ui.selLink = l ? l.id : null; H.renderLinks(); H.draw(); H.status(); return H.statusText(); },

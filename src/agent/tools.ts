@@ -12,6 +12,7 @@ import { matchPart } from '../core/library';
 import { fmt, t as translate, type Tr } from '../i18n/i18n';
 import { checkAll, type Issue } from '../engine/check';
 import { generateCode, type CodeLang } from '../engine/codegen';
+import { layoutStats } from '../engine/compact';
 import { BRIEF_MAX, emptyDesign, normalize } from '../engine/design';
 import { DEFS, hasPress, isMcu, isOff, penv } from '../engine/defs';
 import { placedPins, xf } from '../engine/geometry';
@@ -167,7 +168,7 @@ export function summarize(D: Design, tr: Tr = fmt): string {
     for (const p of D.parts) {
       const ps = placedPins(p), pins = ps.length <= 8 ? ' pins ' + ps.map(q => `${q.name !== q.id && !isMcu(p) ? q.id + '/' + en(q.name) : q.name}@${q.r},${q.c}`).join(' ') : ` ${ps.length} pins`;
       const prm = paramsText(p);
-      L.push(`- ${p.label}: ${typeName(p.type)} [${p.type}] at ${p.r},${p.c} rot ${rotDeg(p)}${isOff(p) ? ', off-board' + (p.plug ? ' (plugged into ' + (D.parts.find(h => h.id === p.plug) || { label: '?' }).label + ')' : '') : ''}${prm ? '; ' + prm : ''};${pins}`);
+      L.push(`- ${p.label}: ${typeName(p.type)} [${p.type}] at ${p.r},${p.c} rot ${rotDeg(p)}${p.fixed ? ', FIXED by the user (do not move)' : ''}${isOff(p) ? ', off-board' + (p.plug ? ' (plugged into ' + (D.parts.find(h => h.id === p.plug) || { label: '?' }).label + ')' : '') : ''}${prm ? '; ' + prm : ''};${pins}`);
     }
   }
   if (D.links.length) {
@@ -177,6 +178,7 @@ export function summarize(D: Design, tr: Tr = fmt): string {
       L.push(`- ${pinLabelOf(D, l.a)} → ${l.b === 'GND' || l.b === 'GPIO' ? l.b : pinLabelOf(D, l.b)}${s && s.gpio && l.b === 'GPIO' ? ' (' + s.gpio + ')' : ''}: ${via}`);
     }
   } else L.push('Connections: none.');
+  { const st = layoutStats(D); if (st.box) L.push(`Footprint: rows ${st.box.r0}–${st.box.r1}, columns ${st.box.c0}–${st.box.c1} (${st.rows}×${st.cols} holes, ${Math.round(st.area / st.boardArea * 100)}% of the board); part bodies fill ${Math.round(st.fill * 100)}% of it. Keep layouts compact: place parts close to what they connect to.`); }
   L.push(`Wiring: ${D.auto.bridges.length} auto bridges, ${D.auto.wires.length} auto wires, ${D.bridges.length} manual bridges, ${D.wires.length} manual wires, ${(D.cuts || []).length + (D.auto.cuts || []).length} strip cuts.`);
   const gp = Object.entries(D.gpio || {}).filter(([, m]) => m);
   if (gp.length) L.push('GPIO modes: ' + gp.map(([k, m]) => `${pinLabelOf(D, k)}=${m}`).join(', '));
@@ -311,6 +313,7 @@ export const TOOLS: ToolDef[] = [
     input_schema: S.obj({ label: S.str('part label'), row: S.int('new origin row'), col: S.int('new origin column'), rotation: S.int('0, 90, 180 or 270'), mirror: S.bool('mirrored') }, ['label']),
     run(ctx, i) {
       const D = ctx.D(), p = partOf(D, str(i.label)); if (!p) return err(`No part labelled "${str(i.label)}".`);
+      if (p.fixed) return err(`${p.label} is fixed in place by the user. Do not move it; if moving it seems necessary, explain why and ask the user to unlock it (“Fixed position” in its properties).`);
       const t = { ...p, r: num(i.row) ?? p.r, c: num(i.col) ?? p.c, rot: i.rotation != null ? Math.round((num(i.rotation) || 0) / 90) & 3 : p.rot, mir: i.mirror != null ? !!i.mirror : p.mir };
       if (!OPS.partFits(D, t)) return err(`${p.label} does not fit at ${t.r},${t.c}.`);
       const ov = overlaps(D, t); if (ov.length) return err(`Would overlap ${ov.join(', ')}.`);

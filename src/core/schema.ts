@@ -233,6 +233,8 @@ export interface PartInstance {
   mir: boolean;
   props: Record<string, any>;
   xray?: boolean;
+  /** Rögzített hely: a tömörítés és az agent nem mozdítja (kézzel továbbra is mozgatható). */
+  fixed?: boolean;
   /** Külső alkatrésznél: a csatlakozó (tüskesor) példány azonosítója, amelybe a kábele be van dugva. */
   plug?: string;
 }

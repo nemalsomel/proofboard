@@ -128,7 +128,8 @@ export function createPropsPanel(H: PropsHost): PropsPanel {
     pr.innerHTML = `<div class="row"><label for="pLabel">${tr('Név')}</label><input type="text" id="pLabel" value="${esc(p.label)}"></div>
       <div class="small muted">${esc(tr(d.name))} · ${tr('origó')} <span class="mono">${p.r}:${p.c}</span> · ${p.rot * 90}°${p.mir ? ' · ' + tr('tükrözve') : ''}</div>
       <div class="pr-acts">${ACT('pRot', 'rotate', N_('Forgatás'), 'R')}${ACT('pMir', 'mirror', N_('Tükrözés'), 'M')}${ACT('pDup', 'copy', N_('Duplikálás'), 'D', N_('Új példány ugyanezekkel a beállításokkal'))}${ACT('pDel', 'trash', N_('Törlés'), 'Del', '', ' danger')}</div>
-      <label class="check small"><input type="checkbox" id="pXray" ${p.xray ? 'checked' : ''}> ${tr('Röntgen (csak körvonal és lábak)')}</label>${paramsHtml(d.def, penv(p), tr)}
+      <label class="check small"><input type="checkbox" id="pXray" ${p.xray ? 'checked' : ''}> ${tr('Röntgen (csak körvonal és lábak)')}</label>
+      <label class="check small" title="${esc(tr('A tömörítés és az agent nem mozdítja; kézzel továbbra is mozgatható.'))}"><input type="checkbox" id="pFixed" ${p.fixed ? 'checked' : ''}> ${icon('lock')} ${tr('Rögzített hely')}</label>${paramsHtml(d.def, penv(p), tr)}
       ${pins}
       <div class="pr-more" id="pMore"></div>`;
     { const e = qq<HTMLInputElement>('#pLabel'); e.addEventListener('change', () => { H.pushUndo(); p.label = e.value.trim() || p.label; H.commit(); }); }
@@ -136,6 +137,7 @@ export function createPropsPanel(H: PropsHost): PropsPanel {
     qq('#pRot').onclick = H.rotate; qq('#pMir').onclick = H.mirror; qq('#pDel').onclick = H.delSel;
     const more = qq('#pMore');
     qq('#pDup').onclick = () => H.duplicate(p);
+    qq<HTMLInputElement>('#pFixed').onchange = e => { H.pushUndo(); if ((e.target as HTMLInputElement).checked) p.fixed = true; else delete p.fixed; H.commit(true); };
     qq<HTMLInputElement>('#pXray').onchange = e => { H.pushUndo(); if ((e.target as HTMLInputElement).checked) p.xray = true; else delete p.xray; H.commit(true); };
     {
       const own = !H.isBuiltin(p.type);
@@ -199,8 +201,10 @@ export function createPropsPanel(H: PropsHost): PropsPanel {
       pr.innerHTML = `<div class="small">${tr('Kijelölve: {p} alkatrész, {b} kézi híd, {w} vezeték', { p: `<b>${g.parts.size}</b>`, b: `<b>${g.bridges.size}</b>`, w: `<b>${g.wires.size}</b>` })}</div>
       <div class="small muted">${tr('Húzással együtt mozognak. Shift+kattintás: hozzáadás/elvétel.')}</div>
       <div class="pr-acts">${ACT('gRot', 'rotate', N_('Forgatás'), 'R')}${ACT('gMir', 'mirror', N_('Tükrözés'), 'M')}${ACT('gDel', 'trash', N_('Törlés'), 'Del', '', ' danger')}</div>
-      ${g.parts.size ? `<div class="pr-more"><button class="btn" id="gAuto">${tr('Bekötés automatikusra')}</button><button class="btn" id="gXray">${tr('Röntgen be/ki')}</button></div>` : ''}`;
+      ${g.parts.size ? `<div class="pr-more"><button class="btn" id="gAuto">${tr('Bekötés automatikusra')}</button><button class="btn" id="gXray">${tr('Röntgen be/ki')}</button><button class="btn" id="gFixed" title="${esc(tr('A tömörítés és az agent nem mozdítja; kézzel továbbra is mozgatható.'))}">${icon('lock')} ${tr('Rögzítés be/ki')}</button></div>` : ''}`;
       const gx = q('#gXray');
+      const gf = q('#gFixed');
+      if (gf) gf.onclick = () => { H.pushUndo(); const ps = D.parts.filter(p => g.parts.has(p.id)); const on = !ps.every(p => p.fixed); ps.forEach(p => { if (on) p.fixed = true; else delete p.fixed; }); H.commit(true); };
       if (gx) gx.onclick = () => { H.pushUndo(); const ps = D.parts.filter(p => g.parts.has(p.id)); const on = !ps.every(p => p.xray); ps.forEach(p => { if (on) p.xray = true; else delete p.xray; }); H.commit(true); };
       qq('#gRot').onclick = H.rotate; qq('#gMir').onclick = H.mirror; qq('#gDel').onclick = H.delSel;
       const ga = q('#gAuto'); if (ga) ga.onclick = () => { if (!H.manualToAuto(new Set(g.parts))) H.flashMsg(tr('A kijelölésnek nincs kézi bekötése')); };

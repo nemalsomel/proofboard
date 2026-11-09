@@ -1405,4 +1405,9 @@ export const EN: Readonly<Record<string, string>> = {
   "{n} sor": "{n} line||{n} lines",
   "üres": "empty",
   "A beszélgetés korábbi része összefoglalva (az agent az összefoglalót látja), hogy a kérések ne dráguljanak.": "The earlier part of the conversation was summarized (the agent sees the summary) to keep requests from getting expensive.",
+  "A tömörítés és az agent nem mozdítja; kézzel továbbra is mozgatható.": "Compaction and the agent leave it in place; you can still move it by hand.",
+  "Rögzített hely": "Fixed position",
+  "Rögzítés be/ki": "Fix position on/off",
+  "Terület: {x}": "Footprint: {x}",
+  "A terv által foglalt terület: {r}×{c} lyuk (a panel {a}%-a); az alkatrészek ennek {f}%-át töltik ki.": "Area used by the design: {r}×{c} holes ({a}% of the board); part bodies fill {f}% of it.",
 };
