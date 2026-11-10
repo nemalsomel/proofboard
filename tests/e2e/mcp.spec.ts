@@ -104,3 +104,26 @@ test('saját alkatrész a Claude-tól: a könyvtárba és a tervbe kerül, lerak
   expect((await S.call('place_part', { type: key, row: 10, col: 10 })).isError).toBeFalsy();
   expect(await parts(page)).toEqual(['R1']);
 });
+
+test('program a blokkos felületen: a Claude blokkokat rak le és köt össze; a Program nézet megnyílik; egy lépésben visszavonható', async ({ page }) => {
+  await page.evaluate(() => (window as any).pcb.example('led-auto'));
+  await connect(page);
+  const labels = await page.evaluate(() => (window as any).pcb.get().parts.map((p: { label: string }) => p.label));
+  expect(labels).toContain('R1');
+  let r = await S.call('add_block', { type: 'blink', params: { period: 500 } });
+  expect(r.text).toMatch(/^Added n1/);
+  await expect(page.locator('#progView')).toBeVisible(); // Mindkettő nézetre vált
+  r = await S.call('add_block', { type: 'out', params: { pin: 'R1.1' } });
+  r = await S.call('connect_blocks', { from: 'n1.v', to: 'n2.a' });
+  r = await S.call('arrange_program', {});
+  const prog = await page.evaluate(() => (window as any).pcb.program());
+  expect(prog.nodes.map((n: { type: string }) => n.type)).toEqual(['blink', 'out']);
+  expect(prog.edges.length).toBe(1);
+  await expect(page.locator('#progView .pg-node')).toHaveCount(2);
+  r = await S.call('run_program', { ms: 1000, sample_ms: 250 });
+  expect(r.text.split('\n')[0]).toContain('LED1(lit)');
+  await expect(page.locator('#agentBar')).toBeHidden({ timeout: 6000 });
+  await page.evaluate(() => (window as any).pcb.undo());
+  expect(await page.evaluate(() => { const p = (window as any).pcb.program(); return p ? p.nodes.length : 0; })).toBe(0);
+  expect(await parts(page)).toContain('LED1'); // a példa megmaradt
+});

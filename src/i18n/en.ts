@@ -1483,4 +1483,11 @@ export const EN: Readonly<Record<string, string>> = {
   "A szerver csak a saját gépeden figyel (127.0.0.1), és csak a Proofboard oldaláról fogad kapcsolatot.": "The server only listens on your own computer (127.0.0.1) and only accepts connections from the Proofboard page.",
   "Alkatrészleírás": "Part definition",
   "Saját alkatrész mentése": "Save custom part",
+  "Blokktípusok": "Block types",
+  "Blokk felvétele": "Add block",
+  "Blokk beállítása": "Block settings",
+  "Blokkok összekötése": "Connect blocks",
+  "Blokkok szétkötése": "Disconnect blocks",
+  "Program elrendezése": "Arrange program",
+  "Program futtatása": "Run program",
 };

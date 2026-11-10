@@ -34,7 +34,7 @@ const TOOL_HU: Record<string, string> = {
   get_design: N_('Terv áttekintése'), list_part_types: N_('Alkatrészek keresése'), describe_part_type: N_('Alkatrész adatai'), get_part: N_('Alkatrész lábai'),
   place_part: N_('Lerakás'), move_part: N_('Mozgatás'), set_params: N_('Paraméterek'), remove_parts: N_('Törlés'), connect: N_('Kapcsolat'), disconnect: N_('Kapcsolat törlése'),
   route: N_('Útvonalak'), get_problems: N_('Problémák'), simulate: N_('Szimuláció'), set_gpio_mode: N_('GPIO mód'), add_note: N_('Jegyzet'), generate_code: N_('Kód'),
-  get_board_image: N_('Panelkép'), list_examples: N_('Példák'), load_example: N_('Példa betöltése'), new_design: N_('Új terv'), set_project_notes: N_('Projektjegyzet'), plan_compaction: N_('Tömörítés előnézete'), compact_layout: N_('Tömörítés'), set_fixed: N_('Rögzítés'), get_part_definition: N_('Alkatrészleírás'), save_custom_part: N_('Saját alkatrész mentése'),
+  get_board_image: N_('Panelkép'), list_examples: N_('Példák'), load_example: N_('Példa betöltése'), new_design: N_('Új terv'), set_project_notes: N_('Projektjegyzet'), plan_compaction: N_('Tömörítés előnézete'), compact_layout: N_('Tömörítés'), set_fixed: N_('Rögzítés'), get_part_definition: N_('Alkatrészleírás'), list_block_types: N_('Blokktípusok'), get_program: N_('Program'), add_block: N_('Blokk felvétele'), set_block_params: N_('Blokk beállítása'), connect_blocks: N_('Blokkok összekötése'), disconnect_blocks: N_('Blokkok szétkötése'), remove_blocks: N_('Blokk törlése'), arrange_program: N_('Program elrendezése'), run_program: N_('Program futtatása'), save_custom_part: N_('Saját alkatrész mentése'),
 };
 
 const esc = (s: unknown) => String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]!));

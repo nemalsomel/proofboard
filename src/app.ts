@@ -994,6 +994,8 @@ function boardSnapshot(): string|null{
 function toolCtx(): ToolCtx{return {D:()=>D,setD:d=>{if(ui.sim)setSim(false);D=normalize(d);syncDefs(D.customParts);ui.sel=null;ui.selLink=null;},commit:()=>commit(),tr,snapshot:boardSnapshot,
   examples:()=>EXAMPLES.map(e=>({id:e.id,title:tr(e.title),desc:tr(e.desc)})),loadExample:id=>{const ok=loadExample(id);if(ok)HIST.drop();return ok;}, // a példa saját visszavonási lépése helyett a feladaté marad
   library:()=>LIB,
+  /** a program változását lássa a felhasználó: csak panel nézetben vált Mindkettőre (mobilon a Program nézetre) */
+  showProgram:fit=>{if(!ui.work||ui.work==='board')setWork(MOB.matches?'prog':'split',false);if(fit)setTimeout(()=>{if(PE)PE.fit();},0);},
   /** mint az Alkatrész-szerkesztő mentése (könyvtár + terv), de visszavonási pont nélkül: a feladaté/munkameneté számít */
   saveCustomPart:(t,def)=>{setLib({...LIB,[t]:def});saveLib();D.customParts={...D.customParts,[t]:def};renderLib();}};}
 /** „Dolgozik” állapot: a kézi szerkesztés szünetel, fent sáv jelzi (szöveg, leállító gomb). */

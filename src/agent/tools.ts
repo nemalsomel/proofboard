@@ -16,6 +16,7 @@ import { fmt, t as translate, type Tr } from '../i18n/i18n';
 import { checkAll, type Issue } from '../engine/check';
 import { generateCode, type CodeLang } from '../engine/codegen';
 import { applyCompaction, layoutStats, planCompaction, type CompactMetrics, type CompactResult, type KeepReason } from '../engine/compact';
+import { makeProgTools } from './progtools';
 import { BRIEF_MAX, emptyDesign, normalize } from '../engine/design';
 import { DEFS, hasPress, isMcu, isOff, penv, syncDefs } from '../engine/defs';
 import { placedPins, xf } from '../engine/geometry';
@@ -52,6 +53,7 @@ export interface ToolCtx {
   /** saját alkatrész mentése (a felületen a saját könyvtárba és a tervbe); a típuskulcs. Alapból csak a tervbe. */
   saveCustomPart?(type: string, def: PartDef): void;
   /** a saját könyvtár alkatrészei (a terven kívüliek is) */ library?(): Record<string, PartDef>;
+  /** a program megváltozott: a felület mutassa a Program nézetet (ha nem látszik) */ showProgram?(fit?: boolean): void;
 }
 
 export interface ToolDef {
@@ -435,7 +437,7 @@ export const TOOLS: ToolDef[] = [
       for (const m of SIM.picos) L.push(`${m.p.label}: ${m.powered ? `powered (${m.vsysName} ${fmtV(m.Usys)} V)` : 'NOT powered'}`);
       const g = SIM.gpios.filter(x => x.mode !== 'float' || !x.float);
       if (g.length) L.push('GPIO: ' + g.map(x => `${x.q.name}=${x.mode}:${gpioLevel(x)}(${fmtV(x.V)}V)`).join(', '));
-      for (const l of SIM.leds) L.push(`${l.p.label}: ${(l.I * 1000).toFixed(2)} mA${l.light ? ', lit' : ', dark'}${l.imax && l.I > l.imax ? ' — OVER-CURRENT' : ''}`);
+      for (const l of SIM.leds) L.push(`${l.p.label}: ${(l.I * 1000).toFixed(2)} mA${l.light ? (l.on && l.I > 1e-4 ? ', lit' : ', dark') : (l.on ? ', conducting' : ', off')}${l.imax && l.I > l.imax ? ' — OVER-CURRENT' : ''}`);
       for (const f of SIM.fets) L.push(`${f.p.label}: ${f.on ? 'on' : 'off'}, Vgs ${fmtV(f.vgs)} V${f.floatGate ? ', FLOATING GATE' : ''}`);
       for (const b of SIM.bjts) L.push(`${b.p.label}: ${b.st}, Ic ${(b.ic * 1000).toFixed(2)} mA`);
       for (const m of SIM.motors) L.push(`${m.p.label}: ${fmtV(m.U)} V, ${(m.I * 1000).toFixed(0)} mA, speed ${Math.round(m.speed * 100)}%`);
@@ -576,6 +578,7 @@ export const TOOLS: ToolDef[] = [
       return ok(`New empty design: ${rows}×${cols}, section ${sec}.`, true);
     },
   },
+  ...makeProgTools({ ok, err, en, num, str, partOf, pinOf, pinLabelOf, S }),
 ];
 
 /** Eszköz futtatása név szerint, hibakezeléssel (a modell hibaüzenetet kap, nem kivételt). */
