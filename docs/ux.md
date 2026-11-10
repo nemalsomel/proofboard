@@ -15,6 +15,7 @@ mi került a felületre, hova, és milyen kérdést hagyott nyitva. A felülvizs
 
 | Elem | Állapot | Megjegyzés |
 | --- | --- | --- |
+| Megosztás linkkel | Fájl › Megosztás linkkel…: a teljes terv (saját alkatrészek, program, jegyzetek) tömörítve a link # része mögött, szerver nélkül; másolás, telefonon rendszer-megosztás; hossz kiírva, 8000 karakter fölött figyelmeztetés. A link megnyitásakor üres tervnél rögtön betölt, különben rákérdez (Mentés fájlba, majd megnyitás); visszavonható. Agent/MCP: `get_share_link`, `open_share_link` | Előnézeti kép a linkhez (közösségi előnézet szerver nélkül nem megy) |
 | Összecsukható oldalsávok (`[` és `]`) | kész | ikonsáv a fülekkel, a Problémákon hibaszám |
 | Harmonikák a jobb sávban (Kapcsolatok, Panel) | kész | állapotuk megmarad; a Terv harmonika tartalma a Fájl menübe került |
 | Fülek: Szerkesztés / Alkatrészek, Terv / Problémák / Szimuláció | kész | szimuláció indításakor a Szimuláció fülre vált |

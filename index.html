@@ -21,6 +21,7 @@
         <button class="menu-item" role="menuitem" id="bNew" data-icon="filePlus">Új terv…<kbd>Alt+N</kbd></button>
         <button class="menu-item" role="menuitem" id="bOpenFile" data-icon="open" title="Terv betöltése fájlból; a saját alkatrészeid megmaradnak">Megnyitás…<kbd>Ctrl+O</kbd></button>
         <button class="menu-item" role="menuitem" id="bSaveFile" data-icon="save" title="A teljes terv (a benne használt saját alkatrészekkel együtt) fájlba">Mentés fájlba<kbd>Ctrl+S</kbd></button>
+        <button class="menu-item" role="menuitem" id="bShare" data-icon="link" title="Link a tervhez: aki megnyitja, a saját böngészőjében kapja meg a terv másolatát">Megosztás linkkel…</button>
         <button class="menu-item" role="menuitem" id="bExamples" data-icon="book">Példák…</button>
         <button class="menu-item" role="menuitem" id="bBoard" data-icon="board">Panel beállításai…</button>
         <button class="menu-item" role="menuitem" id="bMcp" data-icon="plug" title="Claude Desktop vagy Claude Code vezérelheti a tervet, élőben (MCP)">Claude-kapcsolat…</button>
@@ -332,6 +333,24 @@
       <button class="btn" id="bInstall2" data-icon="install" hidden>Telepítés</button>
     </div>
   </div>
+</dialog>
+<dialog class="dlg dlg-sm" id="dlgShare" aria-labelledby="dlgShareT">
+  <header class="dlg-head"><h2 id="dlgShareT">Megosztás linkkel</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <div class="dlg-body share">
+    <p>Aki megnyitja a linket, a terv másolatát kapja a saját böngészőjében (a saját alkatrészekkel és a programmal együtt). A terv a linkben van, nem kerül szerverre.</p>
+    <div class="share-row"><input id="shareUrl" readonly aria-label="A terv linkje" spellcheck="false"><button class="btn primary" id="bShareCopy" data-icon="copy">Másolás</button></div>
+    <p class="small muted" id="shareInfo"></p>
+    <p class="small share-warn" id="shareWarn" hidden></p>
+  </div>
+  <footer class="dlg-foot"><button class="btn" id="bShareSys" data-icon="send" hidden>Küldés…</button><button class="btn ghost" data-close>Bezárás</button></footer>
+</dialog>
+<dialog class="dlg dlg-sm" id="dlgShared" aria-labelledby="dlgSharedT">
+  <header class="dlg-head"><h2 id="dlgSharedT">Megosztott terv</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <div class="dlg-body share">
+    <p id="sharedInfo"></p>
+    <p class="small muted">A megnyitott terv a mostani helyére kerül. A mostani terved visszavonással (Ctrl+Z) visszahozható, amíg ez az oldal nyitva van; ha meg akarod tartani, előbb mentsd fájlba.</p>
+  </div>
+  <footer class="dlg-foot"><button class="btn ghost" data-close>Mégse</button><button class="btn" id="bSharedSave" data-icon="save">Mentés fájlba, majd megnyitás</button><button class="btn primary" id="bSharedOpen" data-icon="open">Megnyitás</button></footer>
 </dialog>
 <div class="toast upd" id="updToast" role="status" aria-live="polite" hidden><span>Új verzió érhető el.</span><button class="btn primary" id="bUpd">Frissítés</button><button class="btn icon ghost" id="bUpdX" data-icon="close" aria-label="Később" title="Később (a következő megnyitáskor frissül)"></button></div>
 <dialog class="dlg dlg-lg" id="dlgEx" aria-labelledby="dlgExT">

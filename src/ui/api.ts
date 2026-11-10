@@ -120,6 +120,7 @@ export interface PcbApi {
   /** Egyszerű mód. */ simple(on?: boolean): boolean;
   /** Nyelv: 'hu' | 'en'. */ lang(l?: string): string;
   /** A lyuk helye a képernyőn; a reveal előbb odagörget. */ at(r: number, c: number): { x: number; y: number }; reveal(r: number, c: number): { x: number; y: number };
+  /** Megosztás: a jelenlegi terv linkje (`#d=…`). */ shareLink(): Promise<string>;
   readonly version: string;
 }
 
@@ -163,6 +164,7 @@ export interface ApiHost {
   loadExample(id: string): boolean;
   libSearch(q: string): string[]; saveCustom(def: PartDef): string; openEditor(type?: string): void;
   importPlan(o: unknown): unknown;
+  shareLink(): Promise<string>;
   readonly version: string;
 }
 
@@ -282,6 +284,7 @@ export function createApi(H: ApiHost): PcbApi {
     lang(l) { return H.lang(l); },
     at(r, c) { return H.at(r, c); },
     reveal(r, c) { return H.reveal(r, c); },
+    shareLink() { return H.shareLink(); },
     version: H.version,
   };
   return api;

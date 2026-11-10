@@ -9,6 +9,7 @@ import { evx, fmtSI, num, parseSI, stepE12, tpl } from './core/expr';
 import { compileAll, compilePart, penvD } from './core/compile';
 import { hasErrors, validatePartDef } from './core/validate';
 import { exportLibrary, importLibrary, typeKeyFor } from './core/library';
+import { SHARE_LONG, canShare, decodeShare, shareCode, shareUrl } from './core/share';
 import { History } from './ui/history';
 import { drawBoard, stubOf as stubOfW } from './ui/drawboard';
 import { ROLEC, makePainter, rgba } from './ui/drawpart';
@@ -832,6 +833,42 @@ $('#bSaveFile').onclick=()=>{const blob=new Blob([JSON.stringify(D,null,1)],{typ
 $('#bOpenFile').onclick=()=>$('#planFile').click();
 $('#planFile').addEventListener('change',async e=>{const fs=(e.target as HTMLInputElement).files,f=fs&&fs[0];(e.target as HTMLInputElement).value='';if(!f)return;
   try{toast(importPlan(JSON.parse(await f.text())));resize();boardUI();homeView();}catch(err){toast(tr('Nem sikerült betölteni: {x}',{x:(err as Error).message}),true);}});
+/* ---------- Megosztás linkkel: a terv a link # része mögött (core/share.ts) ---------- */
+const shareBase=()=>location.origin+location.pathname;
+function shareLink(){return shareUrl(shareBase(),D);}
+$('#bShare').onclick=async()=>{closeMenu();
+  if(!canShare()){toast(tr('Ez a böngésző nem tud linket készíteni; mentsd fájlba a tervet.'),true);return;}
+  let u='';try{u=await shareLink();}catch(e){toast(tr('Nem sikerült a linket elkészíteni: {x}',{x:(e as Error).message}),true);return;}
+  $('#shareUrl').value=u;
+  const nc=Object.keys(D.customParts||{}).length,nb=D.program?D.program.nodes.length:0;
+  $('#shareInfo').textContent=[tr('{n} karakter',{n:u.length}),tr('{n} alkatrész',{n:D.parts.length}),...(nc?[tr('{n} saját alkatrész',{n:nc})]:[]),...(nb?[tr('{n} blokk',{n:nb})]:[])].join(' · ');
+  const w=$('#shareWarn');w.hidden=u.length<=SHARE_LONG;w.textContent=tr('Hosszú link: egyes csevegőprogramok és levelezők levághatják. Ha nem nyílik meg, küldd inkább fájlként (Fájl › Mentés fájlba).');
+  $('#bShareSys').hidden=typeof navigator.share!=='function';
+  openDlg('#dlgShare');const i=$('#shareUrl');i.focus();i.select();};
+$('#bShareCopy').onclick=()=>{const i=$('#shareUrl');navigator.clipboard.writeText(i.value).then(()=>toast(tr('A link a vágólapon.'))).catch(()=>{i.focus();i.select();toast(tr('Kijelöltem a linket, másold Ctrl+C-vel.'));});};
+$('#bShareSys').onclick=()=>{navigator.share({title:'Proofboard',url:$('#shareUrl').value}).catch(()=>{});};
+/** Megnyitáskor (és ha a # rész változik): a linkben érkezett terv. Üres tervnél rögtön megnyílik, különben rákérdez. */
+let SHARED: unknown=null;
+const designEmpty=()=>!D.parts.length&&!D.notes.length&&!(D.program&&D.program.nodes.length)&&!D.wires.length&&!D.bridges.length;
+async function checkShared(){const code=shareCode(location.hash);if(code==null)return;
+  try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}
+  try{SHARED=await decodeShare(code);if(!SHARED||typeof SHARED!=='object')throw new Error(tr('nem terv'));}
+  catch(e){SHARED=null;toast(tr('A link nem nyitható meg (hiányos vagy sérült): {x}',{x:(e as Error).message}),true);return;}
+  const o=SHARED as {parts?: unknown[];customParts?: object;program?: {nodes?: unknown[]}};
+  const nc=Object.keys(o.customParts||{}).length,nb=(o.program&&o.program.nodes||[]).length;
+  if(designEmpty()){openShared();return;}
+  $('#sharedInfo').textContent=tr('A link egy tervet tartalmaz: {n} alkatrész',{n:(o.parts||[]).length})+(nc?', '+tr('{n} saját alkatrész',{n:nc}):'')+(nb?', '+tr('{n} blokk',{n:nb}):'')+'.';
+  openDlg('#dlgShared');}
+function openShared(){const raw=SHARED;SHARED=null;closeDlg('#dlgShared');if(!raw)return;
+  if(ui.sim)setSim(false);
+  try{const m=importPlan(raw);resize();boardUI();homeView();
+    if(D.program&&D.program.nodes.length&&(!ui.work||ui.work==='board'))setWork(window.innerWidth>1000?'split':'prog',false);
+    toast(tr('Megosztott terv megnyitva.')+' '+m);}
+  catch(e){toast(tr('Nem sikerült betölteni: {x}',{x:(e as Error).message}),true);}}
+$('#bSharedOpen').onclick=openShared;
+$('#bSharedSave').onclick=()=>{$('#bSaveFile').click();openShared();};
+$('#dlgShared').addEventListener('close',()=>{SHARED=null;});
+window.addEventListener('hashchange',()=>{void checkShared();});
 /* ---------- Kapcsolatok és útvonalkereső ---------- */
 const findPin=(ref: string)=>findPinOf(D,ref);
 const linkText=(l: Link)=>linkTextOf(D,l);
@@ -1012,7 +1049,7 @@ function toolCtx(): ToolCtx{return {D:()=>D,setD:d=>{if(ui.sim)setSim(false);D=n
   examples:()=>EXAMPLES.map(e=>({id:e.id,title:tr(e.title),desc:tr(e.desc)})),loadExample:id=>{const ok=loadExample(id);if(ok)HIST.drop();return ok;}, // a példa saját visszavonási lépése helyett a feladaté marad
   library:()=>LIB,
   /** a program változását lássa a felhasználó: csak panel nézetben vált Mindkettőre (mobilon a Program nézetre) */
-  showProgram:fit=>{if(!ui.work||ui.work==='board')setWork(MOB.matches?'prog':'split',false);if(fit)setTimeout(()=>{if(PE)PE.fit();},0);},
+  shareBase,showProgram:fit=>{if(!ui.work||ui.work==='board')setWork(MOB.matches?'prog':'split',false);if(fit)setTimeout(()=>{if(PE)PE.fit();},0);},
   /** mint az Alkatrész-szerkesztő mentése (könyvtár + terv), de visszavonási pont nélkül: a feladaté/munkameneté számít */
   saveCustomPart:(t,def)=>{setLib({...LIB,[t]:def});saveLib();D.customParts={...D.customParts,[t]:def};renderLib();}};}
 /** „Dolgozik” állapot: a kézi szerkesztés szünetel, fent sáv jelzi (szöveg, leállító gomb). */
@@ -1079,7 +1116,7 @@ $('#bMcp').onclick=()=>{closeMenu();MCPP.open();};
   at:(r,c)=>{const[vx,vy]=toScreen(hx(c),hy(r));const rc=cv.getBoundingClientRect();return{x:rc.left+vx,y:rc.top+vy};},
   reveal:(r,c)=>{const sc=$('#scroll'),[vx,vy]=toScreen(hx(c),hy(r));sc.scrollTo(vpX(vx)-sc.clientWidth/2,vpY(vy)-sc.clientHeight/2);const rc=cv.getBoundingClientRect();return{x:rc.left+vx,y:rc.top+vy};},
   loadExample,libSearch:q=>{ui.libQ=q;$('#libSearch').value=q;ltab('lib');renderLib();return[...$$('#lib [data-lib]')].map(b=>b.dataset.lib!);},
-  saveCustom:def=>editorHost.save(null,def),openEditor:type=>openEditor(editorHost,type?{type}:{}),importPlan,version:__APP_VERSION__});
+  saveCustom:def=>editorHost.save(null,def),openEditor:type=>openEditor(editorHost,type?{type}:{}),importPlan,shareLink,version:__APP_VERSION__});
 function statusText(){return $('#status').textContent;}
 
 /* ---------- Indulás ---------- */
@@ -1099,4 +1136,5 @@ function statusText(){return $('#status').textContent;}
   setSimple(!!uiPref().simple,false);
   restoreParked(editorHost); // a háttérben hagyott, nem mentett alkatrész füle
   {let l=null;try{l=localStorage.getItem(LANGKEY);}catch(e){}applyLang(detectLang(l,navigator.languages||[navigator.language]),false);}
+  void checkShared(); // megosztott link: #d=…
 })();

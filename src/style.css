@@ -864,6 +864,9 @@ html.simple [data-adv]{display:none!important}
 .about p{margin:0}
 .about-links{display:flex;flex-wrap:wrap;gap:8px}
 .about-links .btn{text-decoration:none;gap:6px}
+.share-row{display:flex;gap:8px;margin:12px 0 6px}
+.share-row input{flex:1;min-width:0;font:12px var(--mono,ui-monospace,monospace)}
+.share-warn{color:var(--warn,#b26b00)}
 .toast.upd{position:fixed;bottom:80px;display:flex;align-items:center;gap:10px;z-index:60;padding:6px 6px 6px 14px}
 .toast.upd[hidden]{display:none}
 .toast.upd .btn.icon{color:var(--bg)}

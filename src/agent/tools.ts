@@ -13,6 +13,7 @@ import type { PartDef } from '../core/schema';
 import { hasErrors, validatePartDef } from '../core/validate';
 import { defToForm, formToDef, type Form } from '../core/partform';
 import { EL_KINDS } from '../core/circuit';
+import { decodeShare, shareCode, shareUrl } from '../core/share';
 import { PARTS } from '../parts/builtin';
 import { fmt, t as translate, type Tr } from '../i18n/i18n';
 import { checkAll, type Issue } from '../engine/check';
@@ -56,7 +57,11 @@ export interface ToolCtx {
   saveCustomPart?(type: string, def: PartDef): void;
   /** a saját könyvtár alkatrészei (a terven kívüliek is) */ library?(): Record<string, PartDef>;
   /** a program megváltozott: a felület mutassa a Program nézetet (ha nem látszik) */ showProgram?(fit?: boolean): void;
+  /** a megosztott link alapja (az app címe); alapból a nyilvános cím */ shareBase?(): string;
 }
+
+/** A nyilvános app címe: a megosztott link ide mutat, ha a gazda nem ad mást. */
+export const PUBLIC_URL = 'https://nemalsomel.github.io/proofboard/';
 
 export interface ToolDef {
   name: string;
@@ -624,6 +629,27 @@ export const TOOLS: ToolDef[] = [
       const rows = Math.max(5, Math.min(200, num(i.rows) || 78)), cols = Math.max(5, Math.min(120, num(i.cols) || 39)), sec = Math.max(1, Math.min(rows, num(i.section) || 3));
       const d = emptyDesign(); d.board = { rows, cols, sec }; ctx.setD(normalize(d)); ctx.commit();
       return ok(`New empty design: ${rows}×${cols}, section ${sec}.`, true);
+    },
+  },
+  {
+    name: 'get_share_link', mutates: false,
+    description: 'Create a share link for the current design. The whole design (parts, connections, custom parts, program, notes) is compressed into the link after "#", nothing is uploaded; whoever opens it gets a copy in their own browser. Give it to the user when they want to share, send or bookmark the design.',
+    input_schema: S.obj({}),
+    async run(ctx) {
+      const u = await shareUrl(ctx.shareBase ? ctx.shareBase() : PUBLIC_URL, ctx.D());
+      return ok(`${u}\n(${u.length} characters${u.length > 8000 ? '; long: some chat apps and mail clients may cut it, a file is safer' : ''})`);
+    },
+  },
+  {
+    name: 'open_share_link', mutates: true,
+    description: 'Open a design from a Proofboard share link (a URL with "#d=…", or just the part after "#"). Replaces the current design (the user can undo). Ask the user first unless they asked for it.',
+    input_schema: S.obj({ url: S.str('the share link') }, ['url']),
+    async run(ctx, i) {
+      const code = shareCode(str(i.url)); if (code == null) return err('Not a Proofboard share link (no "#d=…" part).');
+      let raw: unknown; try { raw = await decodeShare(code); } catch (e) { return err(`The link cannot be opened (incomplete or damaged): ${(e as Error).message}`); }
+      ctx.setD(normalize(raw)); ctx.commit();
+      const d = ctx.D();
+      return ok(`Opened the shared design: ${d.parts.length} parts, ${d.links.length} connections, ${Object.keys(d.customParts || {}).length} custom parts, ${d.program ? d.program.nodes.length : 0} blocks.`, true);
     },
   },
   ...makeProgTools({ ok, err, en, num, str, partOf, pinOf, pinLabelOf, S }),
