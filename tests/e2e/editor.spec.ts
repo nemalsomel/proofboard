@@ -151,10 +151,18 @@ test('Űrlap ↔ JSON: a beállítások mindkét irányban átkerülnek; amit az
   await expect(page.locator('.cg [data-k="in"]')).toHaveText([/Láb: VCC/, /Láb: GND/]);
   await el.locator('.pg-head').click();
   await expect(page.locator('#cg_val0')).toHaveValue('4.7k');
-  // haladó elem: paraméter → figyelmeztetés, maradhat JSON-ban
+  // szám paraméter (csúszkával) az űrlapon is megmarad (Működés fül, Paraméterek)
+  await page.click('.pe [data-tab="json"]');
+  const k0 = JSON.parse(await page.locator('#pe_json').inputValue());
+  k0.params = [{ key: 'x', label: 'X', type: 'number', default: 1 }]; k0.controls = [{ kind: 'slider', key: 'x', label: 'X' }];
+  await page.fill('#pe_json', JSON.stringify(k0));
+  await page.click('.pe [data-tab="func"]');
+  await expect(page.locator('.pe-warn')).toHaveCount(0);
+  await expect(page.locator('#pe_s_params input[data-k="slider"]')).toBeChecked();
+  // haladó elem: választós paraméter → figyelmeztetés, maradhat JSON-ban
   await page.click('.pe [data-tab="json"]');
   const k = JSON.parse(await page.locator('#pe_json').inputValue());
-  k.params = [{ key: 'x', label: 'X', type: 'number', default: 1 }];
+  k.params = [{ key: 'x', label: 'X', type: 'select', default: 'a', options: [['a', 'A'], ['b', 'B']] }]; delete k.controls;
   await page.fill('#pe_json', JSON.stringify(k));
   await page.click('.pe [data-tab="pins"]');
   await expect(page.locator('.pe-warn')).toContainText('paraméterek');

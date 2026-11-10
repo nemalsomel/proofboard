@@ -127,3 +127,20 @@ test('program a blokkos felületen: a Claude blokkokat rak le és köt össze; a
   expect(await page.evaluate(() => { const p = (window as any).pcb.program(); return p ? p.nodes.length : 0; })).toBe(0);
   expect(await parts(page)).toContain('LED1'); // a példa megmaradt
 });
+
+test('potméter a Claude-tól űrlapként: az Alkatrész-szerkesztő űrlapként nyitja, a Működés fülön a paraméterek és a csúszka', async ({ page }) => {
+  await connect(page);
+  const f = await S.call('get_part_form', { type: 'pot' });
+  const form = JSON.parse(f.text.slice(f.text.indexOf('\n') + 1));
+  form.name = 'Potméter 47k'; form.params[0].def = '47k';
+  const r = await S.call('save_custom_part', { form });
+  expect(r.text).toMatch(/Editable in the part editor/);
+  const key = /custom part "([^"]+)"/.exec(r.text)![1];
+  await expect(page.locator('#agentBar')).toBeHidden({ timeout: 6000 });
+  await page.evaluate(k => (window as any).pcb.openEditor(k), key);
+  await expect(page.locator('#pe_name')).toHaveValue('Potméter 47k'); // űrlap, nem JSON
+  await page.locator('[data-tab="func"]').first().click();
+  await expect(page.locator('#pe_s_params')).toBeVisible();
+  await expect(page.locator('#pe_s_params input[data-k="key"]')).toHaveCount(2);
+  await expect(page.locator('#pe_s_params input[data-k="slider"]').nth(1)).toBeChecked();
+});

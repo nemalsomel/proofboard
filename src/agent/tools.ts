@@ -11,6 +11,8 @@ import type { PartInstance } from '../core/schema';
 import { matchPart, typeKeyFor } from '../core/library';
 import type { PartDef } from '../core/schema';
 import { hasErrors, validatePartDef } from '../core/validate';
+import { defToForm, formToDef, type Form } from '../core/partform';
+import { EL_KINDS } from '../core/circuit';
 import { PARTS } from '../parts/builtin';
 import { fmt, t as translate, type Tr } from '../i18n/i18n';
 import { checkAll, type Issue } from '../engine/check';
@@ -153,6 +155,22 @@ function paramsText(p: PartInstance): string {
   const E = penv(p), ps = DEFS[p.type].def.params || [];
   return ps.filter(x => x.type !== 'span' && x.type !== 'names').map(x => `${x.key}=${fmtV(E[x.key])}${x.unit ? x.unit : ''}`).join(', ');
 }
+
+/** Az alkatrész-űrlap tömör leírása a modellnek (get_part_schema). */
+const PART_SCHEMA_TEXT = () => [
+  'Part editor model ("form") – save with save_custom_part {form}; the part is then editable in the app (Pins and Function tabs).',
+  'Fields: name, prefix (label prefix, e.g. "RV"), cat (category), bodyText (text on the body), fill (body colour #rrggbb), pad (body margin around pins, holes, default 0.6), ext {t,b,l,r} (extra body size, holes), showLabel (bool), names ("below"|"above"|"in"|"out"|"none": pin name labels), off (true = off-board part on a cable).',
+  'pins: [{ id, name, lr, lc, role, group, volt?, caps?, fn? }] – lr/lc = row/column in holes (first pin is the origin 0:0); group: pins with the same non-empty group are connected internally; volt for vin pins "2.7-5.5".',
+  'Pin roles: sig (signal), out, vin (power in), gnd, adc (analog signal), an (anode/+), ka (cathode/−), nc, h (general), r (resistor lead), gpio, p33, pwr, misc.',
+  'model: electrical elements [{ el, pins: [pin ids in order], vals: [values as text] }]:',
+  ...Object.entries(EL_KINDS).map(([k, d]) => `  ${k}: pins (${d.pins.map(p => p[0]).join(', ')}), vals (${d.vals.map(v => `${v[0]}${v[2] ? ' ' + v[2] : ''}, default ${v[3]}`).join('; ') || '-'})`),
+  '  Values accept SI prefixes ("4.7k", "100n") or an expression of parameters in braces, e.g. "{ohm*pos/100+0.5}".',
+  'press: [pinA, pinB] – a push button that connects the two pins while pressed (clickable in simulation).',
+  'logic (digital behaviour): { vcc: pin, gnd: pin, outs: [{ pin, expr, oe?, type: "pp"|"od" }], regs?: [{ name, clk, d, edge: "rise"|"fall", reset?, set? }] } – expr uses pin names and register names with & | ^ ! ( ), e.g. "!(A & B)".',
+  'params: [{ key, label, unit, def, min, max, step, slider, value? }] – adjustable per placed part; slider: true = a slider in simulation; value: true = the value takes SI prefixes (e.g. ohms). Use {key} in model values.',
+  'Example – potentiometer: {"name":"Potentiometer 10k","prefix":"RV","cat":"Passive","pins":[{"id":"1","name":"1","lr":0,"lc":0,"role":"r","group":""},{"id":"W","name":"W","lr":0,"lc":1,"role":"adc","group":""},{"id":"3","name":"3","lr":0,"lc":2,"role":"r","group":""}],"model":[{"el":"resistor","pins":["1","W"],"vals":["{ohm*pos/100+0.5}"]},{"el":"resistor","pins":["W","3"],"vals":["{ohm*(100-pos)/100+0.5}"]}],"params":[{"key":"ohm","label":"Value","unit":"Ω","def":"10k","min":"100","max":"10M","step":"","slider":false,"value":true},{"key":"pos","label":"Position","unit":"%","def":"50","min":"0","max":"100","step":"5","slider":true}],"press":null}',
+  'There is also a built-in "pot" (potentiometer) – prefer built-ins when they fit. After saving, place the part and check it with simulate.',
+].join('\n');
 
 /** a saját alkatrészek: a könyvtár és a terv (a terv felülírja) */
 const customDefs = (ctx: ToolCtx): Record<string, PartDef> => ({ ...(ctx.library ? ctx.library() : {}), ...(ctx.D().customParts || {}) });
@@ -511,22 +529,52 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'save_custom_part', mutates: true,
-    description: 'Create or update a custom part type (the user\'s own parts, e.g. a potentiometer with another resistance or footprint). Start from get_part_definition of a similar part, change what is needed, and save. Give "type" to update an existing custom part; omit it to create a new one (a key is made from the name). Built-in types cannot be overwritten – save a copy under a new name. The definition is validated; errors are returned and nothing is saved. Placed parts of an updated type change with it.',
-    input_schema: S.obj({ definition: { type: 'object', description: 'the complete PartDef (as returned by get_part_definition, edited)' }, type: S.str('existing custom part key to update (omit for a new part)') }, ['definition']),
+    description: 'Create or update a custom part type (the user\'s own parts). Prefer giving "form" (the part editor model, see get_part_schema and get_part_form): the result is then editable in the app\'s part editor (Pins and Function tabs). A raw "definition" (PartDef) is also accepted for things the form cannot express (custom graphics, pin expressions) – then the user can edit it only as JSON. Give "type" to update an existing custom part; omit it to create a new one. Built-in types cannot be overwritten – save a copy under a new name. The result is validated; errors are returned and nothing is saved. Placed parts of an updated type change with it.',
+    input_schema: S.obj({ form: { type: 'object', description: 'the part editor model (get_part_form / get_part_schema)' }, definition: { type: 'object', description: 'a complete PartDef (alternative to form)' }, type: S.str('existing custom part key to update (omit for a new part)') }),
     run(ctx, i) {
-      const def = i.definition as PartDef, k0 = i.type == null ? null : str(i.type);
+      const k0 = i.type == null ? null : str(i.type);
       if (k0 && k0 in PARTS) return err(`"${k0}" is a built-in part and cannot be changed. Save the edited copy as a new part (omit "type", give it a new name).`);
       const cur = customDefs(ctx);
       if (k0 && !cur[k0]) return err(`No custom part "${k0}". Omit "type" to create a new one.`);
+      let def: PartDef, lost: string[] = [];
+      if (i.form && typeof i.form === 'object') {
+        const f = i.form as Form;
+        if (!Array.isArray(f.pins) || !f.pins.length) return err('form.pins must be a non-empty array of {id, name, lr, lc, role, group}.');
+        const base: Partial<Form> = { name: '', prefix: 'U', cat: 'Saját', bodyText: '', pad: 0.6, ext: { t: 0, b: 0, l: 0, r: 0 }, fill: '#1b4f8a', showLabel: true, names: 'below', model: [], press: null };
+        try { def = formToDef({ ...base, ...f,
+          pins: f.pins.map(p => ({ ...p, group: p.group ?? '', role: p.role ?? 'sig', name: p.name ?? String(p.id) })), model: (f.model || []).map(m => ({ ...m, pins: m.pins || [], vals: (m.vals || []).map(String) })) } as Form); }
+        catch (e) { return err('Invalid form: ' + String(e)); }
+      } else if (i.definition && typeof i.definition === 'object') {
+        def = JSON.parse(JSON.stringify(i.definition)) as PartDef;
+        const conv = defToForm(def, undefined, en);
+        if (conv.form && !conv.lost.length) def.meta = { ...(def.meta || {}), editor: 1, form: conv.form }; else lost = conv.lost.length ? conv.lost : ['pins'];
+      } else return err('Give "form" (preferred) or "definition".');
       const probs = validatePartDef(def, en);
-      if (hasErrors(probs)) return err('The definition has errors; nothing was saved:\n' + probs.map(p => `- ${p.level}: ${p.path ? p.path + ': ' : ''}${p.msg}`).join('\n'));
+      if (hasErrors(probs)) return err('The part has errors; nothing was saved:\n' + probs.map(p => `- ${p.level}: ${p.path ? p.path + ': ' : ''}${p.msg}`).join('\n'));
       const k = k0 || typeKeyFor(def.name, x => x in DEFS || x in cur);
       if (ctx.saveCustomPart) ctx.saveCustomPart(k, def);
       else { const D = ctx.D(); D.customParts = { ...D.customParts, [k]: def }; }
       syncDefs(ctx.D().customParts); ctx.commit();
       const warns = probs.filter(p => p.level === 'warn');
-      return ok(`${k0 ? 'Updated' : 'Saved new'} custom part "${k}" (${def.name}). Place it with place_part type "${k}".${warns.length ? '\nWarnings: ' + warns.map(p => (p.path ? p.path + ': ' : '') + p.msg).join('; ') : ''}`, true);
+      return ok(`${k0 ? 'Updated' : 'Saved new'} custom part "${k}" (${def.name}). Place it with place_part type "${k}". ${lost.length ? `Editable only as JSON in the part editor (the form cannot show: ${lost.join(', ')}).` : 'Editable in the part editor (Pins and Function tabs).'}${warns.length ? '\nWarnings: ' + warns.map(p => (p.path ? p.path + ': ' : '') + p.msg).join('; ') : ''}`, true);
     },
+  },
+  {
+    name: 'get_part_form', mutates: false,
+    description: 'A part type as the part editor model ("form") – the easiest way to make an editable custom part: take a similar part\'s form, change it, and save it with save_custom_part {form}. Also says what the form cannot express for this type (that would be lost, e.g. custom graphics of built-in parts: the copy gets a plain body).',
+    input_schema: S.obj({ type: S.str('part type key') }, ['type']),
+    run(ctx, i) {
+      const k = str(i.type), d = customDefs(ctx)[k] || PARTS[k]; if (!d) return err(`Unknown part type "${k}". Use list_part_types.`);
+      const c = defToForm(d, undefined, en); if (!c.form) return err(`"${k}" cannot be shown as a form (${c.lost.join(', ')}). Use get_part_definition.`);
+      const f = JSON.parse(JSON.stringify(c.form)) as Form; delete f.graph; if (f.logic) delete f.logic.graph;
+      return ok(`${k} as form${c.lost.length ? ` (not representable, would be lost: ${c.lost.join(', ')})` : ''}:\n${JSON.stringify(f)}`);
+    },
+  },
+  {
+    name: 'get_part_schema', mutates: false,
+    description: 'Reference for making custom parts with the part editor model ("form"): fields, pin roles, electrical elements, digital logic, button, parameters with sliders and value expressions, with a complete potentiometer example.',
+    input_schema: S.obj({}),
+    run() { return ok(PART_SCHEMA_TEXT()); },
   },
   {
     name: 'plan_compaction', mutates: false,

@@ -15,6 +15,9 @@ import type { ModelEl, PartDef, Prim } from '../core/schema';
 import { icon } from './icons';
 import { History } from './history';
 import { N_, t as tr } from '../i18n/i18n';
+import { bodyRect, darken, defToForm, FILLS, formOf, lightText, formToDef, guessRole, MODEL_UI, newForm, parseRange, splitCaps, type Form, type LogicForm, type ModelKind, type ModelRow, type PinRow } from '../core/partform';
+export { defToForm, formToDef, guessRole, parseRange, splitCaps };
+export type { Form, LogicForm };
 
 export interface EditorHost {
   builtin: Record<string, PartDef>;
@@ -88,241 +91,7 @@ export const ROLES: Array<[string, string]> = [
 /** A GPIO-képességek magyarázata a szerkesztőben (a buszfunkciók pl. i2c0.sda, spi1.mosi, uart0.tx, pwm3.a). */
 const CAP_HELP = N_('adc, adc2, in (csak bemenet), nopull, strap, uart0, led, valamint buszfunkciók: i2c0.sda, spi1.mosi, uart0.tx, pwm3.a…');
 
-type ModelKind = ElKind;
-/** A villamos elemek kivezetései és értékei (a belső kapcsolás adatmodelljéből). */
-const MODEL_UI = EL_KINDS;
-
-interface LogicOutRow { pin: string; expr: string; oe: string; type: 'pp' | 'od' }
-interface LogicRegRow { name: string; clk: string; d: string; edge: 'rise' | 'fall'; reset: string; set: string }
-export interface LogicForm {
-  vcc: string; gnd: string; outs: LogicOutRow[];
-  /** Tárolók (órajeles állapotbitek). */
-  regs?: LogicRegRow[];
-  /** A szerkesztő nézete: kapcsolás (diagram) vagy igazságtábla; a régi 'expr' / 'gates' a kapcsolás. */
-  view?: 'graph' | 'table' | 'expr' | 'gates';
-  /** A belső kapcsolás diagramja: ez a forrás, az `outs` és a `regs` belőle számolt kifejezések. */
-  graph?: CGraph;
-  /** Az igazságtábla bemenetei (lábnevek) a kifejezésekben szereplőkön felül. */
-  tableVars?: string[];
-  vih?: number; vil?: number; rout?: number;
-}
-interface PinRow { id: string; name: string; lr: number; lc: number; role: string; group: string; volt?: string; /** GPIO-nál: képességek szóközzel/vesszővel */ caps?: string; /** perifériánál: buszfunkció */ fn?: string }
-interface ModelRow { el: ModelKind; pins: string[]; vals: string[]; /** MCU: 'matrix' = bármely GPIO bármely buszfunkcióra kiosztható */ mux?: 'fixed' | 'matrix' }
-interface Form {
-  name: string; prefix: string; cat: string; bodyText: string;
-  pad: number; fill: string; showLabel: boolean; names: 'below' | 'above' | 'in' | 'out' | 'none';
-  /** Külső alkatrész (motor, szenzor kábelen): a panel mellé kerül, a lábai kivezetések. */
-  off?: boolean;
-  /** Digitális logika: táp, GND, és a belső kapcsolásból számolt kifejezések. */
-  logic?: LogicForm;
-  /** Belső kapcsolás (Működés fül): ez a forrás; a `model`, a `press` és a `logic` kifejezései belőle számolódnak. */
-  graph?: CGraph;
-  /** A test kiterjesztése a lábakon túl (lyukban): fent, lent, balra, jobbra. */
-  ext: { t: number; b: number; l: number; r: number };
-  pins: PinRow[]; model: ModelRow[]; press: [string, string] | null;
-}
-
 const esc = (s: unknown) => String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]!));
-const FILLS = ['#1b4f8a', '#1f6b4a', '#7a1f2b', '#2a2a2a', '#5f3dc4', '#c2410c', '#d9d2bf'];
-
-/** Szerep tippelése a láb nevéből (generátorhoz). */
-export function guessRole(name: string): string {
-  const n = name.trim().toUpperCase();
-  if (/^(GND|VSS|0V|GROUND|−|-)$/.test(n)) return 'gnd';
-  if (/^(VCC|VDD|VIN|V\+|\+|5V|3V3|3\.3V|VBAT|BAT\+|IN\+|OUT\+|B\+)$/.test(n)) return 'vin';
-  if (/^(NC|N\/C)$/.test(n)) return 'nc';
-  if (/^(A\d|VR[XY]|AIN\d*|ADC\d*)$/.test(n)) return 'adc';
-  return 'sig';
-}
-
-function darken(hex: string, k = 0.6): string {
-  const n = parseInt(hex.slice(1), 16);
-  const ch = (s: number) => Math.round(((n >> s) & 255) * k).toString(16).padStart(2, '0');
-  return '#' + ch(16) + ch(8) + ch(0);
-}
-function lightText(hex: string): boolean {
-  const n = parseInt(hex.slice(1), 16);
-  return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) < 150;
-}
-
-/** A test téglalapja a lábak és a beállítások alapján (felirat esetén legalább 2,4 lyuk magas). */
-/** Feszültségtartomány szövegből: "2.7-3.6", "–5.5" (csak max), "4.5-" (csak min). */
-export function parseRange(t: string | undefined): { vmin?: number; vmax?: number } {
-  const m = /^\s*([\d.,]*)\s*[-–]\s*([\d.,]*)\s*$/.exec(t || '');
-  if (!m) return {};
-  const n = (x: string) => (x ? parseFloat(x.replace(',', '.')) : NaN);
-  const o: { vmin?: number; vmax?: number } = {};
-  if (isFinite(n(m[1]))) o.vmin = n(m[1]);
-  if (isFinite(n(m[2]))) o.vmax = n(m[2]);
-  return o;
-}
-
-export function bodyRect(f: Pick<Form, 'pad' | 'ext' | 'bodyText'>, pins: ReadonlyArray<{ lr: number; lc: number }>) {
-  const rs = pins.map(p => p.lr), cs = pins.map(p => p.lc);
-  const pr0 = Math.min(...rs, Infinity) === Infinity ? 0 : Math.min(...rs), pr1 = pins.length ? Math.max(...rs) : 0;
-  const pc0 = pins.length ? Math.min(...cs) : 0, pc1 = pins.length ? Math.max(...cs) : 0;
-  const e = f.ext || { t: 0, b: 0, l: 0, r: 0 };
-  let t = Math.max(0, e.t);
-  const h = pr1 - pr0 + 2 * f.pad + t + Math.max(0, e.b);
-  if (f.bodyText.trim() && h < 2.4) t += 2.4 - h;
-  return { r0: pr0 - f.pad - t, r1: pr1 + f.pad + Math.max(0, e.b), c0: pc0 - f.pad - Math.max(0, e.l), c1: pc1 + f.pad + Math.max(0, e.r) };
-}
-
-/** Űrlapból szabályos alkatrész-leírás. Az első láb kerül a 0:0 (lerakási) pontra. */
-export function formToDef(f: Form): PartDef {
-  const o = f.pins[0] || { lr: 0, lc: 0 };
-  const pins = f.pins.map(p => ({ ...p, lr: p.lr - o.lr, lc: p.lc - o.lc }));
-  const rs = pins.map(p => p.lr), cs = pins.map(p => p.lc);
-  const B = bodyRect(f, pins), mc = (B.c0 + B.c1) / 2;
-  const graphics: Prim[] = [{ shape: 'rect', layer: 'body', r: [B.r0, B.r1], c: [B.c0, B.c1], fill: f.fill, stroke: darken(f.fill), width: 1.2 }];
-  if (f.bodyText.trim()) {
-    // a felirat a lábsoron kívüli részre kerül, ha van ilyen
-    const pinTop = Math.min(...rs) - 0.5, free = pinTop - B.r0;
-    const tr = free >= 1 ? (B.r0 + pinTop) / 2 : (B.r0 + B.r1) / 2;
-    graphics.push({ shape: 'text', layer: 'detail', at: [tr, mc], text: f.bodyText.trim(), size: 0.5, min: 8, color: lightText(f.fill) ? '#f1f3f5' : '#1d231f', xray: { color: '#1d231f' } });
-  }
-  if (f.showLabel) graphics.push({ shape: 'text', layer: 'label', at: f.names === 'above' ? [B.r1 + 0.6, mc] : [B.r0 - 0.6, mc], text: '{label}', size: 0.42 });
-  const groups: string[][] = [];
-  const byG = new Map<string, string[]>();
-  for (const p of pins) if (p.group.trim()) { const k = p.group.trim(); byG.set(k, [...(byG.get(k) || []), p.id]); }
-  for (const ids of byG.values()) if (ids.length > 1) groups.push(ids);
-  const model: ModelEl[] = f.model.map(m => {
-    const v = (i: number) => { const x = parseSI(m.vals[i]); return isFinite(x) ? x : MODEL_UI[m.el].vals[i][3]; };
-    switch (m.el) {
-      case 'resistor': return { el: 'resistor', a: m.pins[0], b: m.pins[1], ohm: v(0) };
-      case 'diode': return { el: 'diode', a: m.pins[0], k: m.pins[1], vf: v(0), ron: 0.5 };
-      case 'source': return { el: 'source', p: m.pins[0], n: m.pins[1], v: v(0), rint: 0.1 };
-      case 'nmos': return { el: 'nmos', d: m.pins[0], g: m.pins[1], s: m.pins[2], vth: v(0), ron: v(1) };
-      case 'capacitor': return { el: 'capacitor', a: m.pins[0], b: m.pins[1], f: v(0), vmax: v(1) };
-      case 'motor': return { el: 'motor', a: m.pins[0], b: m.pins[1], ohm: v(0), vnom: v(1) };
-      case 'npn': return { el: 'npn', c: m.pins[0], b: m.pins[1], e: m.pins[2], beta: v(0) };
-      case 'mcu': return { el: 'mcu', gnd: m.pins[0], vsys: m.pins[1], v33: m.pins[2], ...(m.pins[3] ? { vbus: m.pins[3] } : {}), vreg: v(0), vmax: v(1), igpio: v(2), ...(m.mux === 'matrix' ? { mux: 'matrix' as const } : {}) };
-    }
-  });
-  const oneRow = new Set(rs).size === 1 || new Set(cs).size === 1;
-  const def: PartDef = {
-    name: f.name.trim(), prefix: f.prefix.trim(), cat: f.cat.trim() || 'Saját',
-    fp: oneRow && pins.length > 1 ? tr('{n} láb egy sorban', { n: pins.length }) : tr('{n} láb', { n: pins.length }),
-    pins: pins.map(p => Object.assign({ id: p.id, name: p.name || p.id, lr: p.lr, lc: p.lc, role: p.role }, p.role === 'vin' ? parseRange(p.volt) : {},
-      p.role === 'gpio' && splitCaps(p.caps).length ? { caps: splitCaps(p.caps) } : {}, p.role !== 'gpio' && p.fn ? { fn: p.fn } : {})),
-    bounds: { r: [B.r0, B.r1], c: [B.c0, B.c1] },
-    graphics,
-    meta: { editor: 1, form: JSON.parse(JSON.stringify(f)) },
-  };
-  if (groups.length) def.groups = groups;
-  if (f.off) { def.mount = 'off'; def.fp = tr('külső · {n} kivezetés', { n: pins.length }); }
-  if (f.names === 'below' || f.names === 'above') def.pinLabels = { mode: 'name', off: f.names === 'below' ? 0.75 : -0.75 };
-  else if (f.names === 'in' || f.names === 'out') def.pinLabels = { mode: 'name', off: 0.75, side: f.names };
-  if (f.logic && f.logic.outs.length) {
-    const L = f.logic;
-    const el: ModelEl = { el: 'logic', vcc: L.vcc, gnd: L.gnd, outs: L.outs.map(o => ({ pin: o.pin, expr: o.expr.trim(), ...(o.oe.trim() ? { oe: o.oe.trim() } : {}), ...(o.type === 'od' ? { type: 'od' as const } : {}) })) };
-    if (L.regs && L.regs.length) el.regs = L.regs.map(r => ({ name: r.name.trim(), clk: r.clk.trim(), d: r.d.trim(), ...(r.edge === 'fall' ? { edge: 'fall' as const } : {}), ...(r.reset.trim() ? { reset: r.reset.trim() } : {}), ...(r.set.trim() ? { set: r.set.trim() } : {}) }));
-    if (L.vih != null) el.vih = L.vih; if (L.vil != null) el.vil = L.vil; if (L.rout != null) el.rout = L.rout;
-    model.push(el);
-  }
-  if (model.length) def.model = model;
-  if (f.press && f.press[0] && f.press[1]) def.controls = [{ kind: 'press', closes: [[f.press[0], f.press[1]]] }];
-  return def;
-}
-
-/** Az összehasonlításhoz: a leírás azon része, amelyet az űrlap is előállít (meta és fp nélkül). */
-const SHAPE_KEYS: Array<[keyof PartDef, string]> = [
-  ['name', N_('név')], ['prefix', N_('előtag')], ['cat', N_('kategória')], ['mount', N_('szerelés')], ['pins', N_('lábak (kifejezések, ismétlés vagy extra mezők)')], ['groups', N_('lábcsoportok')],
-  ['params', N_('paraméterek')], ['pinTable', N_('lábtábla')], ['bounds', N_('a test mérete')], ['graphics', N_('saját rajzelemek')], ['pinLabels', N_('lábfeliratok')],
-  ['model', N_('a villamos modell részletei')], ['controls', N_('vezérlők')],
-];
-const MODEL_FIELDS: Record<ModelKind, { pins: string[]; vals: string[] }> = {
-  resistor: { pins: ['a', 'b'], vals: ['ohm'] }, diode: { pins: ['a', 'k'], vals: ['vf'] }, source: { pins: ['p', 'n'], vals: ['v'] },
-  nmos: { pins: ['d', 'g', 's'], vals: ['vth', 'ron'] }, capacitor: { pins: ['a', 'b'], vals: ['f', 'vmax'] },
-  motor: { pins: ['a', 'b'], vals: ['ohm', 'vnom'] }, npn: { pins: ['c', 'b', 'e'], vals: ['beta'] },
-  mcu: { pins: ['gnd', 'vsys', 'v33', 'vbus'], vals: ['vreg', 'vmax', 'igpio'] },
-};
-/** Képességlista szövegből: szóköz, vessző vagy pontosvessző választja el. */
-export const splitCaps = (s?: string): string[] => [...new Set(String(s || '').split(/[\s,;]+/).map(x => x.trim()).filter(Boolean))];
-
-/**
- * Leírásból űrlap (a JSON → Űrlap váltáshoz). `lost`: mi az, amit az űrlap nem tud visszaadni
- * (a leírás és az űrlapból újra előállított leírás eltérései); üres, ha a váltás veszteségmentes.
- */
-export function defToForm(def: PartDef, base?: { form: Form; graphics: unknown; bounds: unknown }): { form: Form | null; lost: string[] } {
-  if (!def || !Array.isArray(def.pins)) return { form: null, lost: [tr('lábak')] };
-  // ha a rajz és a test még az űrlapé (a JSON-ban nem nyúltak hozzá), az űrlap megjelenési beállításai maradnak
-  const same = (x: unknown, y: unknown) => JSON.stringify(x ?? null) === JSON.stringify(y ?? null);
-  const gen = base && same(def.graphics, base.graphics) && same(def.bounds, base.bounds);
-  const meta = (def.meta && (def.meta as { form?: Form }).form) || (gen ? base!.form : undefined);
-  const f: Form = meta && Array.isArray(meta.pins) ? JSON.parse(JSON.stringify(meta)) : newForm();
-  // a belső kapcsolás diagramja csak akkor marad, ha a JSON villamos modellje és vezérlője változatlan; különben ezekből épül újra
-  if (f.graph && meta) { const ref = formToDef(meta); if (!same(ref.model, def.model) || !same(ref.controls, def.controls)) delete f.graph; }
-  if (f.logic) delete f.logic.graph;
-  f.ext = Object.assign({ t: 0, b: 0, l: 0, r: 0 }, f.ext || {});
-  f.name = String(def.name ?? ''); f.prefix = String(def.prefix ?? ''); f.cat = String(def.cat ?? '');
-  f.off = def.mount === 'off';
-  const gOf = new Map<string, string>();
-  (def.groups || []).forEach((g, i) => { if (Array.isArray(g)) for (const id of g) gOf.set(id, 'g' + (i + 1)); });
-  const lost = new Set<string>();
-  f.pins = [];
-  for (const p of def.pins) {
-    if (!p || p.repeat != null || typeof p.lr !== 'number' || typeof p.lc !== 'number') { lost.add(tr('lábak (kifejezések, ismétlés vagy extra mezők)')); continue; }
-    const volt = p.vmin != null || p.vmax != null ? `${p.vmin ?? ''}-${p.vmax ?? ''}` : '';
-    f.pins.push({ id: String(p.id), name: p.name != null ? String(p.name) : String(p.id), lr: p.lr, lc: p.lc, role: p.role || 'sig', group: gOf.get(String(p.id)) || '', ...(volt ? { volt } : {}),
-      ...(Array.isArray(p.caps) && p.caps.length ? { caps: p.caps.join(' ') } : {}), ...(p.fn ? { fn: String(p.fn) } : {}) });
-  }
-  f.model = [];
-  f.logic = undefined;
-  for (const el of def.model || []) {
-    if (el.el === 'logic') {
-      if (f.logic || !Array.isArray(el.outs)) { lost.add(tr('a villamos modell részletei')); continue; }
-      const view = meta && meta.logic ? meta.logic.view : undefined, tv = meta && meta.logic ? meta.logic.tableVars : undefined;
-      f.logic = { vcc: String(el.vcc ?? ''), gnd: String(el.gnd ?? ''), outs: el.outs.map(o => ({ pin: String(o.pin), expr: String(o.expr ?? ''), oe: String(o.oe ?? ''), type: o.type === 'od' ? 'od' : 'pp' })),
-        ...(view ? { view } : {}), ...(tv ? { tableVars: tv } : {}) };
-      if (Array.isArray(el.regs) && el.regs.length) f.logic.regs = el.regs.map(r => ({ name: String(r.name ?? ''), clk: String(r.clk ?? ''), d: String(r.d ?? ''), edge: r.edge === 'fall' ? 'fall' : 'rise', reset: String(r.reset ?? ''), set: String(r.set ?? '') }));
-      if ((el.regs || []).some(r => r.init != null)) lost.add(tr('a villamos modell részletei'));
-      for (const k of ['vih', 'vil', 'rout'] as const) { const v = el[k]; if (typeof v === 'number') f.logic[k] = v; else if (v != null) lost.add(tr('a villamos modell részletei')); }
-      continue;
-    }
-    const k = el.el as ModelKind, mf = MODEL_FIELDS[k];
-    if (!mf) { lost.add(tr('a villamos modell részletei')); continue; }
-    const e = el as unknown as Record<string, unknown>;
-    f.model.push({ el: k, pins: mf.pins.map(x => String(e[x] ?? '')), vals: mf.vals.map((x, i) => (typeof e[x] === 'number' ? fmtSI(e[x] as number) : e[x] != null ? String(e[x]) : fmtSI(MODEL_UI[k].vals[i][3]))), ...(e.mux === 'matrix' ? { mux: 'matrix' as const } : {}) });
-  }
-  const press = (def.controls || []).find(c => c.kind === 'press') as { closes: string[][] } | undefined;
-  f.press = press && press.closes[0] ? [press.closes[0][0], press.closes[0][1]] : null;
-  if (!meta) {
-    const body = (def.graphics || []).find(g => g.shape === 'rect' && (g.layer || 'body') === 'body');
-    if (body && typeof body.fill === 'string' && /^#[0-9a-f]{6}$/i.test(body.fill)) f.fill = body.fill;
-    const txt = (def.graphics || []).find(g => g.shape === 'text' && g.layer === 'detail');
-    f.bodyText = txt && txt.text ? String(txt.text) : '';
-    f.showLabel = (def.graphics || []).some(g => g.shape === 'text' && g.layer === 'label' && g.text === '{label}');
-    f.names = !def.pinLabels ? 'none' : def.pinLabels.side ? def.pinLabels.side : (def.pinLabels.off ?? 0.75) < 0 ? 'above' : 'below';
-  }
-  if (def.params && def.params.length) lost.add(tr('paraméterek'));
-  if (def.pinTable) lost.add(tr('lábtábla'));
-  // veszteség: az újra előállított leírás eltér-e (a lábak eltolása a 0:0 pontra nem számít)
-  if (f.pins.length) {
-    const back = formToDef(f), o = def.pins[0] as { lr: number; lc: number };
-    const shift = (d: PartDef) => JSON.parse(JSON.stringify(d, (k, v) => (k === 'meta' || k === 'fp' ? undefined : v)));
-    const a = shift(def), b = shift(back);
-    if (typeof o.lr === 'number' && (o.lr || o.lc)) b.pins = b.pins.map((p: { lr: number; lc: number }) => ({ ...p, lr: p.lr + o.lr, lc: p.lc + o.lc }));
-    const canon = (x: unknown) => JSON.stringify(x, (_k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).filter(([, y]) => y !== undefined).sort(([p], [q]) => p.localeCompare(q))) : v));
-    for (const [k, label] of SHAPE_KEYS) {
-      if (k === 'graphics' || k === 'bounds') { if (meta) continue; } // a meta.form alapján épült rajz és test megegyezik
-      if (k === 'pins' && b.pins) { if (canon(a.pins) !== canon(b.pins.map((p: Record<string, unknown>, i: number) => ({ ...p, name: a.pins[i]?.name ?? p.name })))) lost.add(label); continue; }
-      if (canon(a[k] ?? null) !== canon(b[k] ?? null) && !(k === 'cat' && !a.cat && b.cat === 'Saját')) lost.add(tr(label));
-    }
-  }
-  return { form: f.pins.length ? f : null, lost: [...lost] };
-}
-
-const newForm = (): Form => ({ name: tr('Új modul'), prefix: 'U', cat: 'Saját', bodyText: '', pad: 0.6, ext: { t: 0, b: 0, l: 0, r: 0 }, fill: FILLS[0], showLabel: true, names: 'below', pins: [], model: [], press: null });
-const formOf = (def: PartDef): Form | null => {
-  const f = def.meta && (def.meta as { form?: Form }).form;
-  if (!f || !Array.isArray(f.pins)) return null;
-  const c: Form = JSON.parse(JSON.stringify(f));
-  c.ext = Object.assign({ t: 0, b: 0, l: 0, r: 0 }, c.ext || {});
-  return c;
-};
-
-/* Piszkozatok: a bezárt (nem mentett) szerkesztés állapota alkatrészenként; az Elvetés törli. */
 type Tab = 'pins' | 'func' | 'json';
 /** Régi piszkozatok fülnevei (Űrlap → Lábak, Logika → Működés). */
 const tabOf = (t: unknown): Tab => (t === 'json' ? 'json' : t === 'logic' || t === 'func' ? 'func' : 'pins');
@@ -347,10 +116,10 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   /** Kiinduló állapot: űrlap, ha a leírás veszteség nélkül megjeleníthető rajta, különben JSON. */
   const initial = (): void => {
     jsonDef = null; jsonText = ''; jsonErr = ''; pending = null;
-    if (!start) { form = newForm(); tab = 'pins'; return; }
+    if (!start) { form = newForm(tr); tab = 'pins'; return; }
     const d: PartDef = JSON.parse(JSON.stringify(start));
     if (opts.from && !existing) { d.name = d.name + ' ' + tr('(másolat)'); delete d.meta; }
-    const m = formOf(d), conv = m ? { form: m, lost: [] } : defToForm(d);
+    const m = formOf(d), conv = m ? { form: m, lost: [] } : defToForm(d, undefined, tr);
     if (conv.form && !conv.lost.length) { form = conv.form; if (opts.from && !existing) form.name = d.name; tab = 'pins'; }
     else { form = null; jsonDef = d; tab = 'json'; }
   };
@@ -443,20 +212,20 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   const left = $('left'), cv = $<HTMLCanvasElement>('cv'), probsEl = $('probs');
   const prevFocus = document.activeElement as HTMLElement | null;
 
-  const currentDef = (): PartDef | null => (tab !== 'json' && form ? formToDef(form) : jsonDef);
+  const currentDef = (): PartDef | null => (tab !== 'json' && form ? formToDef(form, tr) : jsonDef);
   /** Váltás a fülek között: az aktuális állapot átkerül a másik nézetbe. */
   function switchTab(t: Tab): void {
     if (t === tab && !pending) return;
     if (tab !== 'json' && t !== 'json') { tab = t; pending = null; render(); left.scrollTop = 0; return; } // Lábak ↔ Működés: ugyanaz az adat
     if (t === 'json') {
-      if (form) { const d = formToDef(form); delete d.meta; jsonDef = d; jsonText = JSON.stringify(d, null, 2); jsonErr = ''; lastGen = { form: JSON.parse(JSON.stringify(form)), graphics: d.graphics, bounds: d.bounds }; }
+      if (form) { const d = formToDef(form, tr); delete d.meta; jsonDef = d; jsonText = JSON.stringify(d, null, 2); jsonErr = ''; lastGen = { form: JSON.parse(JSON.stringify(form)), graphics: d.graphics, bounds: d.bounds }; }
       tab = 'json'; pending = null; render(); return;
     }
     const ta = left.querySelector<HTMLTextAreaElement>('#pe_json'); if (ta) jsonText = ta.value;
     let d: PartDef;
     try { d = JSON.parse(jsonText); jsonDef = d; jsonErr = ''; }
     catch (e) { jsonErr = tr('Hibás JSON: {x}', { x: e instanceof Error ? e.message : String(e) }) + ' – ' + tr('javítsd, mielőtt az űrlapra váltasz.'); render(); return; }
-    const conv = defToForm(d, lastGen || undefined);
+    const conv = defToForm(d, lastGen || undefined, tr);
     if (!conv.form) { jsonErr = tr('Az űrlapon legalább egy, fix helyű láb kell (számmal megadott sor és oszlop).'); render(); return; }
     if (conv.lost.length) { pending = { form: conv.form, lost: conv.lost, to: t }; render(); return; }
     form = conv.form; tab = t; pending = null; histReset(); render();
@@ -719,7 +488,22 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
   }
   /** Működés fül: villamos modell, logika, vezérlő – az alkatrész belső viselkedése. */
   function funcHtml(f: Form): string {
-    return `<section class="pe-sec" id="pe_s_logic">${logicHtml(f)}</section>`;
+    return `${paramsHtml(f)}<section class="pe-sec" id="pe_s_logic">${logicHtml(f)}</section>`;
+  }
+  /** Paraméterek (a lerakott példányon állíthatók; csúszkával szimuláció közben is) – a villamos elemek értékében {kulcs}-ként. */
+  function paramsHtml(f: Form): string {
+    const ps = f.params || [];
+    const cell = (i: number, k: string, v: string, w: number, lab: string) => `<td><input type="text" data-par="${i}" data-k="${k}" value="${esc(v)}" style="width:${w}px" aria-label="${esc(lab)}"></td>`;
+    return `<section class="pe-sec" id="pe_s_params">
+      <p class="h">${tr('Paraméterek')} <span class="muted">(${ps.length})</span></p>
+      ${ps.length ? `<div class="tablewrap"><table class="tbl pe-params"><thead><tr><th>${tr('Kulcs')}</th><th>${tr('Felirat')}</th><th>${tr('Egység')}</th><th>${tr('Alapérték')}</th><th>${tr('Min.')}</th><th>${tr('Max.')}</th><th title="${tr('Szimuláció közben csúszkával állítható')}">${tr('Csúszka')}</th><th></th></tr></thead><tbody>
+        ${ps.map((p, i) => `<tr>${cell(i, 'key', p.key, 64, tr('kulcs'))}${cell(i, 'label', p.label, 110, tr('felirat'))}${cell(i, 'unit', p.unit, 40, tr('egység'))}${cell(i, 'def', p.def, 64, tr('alapérték'))}${cell(i, 'min', p.min, 52, tr('minimum'))}${cell(i, 'max', p.max, 52, tr('maximum'))}
+          <td><input type="checkbox" data-par="${i}" data-k="slider" ${p.slider ? 'checked' : ''} aria-label="${tr('csúszka')}"></td>
+          <td><button class="btn" data-act="delpar" data-i="${i}" aria-label="${tr('Paraméter törlése')}" title="${tr('Paraméter törlése')}">×</button></td></tr>`).join('')}
+      </tbody></table></div>` : ''}
+      <button class="btn" data-act="addpar">${tr('Paraméter hozzáadása')}</button>
+      <p class="help">${tr('A villamos elemek értéke kifejezés is lehet a paraméterekkel, pl. egy potméter két fele: {ohm*pos/100} és {ohm*(100-pos)/100}. A csúszkás paraméter szimuláció közben állítható.')}</p>
+    </section>`;
   }
 
 
@@ -1015,7 +799,14 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       } else p[k] = t.value;
       sel = +t.dataset.pin; refresh(); return;
     }
-    if (t.dataset.model != null && t.dataset.k?.startsWith('val')) { form.model[+t.dataset.model].vals[+t.dataset.k.slice(3)] = t.value; refresh(); }
+    if (t.dataset.model != null && t.dataset.k?.startsWith('val')) { form.model[+t.dataset.model].vals[+t.dataset.k.slice(3)] = t.value; refresh(); return; }
+    if (t.dataset.par != null && form.params) {
+      const p = form.params[+t.dataset.par], k = t.dataset.k as 'key' | 'label' | 'unit' | 'def' | 'min' | 'max' | 'slider';
+      if (!p) return;
+      if (k === 'slider') p.slider = t.checked;
+      else { p[k] = t.value; if (k === 'unit') { if (t.value.trim()) p.value = true; else delete p.value; } }
+      refresh(); return;
+    }
   });
   back.addEventListener('change', e => {
     const t = e.target as HTMLSelectElement & HTMLInputElement;
@@ -1088,6 +879,12 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       if (Date.now() - confirmDiscard > 3000) { confirmDiscard = Date.now(); b.innerHTML = `${icon('trash')}<span>${tr('Biztos? Kattints újra')}</span>`; b.classList.add('danger', 'confirm'); setTimeout(() => { if (Date.now() - confirmDiscard >= 2900) idle(); }, 3000); return; }
       confirmDiscard = 0; idle(); b.disabled = true; putDraft(draftKey, null); setParked(draftKey, false); initial(); sel = -1; selModel = -1; clean = snapshot(); histReset(); render(); return;
     }
+    if (act === 'addpar' && form) {
+      const ps = form.params || (form.params = []);
+      let k = 'p1'; for (let i = 1; ps.some(x => x.key === k); i++) k = 'p' + (i + 1);
+      ps.push({ key: k, label: tr('Új paraméter'), unit: '', def: '0', min: '', max: '', step: '', slider: false }); render(); return;
+    }
+    if (act === 'delpar' && form && form.params) { form.params.splice(+(b.dataset.i || 0), 1); if (!form.params.length) delete form.params; render(); return; }
     if (act === 'gen' && form) {
       const n = Math.max(1, Math.min(40, +(left.querySelector<HTMLInputElement>('#pe_gn')!.value) || 1));
       const dir = left.querySelector<HTMLSelectElement>('#pe_gdir')!.value as 'h' | 'v';

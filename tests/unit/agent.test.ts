@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { emptyDesign, normalize } from '../../src/engine/design';
+import { defToForm } from '../../src/core/partform';
 import { engineCtx, partOf, pinOf, runTool, summarize, toolSpecs, TOOLS } from '../../src/agent/tools';
 import { systemPrompt } from '../../src/agent/prompt';
 
@@ -157,6 +158,7 @@ describe('saját alkatrész az agenttel', () => {
     expect(r.isError).toBe(true); expect(r.text).toMatch(/built-in part and cannot be changed/);
     r = await call(ctx, 'save_custom_part', { definition: { ...def, pins: 'rossz' } });
     expect(r.isError).toBe(true); expect(r.text).toMatch(/has errors; nothing was saved/);
+    expect(r.text).toMatch(/^The part has errors/);
     expect(Object.keys(ctx.D().customParts)).toEqual([]);
     r = await call(ctx, 'save_custom_part', { definition: def });
     expect(r.isError, r.text).toBeFalsy(); expect(r.changed).toBe(true);
@@ -170,5 +172,32 @@ describe('saját alkatrész az agenttel', () => {
     r = await call(ctx2, 'save_custom_part', { type: key, definition: { ...def, name: 'Ellenállás álló 2' } });
     expect(r.text).toMatch(/^Updated custom part/); expect(saved).toEqual([key + ':Ellenállás álló 2']);
     expect((await call(ctx2, 'get_part_definition', { type: key })).text).toMatch(/custom part/);
+  });
+});
+
+describe('saját alkatrész űrlapként (szerkeszthető a Lábak / Működés fülön)', () => {
+  it('a beépített potméter űrlapja; mentés űrlapból: paraméterek, csúszka, kifejezéses értékek; a szerkesztő veszteség nélkül nyitja', async () => {
+    const ctx = engineCtx(emptyDesign());
+    expect((await call(ctx, 'get_part_schema')).text).toMatch(/Example – potentiometer/);
+    const r0 = await call(ctx, 'get_part_form', { type: 'pot' });
+    expect(r0.text).toMatch(/^pot as form \(not representable, would be lost: .*custom drawing elements/);
+    const f = JSON.parse(r0.text.slice(r0.text.indexOf('\n') + 1));
+    expect(f.params.map((p: { key: string; slider: boolean }) => [p.key, p.slider])).toEqual([['ohm', false], ['pos', true]]);
+    expect(f.model[0].vals[0]).toBe('{ohm*pos/100+0.5}');
+    f.name = 'Potméter 100k'; f.params[0].def = '100k';
+    const r = await call(ctx, 'save_custom_part', { form: f });
+    expect(r.isError, r.text).toBeFalsy();
+    expect(r.text).toMatch(/Editable in the part editor/);
+    const key = /custom part "([^"]+)"/.exec(r.text)![1], def = ctx.D().customParts[key];
+    expect(def.params!.find(p => p.key === 'ohm')!.default).toBe(100000);
+    expect(def.controls).toEqual([{ kind: 'slider', key: 'pos', label: 'Állás' }]);
+    expect(def.model![1]).toMatchObject({ el: 'resistor', a: 'W', b: '3', ohm: '{ohm*(100-pos)/100+0.5}' });
+    const back = defToForm(def);
+    expect(back.lost).toEqual([]);
+    expect((await call(ctx, 'place_part', { type: key, row: 10, col: 10 })).isError).toBeFalsy();
+    // nyers leírás: ha az űrlap ki tudja fejezni, az is szerkeszthető lesz
+    const r2 = await call(ctx, 'save_custom_part', { definition: { ...def, name: 'Másik potméter', meta: undefined } });
+    expect(r2.text).toMatch(/Editable in the part editor/);
+    expect((await call(ctx, 'save_custom_part', { form: { name: 'x' } })).text).toMatch(/form\.pins must be/);
   });
 });
