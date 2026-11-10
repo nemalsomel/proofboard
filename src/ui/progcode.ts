@@ -16,6 +16,7 @@ export interface CodeHost {
   download(name: string, data: Blob): void;
   lang(): CodeLang;
   setLang(l: CodeLang): void;
+  /** Kód importálása (Arduino / MicroPython → blokkok) */ openImport(): void;
 }
 export interface CodeView { refresh(): void }
 
@@ -37,6 +38,7 @@ export function mountCodeView(root: HTMLElement, host: CodeHost): CodeView {
     <div class="pg-bar" role="toolbar" aria-label="${t('Kód')}">
       <div class="grp seg" role="group" aria-label="${t('Programnyelv')}"><button class="btn" data-lang="micropython">MicroPython</button><button class="btn" data-lang="arduino">Arduino</button></div>
       <span class="pg-sp"></span>
+      <button class="btn" data-pc="imp" title="${t('Arduino- vagy MicroPython-kódból blokkok')}">${t('Importálás…')}</button>
       <button class="btn" data-pc="copy">${t('Másolás')}</button>
       <button class="btn" data-pc="dl"></button>
       <button class="btn" data-adv data-pc="pio" title="${t('platformio.ini és src/main.cpp egy zip-ben (VS Code + PlatformIO)')}">${t('PlatformIO-projekt')}</button>
@@ -51,6 +53,7 @@ export function mountCodeView(root: HTMLElement, host: CodeHost): CodeView {
     root.querySelector('.pg-bar')!.setAttribute('aria-label', t('Kód'));
     root.querySelector('.pg-bar .grp')!.setAttribute('aria-label', t('Programnyelv'));
     $<HTMLButtonElement>('[data-pc="copy"]').textContent = t('Másolás');
+    { const b = $<HTMLButtonElement>('[data-pc="imp"]'); b.textContent = t('Importálás…'); b.title = t('Arduino- vagy MicroPython-kódból blokkok'); }
     const pio = $<HTMLButtonElement>('[data-pc="pio"]'); pio.textContent = t('PlatformIO-projekt'); pio.title = t('platformio.ini és src/main.cpp egy zip-ben (VS Code + PlatformIO)');
     $<HTMLElement>('.pc-code').setAttribute('aria-label', t('Generált kód'));
     const lang = host.lang();
@@ -59,7 +62,8 @@ export function mountCodeView(root: HTMLElement, host: CodeHost): CodeView {
     $<HTMLButtonElement>('[data-pc="dl"]').textContent = t('Letöltés ({x})', { x: lang === 'micropython' ? 'main.py' : '.ino' });
     $<HTMLButtonElement>('[data-pc="pio"]').hidden = lang !== 'arduino';
     const pre = $<HTMLPreElement>('.pc-code'), info = $<HTMLDivElement>('.pc-info');
-    if (!cur) { pre.innerHTML = ''; info.innerHTML = `<p class="help">${t('Még nincs program. A Blokkok fülön rakd össze, és itt megjelenik a kódja.')}</p>`; return; }
+    if (!cur) { pre.innerHTML = ''; info.innerHTML = `<p class="help">${t('Még nincs program. A Blokkok fülön rakd össze, és itt megjelenik a kódja; vagy importálj meglévő Arduino- vagy MicroPython-kódot.')}</p>`; root.querySelectorAll<HTMLButtonElement>('[data-pc="copy"],[data-pc="dl"],[data-pc="pio"]').forEach(x => { x.disabled = true; }); return; }
+    root.querySelectorAll<HTMLButtonElement>('[data-pc="copy"],[data-pc="dl"],[data-pc="pio"]').forEach(x => { x.disabled = false; });
     const sel = host.selected(), mark = new Set<number>(), owner = new Map<number, string>();
     for (const [id, rs] of Object.entries(cur.lines)) for (const [a, b] of rs) for (let i = a; i <= b; i++) { owner.set(i, id); if (id === sel) mark.add(i); }
     const tg = cur.target;
@@ -79,6 +83,7 @@ export function mountCodeView(root: HTMLElement, host: CodeHost): CodeView {
     const el = e.target as HTMLElement, lb = el.closest('[data-lang]') as HTMLElement | null, b = el.closest('[data-pc]') as HTMLElement | null, ln = el.closest('.pc-ln[data-node]') as HTMLElement | null;
     if (lb) { host.setLang(lb.dataset.lang as CodeLang); render(); return; }
     if (ln) { host.select(ln.dataset.node === host.selected() ? null : ln.dataset.node!); render(); return; }
+    if (b && b.dataset.pc === 'imp') { host.openImport(); return; }
     if (!b || !cur) return;
     if (b.dataset.pc === 'copy') {
       try { await navigator.clipboard.writeText(cur.code); b.textContent = t('Másolva') + ' ✓'; } catch { b.textContent = t('Nem sikerült'); }

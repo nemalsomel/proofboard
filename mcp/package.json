@@ -1,6 +1,6 @@
 {
   "name": "proofboard-mcp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "MCP server for Proofboard (perfboard/stripboard designer & simulator): lets Claude design and check circuits, live in the browser app or headless.",
   "type": "module",
   "bin": { "proofboard-mcp": "dist/proofboard-mcp.mjs" },

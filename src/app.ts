@@ -11,6 +11,8 @@ import { hasErrors, validatePartDef } from './core/validate';
 import { exportLibrary, importLibrary, typeKeyFor } from './core/library';
 import { type Command, commandFor, fmtKey } from './ui/commands';
 import { type PalItem, mountPalette } from './ui/palette';
+import { mountImportDialog } from './ui/codeimpdlg';
+import { applyImport, importCode as importCodeOf, type ImportResult } from './engine/codeimport';
 import { SHARE_LONG, canShare, decodeShare, shareCode, shareUrl } from './core/share';
 import { History } from './ui/history';
 import { drawBoard, stubOf as stubOfW } from './ui/drawboard';
@@ -313,7 +315,13 @@ const codeHost: CodeHost={
   download(name,blob){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);},
   lang:()=>uiPref().codeLang==='arduino'?'arduino':'micropython',
   setLang(l){uiPrefSet({codeLang:l});},
+  openImport(){IMPD.open();},
 };
+/* Kód importálása: Arduino / MicroPython → blokkok (engine/codeimport.ts, ui/codeimpdlg.ts); egy visszavonási lépés */
+function applyCodeImport(r: ImportResult,mode: 'replace'|'append'){if(ui.sim)setSim(false);pushUndo();applyImport(D,r,mode);ui.progSel=null;commit(true);
+  if(!ui.work||ui.work==='board')setWork(MOB.matches?'prog':'split',false);setTimeout(()=>{if(PE)PE.fit();},80);
+  toast(tr('Kódból: {x}',{x:r.summary[0]||''})+(r.notes.length?' · '+tr('{n} megjegyzés',{n:r.notes.length}):''));}
+const IMPD=mountImportDialog($<HTMLDialogElement>('#dlgImp'),{design:()=>D,tr:(s,p)=>tr(s,p),apply:applyCodeImport});
 function progLive(){if(!PE||!ui.work||ui.work==='board')return;const n=performance.now();if(n-progLiveAt<100)return;progLiveAt=n;PE.live();}
 function setWork(v: string,remember=true){if(ui.part)partShow(null);if(!['board','prog','split'].includes(v))v='board';ui.work=v;const a=$('.app').classList;
   a.toggle('work-prog',v==='prog');a.toggle('work-split',v==='split');$('#progView').hidden=v==='board';
@@ -1100,6 +1108,7 @@ $('#bMcp').onclick=()=>{closeMenu();MCPP.open();};
   loadExample,libSearch:q=>{ui.libQ=q;$('#libSearch').value=q;ltab('lib');renderLib();return[...$$('#lib [data-lib]')].map(b=>b.dataset.lib!);},
   saveCustom:def=>editorHost.save(null,def),openEditor:type=>openEditor(editorHost,type?{type}:{}),importPlan,shareLink,
   commands:()=>CMDS.map(c=>({id:c.id,label:cmdLabel(c),group:tr(c.group),keys:c.keys||[],enabled:!c.enabled||c.enabled(),hidden:!!c.hidden&&c.hidden()})),
+  importCode:(code,o={})=>{const r=importCodeOf(D,code,{lang:o.lang,tr});if(o.apply!==false&&r.program.nodes.length)applyCodeImport(r,o.mode||'replace');return{lang:r.lang,blocks:r.program.nodes.length,summary:r.summary,notes:r.notes};},
   runCommand:id=>{const c=CMDS.find(x=>x.id===id);if(!c||(c.enabled&&!c.enabled())||(c.hidden&&c.hidden()))return false;c.run();return true;},
   version:__APP_VERSION__});
 function statusText(){return $('#status').textContent;}
@@ -1114,7 +1123,7 @@ const notSim=()=>!ui.sim;
 const RTABS: Array<[string,string]>=[['props',N_('Tulajdonságok')],['design',N_('Kapcsolatok')],['sim',N_('Szimuláció')],['code',N_('Kód')],['agent',N_('Agent')]];
 function escSel(){ui.placing=null;ui.wireStart=null;ui.sel=null;if(ui.selLink){ui.selLink=null;renderLinks();}renderLeft();draw();status();}
 function focusLib(){if(sideCollapse('l',false,false)===null){/* még nincs bekötve */}ltab('lib');if(MOB.matches)sheet('left');const i=$('#libSearch');i.focus();i.select();}
-const G={file:N_('Fájl'),edit:N_('Szerkesztés'),tool:N_('Eszközök'),view:N_('Nézet'),pane:N_('Panelek és fülek'),route:N_('Bekötés'),sim:N_('Szimuláció'),set:N_('Beállítások'),help:N_('Súgó')};
+const G={file:N_('Fájl'),edit:N_('Szerkesztés'),tool:N_('Eszközök'),view:N_('Nézet'),pane:N_('Panelek és fülek'),route:N_('Bekötés'),prog:N_('Program'),sim:N_('Szimuláció'),set:N_('Beállítások'),help:N_('Súgó')};
 const CMDS: Command[]=[
   {id:'palette',label:N_('Parancspaletta és gyorsbillentyűk'),group:G.help,keys:['Ctrl+K','F1'],scope:'input',words:'command palette shortcuts keys help súgó billentyű',run:()=>PAL.isOpen()?PAL.close():PAL.open()},
   {id:'palette2',label:N_('Gyorsbillentyűk'),group:G.help,keys:['?'],words:'shortcuts help',run:()=>PAL.open(),unlisted:true},
@@ -1166,6 +1175,7 @@ const CMDS: Command[]=[
   btnCmd('bToAuto',N_('Kézi → automatikus'),G.route,{words:'manual to auto'}),
   btnCmd('bUnroute',N_('Auto hidak törlése'),G.route,{words:'delete auto bridges unroute'}),
   {id:'compact',label:N_('Tömörítés…'),group:G.route,keys:['Alt+K'],target:'#bCompact',words:'compact compress area',enabled:notSim,run:()=>openCompact()},
+  {id:'importCode',label:N_('Kód importálása…'),group:G.prog,keys:['Alt+I'],target:'[data-pc="imp"]',scope:'global',words:'import code arduino micropython sketch kód vázlat',run:()=>{closeMenu();IMPD.open();}},
   {id:'sim',label:N_('Szimuláció indítása / leállítása'),group:G.sim,keys:['S'],target:'#bSim',words:'simulation run start stop',run:()=>setSim(!ui.sim),checked:()=>!!ui.sim},
   {id:'simple',label:N_('Egyszerű mód'),group:G.set,words:'simple mode',run:()=>setSimple(!isSimple()),checked:isSimple},
   ...(['auto','light','dark'] as const).map((v,i): Command=>({id:'theme.'+v,label:[N_('Téma: automatikus'),N_('Téma: világos'),N_('Téma: sötét')][i],group:G.set,words:'theme '+v,run:()=>setTheme(v),checked:()=>themeGet()===v})),

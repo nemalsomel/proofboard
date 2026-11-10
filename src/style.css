@@ -988,3 +988,15 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .app.keys .rail [data-kbd]::after{top:auto;bottom:-6px;right:50%;transform:translateX(50%)}
 .app.keys #bUndo::after{right:auto;left:-16px;transform:none}
 .app.keys #bRedo::after{right:-16px;transform:none}
+/* kód importálása */
+.dlg.dlg-imp{width:min(820px,calc(100vw - 32px));height:min(86vh,820px)}
+.imp{display:flex;flex-direction:column;gap:10px;min-height:0;flex:1}
+.imp-intro{margin:0}
+.imp-bar{display:flex;align-items:center;gap:8px}
+.imp-code{flex:1;min-height:200px;resize:none;font:13px/18px var(--mono);padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel2);color:var(--fg);tab-size:2;white-space:pre}
+.imp-out{max-height:32%;overflow:auto;font-size:13px}
+.imp-sum{margin:0 0 6px}
+.imp-notes{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.imp-notes li{display:flex;gap:8px;align-items:baseline;color:var(--warn)}
+.imp-ln{flex:none;min-width:30px;font:600 11px/1 var(--mono);padding:3px 5px;border:1px solid var(--line);border-radius:4px;background:var(--panel2);color:var(--fg);cursor:pointer}
+.imp-ln:hover{border-color:var(--primary)}

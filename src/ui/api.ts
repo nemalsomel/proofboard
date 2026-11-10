@@ -121,10 +121,13 @@ export interface PcbApi {
   /** Nyelv: 'hu' | 'en'. */ lang(l?: string): string;
   /** A lyuk helye a képernyőn; a reveal előbb odagörget. */ at(r: number, c: number): { x: number; y: number }; reveal(r: number, c: number): { x: number; y: number };
   /** Megosztás: a jelenlegi terv linkje (`#d=…`). */ shareLink(): Promise<string>;
+  /** Kód (Arduino / MicroPython) → blokkprogram; alapból a tervbe is (csere), `apply: false`-szal csak az eredmény. */ importCode(code: string, o?: ApiImportOpts): ApiImport;
   /** A parancsok (a palettán és a billentyűkhöz): azonosító, név, csoport, billentyűk, elérhető-e, rejtett-e. */ commands(): ApiCommand[];
   /** Parancs végrehajtása azonosító szerint; ha nincs vagy nem elérhető, false. */ run(id: string): boolean;
   readonly version: string;
 }
+export interface ApiImportOpts { lang?: 'arduino' | 'micropython'; mode?: 'replace' | 'append'; apply?: boolean }
+export interface ApiImport { lang: string; blocks: number; summary: string[]; notes: Array<{ line: number; msg: string }> }
 export interface ApiCommand { id: string; label: string; group: string; keys: string[]; enabled: boolean; hidden: boolean }
 
 /* ---------- Gazda ---------- */
@@ -169,6 +172,7 @@ export interface ApiHost {
   importPlan(o: unknown): unknown;
   shareLink(): Promise<string>;
   commands(): ApiCommand[]; runCommand(id: string): boolean;
+  importCode(code: string, o?: ApiImportOpts): ApiImport;
   readonly version: string;
 }
 
@@ -290,6 +294,7 @@ export function createApi(H: ApiHost): PcbApi {
     reveal(r, c) { return H.reveal(r, c); },
     shareLink() { return H.shareLink(); },
     commands() { return H.commands(); },
+    importCode(code, o) { return H.importCode(code, o); },
     run(id) { return H.runCommand(id); },
     version: H.version,
   };

@@ -14,6 +14,7 @@ import { hasErrors, validatePartDef } from '../core/validate';
 import { defToForm, formToDef, type Form } from '../core/partform';
 import { EL_KINDS } from '../core/circuit';
 import { decodeShare, shareCode, shareUrl } from '../core/share';
+import { applyImport, importCode } from '../engine/codeimport';
 import { PARTS } from '../parts/builtin';
 import { fmt, t as translate, type Tr } from '../i18n/i18n';
 import { checkAll, type Issue } from '../engine/check';
@@ -650,6 +651,20 @@ export const TOOLS: ToolDef[] = [
       ctx.setD(normalize(raw)); ctx.commit();
       const d = ctx.D();
       return ok(`Opened the shared design: ${d.parts.length} parts, ${d.links.length} connections, ${Object.keys(d.customParts || {}).length} custom parts, ${d.program ? d.program.nodes.length : 0} blocks.`, true);
+    },
+  },
+  {
+    name: 'import_code', mutates: true,
+    description: 'Turn an Arduino (C++) or MicroPython sketch into the block program (the user can see and edit blocks; prefer building blocks directly with add_block when you design from scratch). The code is run symbolically: GPIO numbers map to the board\'s pins; digitalRead/digitalWrite, analogRead/analogWrite, PWM, delay-based timing (→ Clock / Sequence), conditions (→ logic blocks, Compare), and state variables (x = !x with edge detection → Toggle, counter → Counter, millis() timers → Clock or Timer) are recognised. Returns what was created and line-numbered notes about parts that could not be translated. mode: "replace" (default) or "append" to the existing program; dry_run: only report.',
+    input_schema: S.obj({ code: S.str('the sketch source'), language: { type: 'string', enum: ['arduino', 'micropython'], description: 'default: detected' }, mode: { type: 'string', enum: ['replace', 'append'], description: 'default: replace' }, dry_run: S.bool('only report, do not change the design') }, ['code']),
+    run(ctx, i) {
+      const lang = i.language === 'arduino' || i.language === 'micropython' ? i.language : undefined;
+      const r = importCode(ctx.D(), str(i.code), { lang, tr: en });
+      const rep = [`Language: ${r.lang}.`, ...r.summary, ...(r.notes.length ? ['Notes:', ...r.notes.map(n => '- ' + n.msg)] : ['Everything was translated.'])];
+      if (i.dry_run || !r.program.nodes.length) return ok((i.dry_run ? 'Dry run, nothing changed. ' : 'No blocks were created. ') + rep.join('\n'));
+      const ids = applyImport(ctx.D(), r, i.mode === 'append' ? 'append' : 'replace');
+      ctx.commit(); if (ctx.showProgram) ctx.showProgram(true);
+      return ok(`Program ${i.mode === 'append' ? 'extended' : 'replaced'}: blocks ${ids.join(', ')}.\n` + rep.join('\n'), true);
     },
   },
   ...makeProgTools({ ok, err, en, num, str, partOf, pinOf, pinLabelOf, S }),
