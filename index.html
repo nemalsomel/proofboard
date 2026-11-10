@@ -195,13 +195,14 @@
         <div class="fwin-body" id="pwBody"><div id="props" class="props"></div></div>
       </section>
       <div class="grp seg zoomctl" role="group" aria-label="Nagyítás">
-          <button class="btn icon" id="zOut" data-icon="zoomOut" aria-label="Kicsinyítés" title="Kicsinyítés (Ctrl+görgő)"></button>
+          <button class="btn icon" id="zOut" data-icon="zoomOut" aria-label="Kicsinyítés" title="Kicsinyítés (− vagy Ctrl+görgő)"></button>
           <button class="btn mono small zlbl" id="zLbl" title="Az egész panel látszódjon (0)">100%</button>
-          <button class="btn icon" id="zIn" data-icon="zoomIn" aria-label="Nagyítás" title="Nagyítás (Ctrl+görgő)"></button>
+          <button class="btn icon" id="zIn" data-icon="zoomIn" aria-label="Nagyítás" title="Nagyítás (+ vagy Ctrl+görgő)"></button>
           <button class="btn icon" id="zFit" data-kbd="0" data-icon="fit" aria-label="Az egész panel" title="Az egész panel, középen (0)"></button>
         </div>
       <div class="fab" id="fab" role="toolbar" aria-label="Műveletek a kijelöléssel" hidden></div>
       <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+      <div class="keys-hint" aria-hidden="true"><kbd>Ctrl+K</kbd> Minden parancs és gyorsbillentyű</div>
     </div>
     <section class="bpanel" id="bpanel" aria-label="Problémák és napló">
       <div class="bp-grip" id="bpGrip" role="separator" aria-orientation="horizontal" aria-label="Az alsó panel magassága" tabindex="0" title="Húzd a magasság állításához"></div>
@@ -334,6 +335,7 @@
     </div>
   </div>
 </dialog>
+<dialog class="dlg pal" id="dlgPal" aria-label="Parancspaletta"></dialog>
 <dialog class="dlg dlg-sm" id="dlgShare" aria-labelledby="dlgShareT">
   <header class="dlg-head"><h2 id="dlgShareT">Megosztás linkkel</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
   <div class="dlg-body share">

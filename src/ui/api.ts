@@ -121,8 +121,11 @@ export interface PcbApi {
   /** Nyelv: 'hu' | 'en'. */ lang(l?: string): string;
   /** A lyuk helye a képernyőn; a reveal előbb odagörget. */ at(r: number, c: number): { x: number; y: number }; reveal(r: number, c: number): { x: number; y: number };
   /** Megosztás: a jelenlegi terv linkje (`#d=…`). */ shareLink(): Promise<string>;
+  /** A parancsok (a palettán és a billentyűkhöz): azonosító, név, csoport, billentyűk, elérhető-e, rejtett-e. */ commands(): ApiCommand[];
+  /** Parancs végrehajtása azonosító szerint; ha nincs vagy nem elérhető, false. */ run(id: string): boolean;
   readonly version: string;
 }
+export interface ApiCommand { id: string; label: string; group: string; keys: string[]; enabled: boolean; hidden: boolean }
 
 /* ---------- Gazda ---------- */
 
@@ -165,6 +168,7 @@ export interface ApiHost {
   libSearch(q: string): string[]; saveCustom(def: PartDef): string; openEditor(type?: string): void;
   importPlan(o: unknown): unknown;
   shareLink(): Promise<string>;
+  commands(): ApiCommand[]; runCommand(id: string): boolean;
   readonly version: string;
 }
 
@@ -285,6 +289,8 @@ export function createApi(H: ApiHost): PcbApi {
     at(r, c) { return H.at(r, c); },
     reveal(r, c) { return H.reveal(r, c); },
     shareLink() { return H.shareLink(); },
+    commands() { return H.commands(); },
+    run(id) { return H.runCommand(id); },
     version: H.version,
   };
   return api;

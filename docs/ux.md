@@ -15,6 +15,7 @@ mi került a felületre, hova, és milyen kérdést hagyott nyitva. A felülvizs
 
 | Elem | Állapot | Megjegyzés |
 | --- | --- | --- |
+| Parancspaletta és gyorsbillentyűk | Ctrl+K (F1, ?): keresés minden parancs, alkatrész és példa között (ékezet nélkül is), Enter végrehajtja; üresen a teljes gyorsbillentyű-táblázat csoportonként, a kapcsolók pipával, a most nem elérhetők halványan. Új billentyűk: Alt+L megosztás, Alt+P példák, Alt+B panel beállításai, Alt+C Claude-kapcsolat, Alt+J JSON, Alt+K tömörítés, U útvonalak, +/− nagyítás, ⇧1–⇧5 a jobb sáv fülei, / alkatrészkeresés. Ctrl nyomva tartva minden látható gombon a billentyűje, fölül utalás a palettára. A billentyűk egy parancslistából (menü, címkék, paletta) | Billentyűk átállítása (később) |
 | Megosztás linkkel | Fájl › Megosztás linkkel…: a teljes terv (saját alkatrészek, program, jegyzetek) tömörítve a link # része mögött, szerver nélkül; másolás, telefonon rendszer-megosztás; hossz kiírva, 8000 karakter fölött figyelmeztetés. A link megnyitásakor üres tervnél rögtön betölt, különben rákérdez (Mentés fájlba, majd megnyitás); visszavonható. Agent/MCP: `get_share_link`, `open_share_link` | Előnézeti kép a linkhez (közösségi előnézet szerver nélkül nem megy) |
 | Összecsukható oldalsávok (`[` és `]`) | kész | ikonsáv a fülekkel, a Problémákon hibaszám |
 | Harmonikák a jobb sávban (Kapcsolatok, Panel) | kész | állapotuk megmarad; a Terv harmonika tartalma a Fájl menübe került |

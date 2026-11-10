@@ -960,3 +960,30 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .cp-preview #scroll{box-shadow:inset 0 0 0 3px color-mix(in srgb,var(--primary) 40%,transparent)}
 .cp-preview .left,.cp-preview .toolstrip,.cp-preview #rpProps,.cp-preview #propWin,.cp-preview #rpDesign>:not(#cpDock){pointer-events:none;opacity:.55}
 .cp-foot .help{flex-basis:100%;margin:0}
+/* parancspaletta (Ctrl+K) */
+.dlg.pal{width:min(640px,calc(100vw - 32px));height:min(70vh,620px);margin:12vh auto auto}
+.pal-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.pal-ic{font-size:18px;color:var(--muted)}
+.pal-q{flex:1;min-width:0;border:0;background:transparent;font-size:16px;padding:6px 0;color:var(--fg);outline:none}
+.pal-q::-webkit-search-cancel-button{display:none}
+.pal-list{flex:1;overflow:auto;padding:6px}
+.pal-g{font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:12px 10px 6px}
+.pal-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:var(--r-md,6px);cursor:pointer}
+.pal-row.on{background:color-mix(in srgb,var(--primary) 14%,transparent)}
+.pal-row.off{opacity:.45;cursor:default}
+.pal-l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pal-sub{color:var(--muted);font:12px var(--mono)}
+.pal-chk{display:inline-block;width:16px;color:var(--primary);font-weight:700}
+.pal-tag{font-size:11px;color:var(--muted);white-space:nowrap}
+.pal-k{display:flex;gap:4px}
+.pal-k kbd,.pal-esc,.keys-hint kbd{font:600 11px/1 var(--mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:3px 5px;background:var(--panel2);color:var(--fg);white-space:nowrap}
+.pal-foot{padding:8px 14px;border-top:1px solid var(--line)}
+.pal-none{padding:16px 10px}
+/* Ctrl nyomva: utalás a palettára */
+.keys-hint{display:none;position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:40;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--r-lg);background:var(--fg);color:var(--bg);font-size:12px;box-shadow:var(--shadow-2);pointer-events:none}
+.keys-hint kbd{background:var(--bg);color:var(--fg);border-color:transparent}
+.app.keys .keys-hint{display:flex}
+.app.keys .rtabs [data-kbd]::after{top:auto;bottom:2px;right:4px;transform:none}
+.app.keys .rail [data-kbd]::after{top:auto;bottom:-6px;right:50%;transform:translateX(50%)}
+.app.keys #bUndo::after{right:auto;left:-16px;transform:none}
+.app.keys #bRedo::after{right:-16px;transform:none}
