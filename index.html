@@ -159,6 +159,32 @@
         <div class="wirecolor" id="wireColorRow" hidden><span class="small muted">Szín</span><div class="swatches" id="swatches"></div></div>
         <div class="wirecolor cutkind" id="cutKindRow" hidden><span class="small muted">Vágás</span><div class="grp seg" id="cutKinds" role="group" aria-label="A csíkvágás típusa"></div><button class="btn ghost" id="cutClear" title="Minden kézi csíkvágás törlése (az automatikusak maradnak)">Kézi vágások törlése</button></div>
       </div>
+      <section class="fwin cp-win" id="cpWin" aria-labelledby="cpTitle" hidden>
+        <header class="fwin-head" id="cpHead">
+          <span class="fwin-t" id="cpTitle">Tömörítés</span><span class="sp"></span>
+          <button class="btn icon ghost" id="cpCol" aria-label="Összecsukás címsorra" title="Összecsukás címsorra (dupla kattintás a címsoron is)" data-icon="down"></button>
+          <button class="btn icon ghost" id="cpDockBtn" aria-label="Rögzítés a jobb sávba" title="Rögzítés a jobb sávba (a Kapcsolatok fül tetejére)" data-icon="dock"></button>
+          <button class="btn icon ghost" data-cp-close aria-label="Bezárás" title="Bezárás (Esc) – a terv nem változik" data-icon="close"></button>
+        </header>
+        <div class="fwin-body" id="cpWinBody">
+<div id="cpContent" class="cp-content">
+    <p class="help">Az alkatrészek közelebb kerülnek egymáshoz és a bekötött lábakhoz. A panelon az előnézet látszik, halványan az eredeti helyekkel.</p>
+    <div class="cp-range">
+      <label for="cpStrength">Szorosság</label>
+      <input type="range" id="cpStrength" min="0" max="100" step="5" value="50">
+      <div class="cp-ends"><span>Laza – könnyű forrasztás</span><span>Szoros – kis panel</span></div>
+    </div>
+    <div class="cp-opts">
+      <label class="check"><input type="checkbox" id="cpMcu" checked> A vezérlőlap a helyén marad</label>
+      <label class="check"><input type="checkbox" id="cpCtl" checked> A kezelőszervek (gomb, csúszka, csatlakozó) a helyükön maradnak</label>
+      <label class="check"><input type="checkbox" id="cpRot" checked> Elforgatás is</label>
+      <label class="check" id="cpSelL"><input type="checkbox" id="cpSel"> Csak a kijelöltek</label>
+    </div>
+    <div class="cp-res" id="cpRes" aria-live="polite"></div>
+    <div class="cp-foot"><span class="help">Visszavonható (Ctrl+Z).</span><span class="sp"></span><button class="btn ghost" data-cp-close>Mégse</button><button class="btn primary" id="cpApply">Alkalmaz</button></div>
+</div>
+        </div>
+      </section>
       <section class="fwin" id="propWin" aria-labelledby="pwTitle" hidden>
         <header class="fwin-head" id="pwHead">
           <span class="fwin-t" id="pwTitle">Kijelölés</span><span class="small fwin-s" id="selSumm"></span><span class="sp"></span>
@@ -228,6 +254,12 @@
       </section>
     </div>
     <div class="rpane" id="rpDesign" data-rpane="design" role="tabpanel">
+      <section class="dock cp-dock" id="cpDock" hidden>
+        <div class="dock-head"><span class="h">Tömörítés</span><span class="sp"></span>
+          <button class="btn icon ghost" id="cpUndock" aria-label="Leválasztás lebegő ablakba" title="Leválasztás: lebegő ablak a panel fölött" data-icon="undock"></button>
+          <button class="btn icon ghost" id="cpDockClose" aria-label="Bezárás" title="Bezárás (Esc) – a terv nem változik" data-icon="close"></button></div>
+        <div class="dock-body" id="cpDockBody"></div>
+      </section>
       <details class="acc" id="accLinks" open>
         <summary><span class="h">Kapcsolatok</span><span id="linkSum"></span></summary>
       <label class="check" style="margin-bottom:8px"><input type="checkbox" id="autoR"> Automatikus útvonaltervezés</label>
@@ -339,25 +371,7 @@
     <p class="help">Amíg a Claude dolgozik, a kézi szerkesztés szünetel, és fent sáv jelzi. Egy-egy munkamenet egy lépésben visszavonható (Ctrl+Z).</p>
   </div>
 </dialog>
-<dialog class="dlg dlg-sm dlg-side" id="dlgCompact" aria-labelledby="dlgCompactT">
-  <header class="dlg-head"><h2 id="dlgCompactT">Tömörítés</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
-  <div class="dlg-body">
-    <p class="help">Az alkatrészek közelebb kerülnek egymáshoz és a bekötött lábakhoz. A panelon az előnézet látszik, halványan az eredeti helyekkel.</p>
-    <div class="cp-range">
-      <label for="cpStrength">Szorosság</label>
-      <input type="range" id="cpStrength" min="0" max="100" step="5" value="50">
-      <div class="cp-ends"><span>Laza – könnyű forrasztás</span><span>Szoros – kis panel</span></div>
-    </div>
-    <div class="cp-opts">
-      <label class="check"><input type="checkbox" id="cpMcu" checked> A vezérlőlap a helyén marad</label>
-      <label class="check"><input type="checkbox" id="cpCtl" checked> A kezelőszervek (gomb, csúszka, csatlakozó) a helyükön maradnak</label>
-      <label class="check"><input type="checkbox" id="cpRot" checked> Elforgatás is</label>
-      <label class="check" id="cpSelL"><input type="checkbox" id="cpSel"> Csak a kijelöltek</label>
-    </div>
-    <div class="cp-res" id="cpRes" aria-live="polite"></div>
-  </div>
-  <footer class="dlg-foot"><span class="help">Visszavonható (Ctrl+Z).</span><button class="btn ghost" data-close>Mégse</button><button class="btn primary" id="cpApply">Alkalmaz</button></footer>
-</dialog>
+
 <dialog class="dlg dlg-sm" id="dlgBoard" aria-labelledby="dlgBoardT">
   <header class="dlg-head"><h2 id="dlgBoardT">Panel beállításai</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
   <div class="dlg-body">

@@ -1,5 +1,5 @@
 /**
- * Tömörítés párbeszédablak: szorosság (Laza ↔ Szoros), mi maradjon a helyén, élő előnézet a panelon (halványan az
+ * Tömörítés panel (lebegő ablakban vagy a jobb sávba rögzítve – a helyét a gazda adja): szorosság (Laza ↔ Szoros), mi maradjon a helyén, élő előnézet a panelon (halványan az
  * eredeti helyekkel), előtte/utána számok. A tervet csak az Alkalmaz módosítja (a gazdán át, egy visszavonási lépésben).
  */
 import { N_, type Tr } from '../i18n/i18n';
@@ -18,20 +18,27 @@ export interface CompactHost {
   /** előnézet: a megjelenített terv és az eredeti helyükön halványan rajzolandó alkatrészek; null: vissza az eredetire */
   preview(d: Design | null, origins: PartInstance[]): void;
   /** a terv végrehajtása (visszavonható) */ apply(res: CompactResult): void;
+  /** megnyitás / bezárás (a gazda megjeleníti vagy elrejti a helyét) */ shown(open: boolean): void;
   loadPrefs(): CompactPrefs; savePrefs(p: CompactPrefs): void;
   tr: Tr;
 }
-export interface CompactDialog { open(onlySelected?: boolean): void; result(): CompactResult | null; busy(): boolean }
+export interface CompactDialog {
+  open(onlySelected?: boolean): void;
+  /** bezárás: az előnézet eltűnik, a terv változatlan */ close(): void;
+  isOpen(): boolean;
+  /** a terv megváltozott, amíg nyitva volt: újraszámolás */ refresh(): void;
+  result(): CompactResult | null; busy(): boolean;
+}
 
 const KEEP: Record<KeepReason, string> = { fixed: N_('rögzített'), mcu: N_('vezérlőlap'), control: N_('kezelőszerv'), manual: N_('kézzel bekötve'), off: N_('panelon kívül'), scope: N_('nincs kijelölve') };
 
-export function mountCompactDialog(dlg: HTMLDialogElement, H: CompactHost): CompactDialog {
-  const q = <T extends HTMLElement = HTMLInputElement>(s: string) => dlg.querySelector<T>(s)!;
+export function mountCompactDialog(root: HTMLElement, H: CompactHost): CompactDialog {
+  const q = <T extends HTMLElement = HTMLInputElement>(s: string) => root.querySelector<T>(s)!;
   const tr = H.tr;
-  let res: CompactResult | null = null, timer = 0, computing = false, applied = false;
+  let res: CompactResult | null = null, timer = 0, computing = false, isOpen = false, selIds: string[] = [];
 
   const opts = (): CompactOpts => {
-    const sel = H.selected();
+    const sel = selIds;
     return { strength: +q('#cpStrength').value / 100, keepMcu: q('#cpMcu').checked, keepControls: q('#cpCtl').checked, rotate: q('#cpRot').checked, only: q('#cpSel').checked && sel.length ? sel : null };
   };
   const row = (name: string, a: number | string, b: number | string, better: boolean | null) =>
@@ -68,21 +75,28 @@ export function mountCompactDialog(dlg: HTMLDialogElement, H: CompactHost): Comp
   q('#cpApply').addEventListener('click', () => {
     if (timer) { clearTimeout(timer); compute(); }
     if (!res || !res.moves.length) return;
-    applied = true; const r = res; dlg.close(); H.apply(r);
+    const r = res; close(false); H.apply(r);
   });
-  const restore = () => { if (timer) { clearTimeout(timer); timer = 0; } if (!applied) H.preview(null, []); applied = true; res = null; };
-  dlg.addEventListener('close', restore); dlg.addEventListener('cancel', restore);
-  dlg.addEventListener('click', e => { if ((e.target as HTMLElement).closest('[data-close]')) restore(); }, true);
+  /** bezárás; `restore`: az előnézet helyett az eredeti terv látszik */
+  function close(restore = true) {
+    if (!isOpen) return; isOpen = false;
+    if (timer) { clearTimeout(timer); timer = 0; }
+    if (restore) H.preview(null, []);
+    res = null; H.shown(false);
+  }
+  root.addEventListener('click', e => { if ((e.target as HTMLElement).closest('[data-cp-close]')) close(); });
 
   return {
     open(onlySelected) {
-      const p = H.loadPrefs(), sel = H.selected();
+      const p = H.loadPrefs(), sel = (selIds = H.selected());
       q('#cpStrength').value = String(Math.round(p.strength * 100)); q('#cpMcu').checked = p.keepMcu; q('#cpCtl').checked = p.keepControls; q('#cpRot').checked = p.rotate;
       q('#cpSelL').hidden = !sel.length; q('#cpSel').checked = !!sel.length && onlySelected !== false;
-      applied = false; res = null; show();
-      if (!dlg.open) dlg.showModal();
+      isOpen = true; res = null; show(); H.shown(true);
       q('#cpRes').classList.add('busy'); compute();
     },
+    close: () => close(),
+    isOpen: () => isOpen,
+    refresh() { if (isOpen) schedule(); },
     result: () => res,
     busy: () => computing || !!timer,
   };

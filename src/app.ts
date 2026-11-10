@@ -33,7 +33,7 @@ import { mountAgentPanel, type AgentPanel, type AgentPrefs, type StoredChat } fr
 import type { UiState } from './ui/state';
 import type { Bridge, Design, Link, NetPin, PlacedPin, Wire } from './engine/types';
 type AutoWire = Wire & { links?: string[] };
-import type { Cut } from './engine/board';
+import type { Cut, Layout } from './engine/board';
 import type { HolePoint } from './engine/cuts';
 import type { Group } from './ui/hit';
 import type { Selection } from './ui/interact';
@@ -164,7 +164,8 @@ function draw0(){
   if(!D||!A0)return;
   if(ui.selLink&&!D.links.some(x=>x.id===ui.selLink))ui.selLink=null;
   const hv=ui.hover,A=ui.sim?AS:A0;
-  drawBoard({ctx,dpr,P,M,vrot:VR(),cu:cu(),design:D,A,layout:LAY(),simOn:!!ui.sim,sim:SIM||null,
+  const PV=CP_PV; // tömörítés előnézete: a terv helyett az előnézeti terv látszik (a valódi nem változik)
+  drawBoard({ctx,dpr,P,M,vrot:VR(),cu:cu(),design:PV?PV.D:D,A:PV?PV.A:A,layout:PV?PV.layout:LAY(),simOn:!!ui.sim,sim:SIM||null,
     colors:{stage:css('--stage'),accent:css('--accent'),muted:css('--muted'),mono:css('--mono'),monoFont:MONO,display:css('--display')},
     hover:hv,tool:ui.tool,origins:CP_ORIGINS,ghost:ui.placing&&hv?(()=>{const g=ghostPart(hv);return{part:g,fits:partFits(g)};})():null,
     xray:!!ui.xray,pressed:id=>!!ui.pressed[id],phase:id=>ui.phase[id]||0,
@@ -173,7 +174,7 @@ function draw0(){
     stub:!!ui.stub,hoverWire:ui.hoverWire,selLink:ui.selLink||null,rats:!!ui.rats,autoHidden,cutAt,selCut:ct=>IA.isSelCut(ct),
     wireStart:ui.wireStart||null,wireColor:ui.wireColor,linkStart:ui.linkStart||null,progHi:ui.progHi||null,findPin,
     flash:ui.flash||null,box:ui.drag&&ui.drag.kind==='box'?{h0:ui.drag.h0,h1:ui.drag.h1}:null,
-    selNote:ui.sel&&ui.sel.kind==='note'?ui.sel.id:null,linkState:ui.linkState,linkA:A0,tr});
+    selNote:ui.sel&&ui.sel.kind==='note'?ui.sel.id:null,linkState:PV?PV.linkState:ui.linkState,linkA:PV?PV.A:A0,tr});
 }
 /* Rövid vezeték nézet (ui/drawboard.ts rajzolja): a találatvizsgálathoz kell, látszik-e a teljes vonal. */
 const stubOf=(w: Wire)=>stubOfW(w,!!ui.stub);
@@ -197,10 +198,10 @@ function restoreSnap(s: string|null){if(s==null)return;const id=D&&D.id,o=JSON.p
 const HIST=new History(150,()=>undoUI());
 function pushUndo(){HIST.push(snap());}
 /** tömörítés előnézete: az eredeti terv (amíg az előnézet látszik) és a mozduló alkatrészek eredeti helye */
-let CP_ORIG: Design|null=null,CP_ORIGINS: PartInstance[]|null=null;
+let CP_PV: {D: Design; A: Netlist; layout: Layout; linkState: typeof ui.linkState}|null=null,CP_ORIGINS: PartInstance[]|null=null;
 /** az agent panelje (az első megnyitáskor jön létre) */
 let AGP: AgentPanel|null=null;
-function commit(noRoute?: boolean){queueMicrotask(progRefresh);syncDefs(D.customParts);const bk=JSON.stringify(D.board);if(!noRoute&&D.settings.autoRoute&&D.links.length)route({moved:ui.moved});ui.moved=null;save();if(bk!==ui.lastBoard){ui.lastBoard=bk;resize();boardUI();}recompute();renderLeft();if(AGP&&ui.rtab==='agent'&&!AGP.busy()&&D.id!==AGP.project())AGP.render();}
+function commit(noRoute?: boolean){queueMicrotask(progRefresh);syncDefs(D.customParts);const bk=JSON.stringify(D.board);if(!noRoute&&D.settings.autoRoute&&D.links.length)route({moved:ui.moved});ui.moved=null;save();if(bk!==ui.lastBoard){ui.lastBoard=bk;resize();boardUI();}recompute();renderLeft();if(AGP&&ui.rtab==='agent'&&!AGP.busy()&&D.id!==AGP.project())AGP.render();if(CPD.isOpen())CPD.refresh();}
 function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(D));}catch(e){}}
 function sameSec(r1: number,c1: number,r2: number,c2: number){const L=LAY();return L.cell(r1,c1)===L.cell(r2,c2);}
 function addBridge(r1: number,c1: number,r2: number,c2: number){return OPS.addBridge(D,r1,c1,r2,c2);}
@@ -246,8 +247,8 @@ function groupTransform(kind: 'rot'|'mir'){ // kind: 'rot' | 'mir'; a lelógást
 function rotate(){if(ui.placing){ui.ghost.rot=(ui.ghost.rot+1)&3;draw();return;}{const g=selG();if(g&&gSize(g))groupTransform('rot');}}
 function mirror(){if(ui.placing){ui.ghost.rot=(4-ui.ghost.rot)&3;ui.ghost.mir=!ui.ghost.mir;draw();return;}{const g=selG();if(g&&gSize(g))groupTransform('mir');}}
 function delSel(){const sel=ui.sel;if(!sel)return;pushUndo();if(sel.kind==='group')OPS.removeItems(D,sel);else if(sel.kind==='wire')D.wires.splice(sel.i,1);else if(sel.kind==='bridge')D.bridges.splice(sel.i,1);else if(sel.kind==='note')D.notes=D.notes.filter(n=>n.id!==sel.id);else if(sel.kind==='cut'){const h=sel.hit;HIST.drop();IA.deleteCut(h);return;}ui.sel=null;commit();}
-function undo(){const E=editorHistory();if(E){E.go(false);return;}const s=HIST.undo(snap());if(s==null)return;restoreSnap(s);ui.sel=null;commit();}
-function redo(){const E=editorHistory();if(E){E.go(true);return;}const s=HIST.redo(snap());if(s==null)return;restoreSnap(s);ui.sel=null;commit();}
+function undo(){const E=editorHistory();if(E){E.go(false);return;}if(CPD.isOpen())CPD.close();const s=HIST.undo(snap());if(s==null)return;restoreSnap(s);ui.sel=null;commit();}
+function redo(){const E=editorHistory();if(E){E.go(true);return;}if(CPD.isOpen())CPD.close();const s=HIST.redo(snap());if(s==null)return;restoreSnap(s);ui.sel=null;commit();}
 function setTool(t: string){ui.tool=t;ui.wireStart=null;ui.linkStart=null;if(t!=='place')ui.placing=null;renderLeft();draw();}
 function setView(v: string){ui.view=v;$('#vComp').classList.toggle('on',v==='comp');$('#vCu').classList.toggle('on',v==='cu');draw();}
 function zoom(dz: number){zoomTo(ui.zoom+dz);}
@@ -365,6 +366,7 @@ function progTick(dt: number){const P=ui.prog;if(!P||!ui.sim)return;P.t+=dt;prog
 let msgTimer: ReturnType<typeof setTimeout>|undefined;function flashMsg(m: string){const s=$('#status');s.textContent=m;s.style.color='var(--err)';clearTimeout(msgTimer);msgTimer=setTimeout(()=>{s.style.color='';status();},1800);}
 
 document.addEventListener('keydown',ev=>{
+  if(CPD.isOpen()&&!(ev.target as HTMLElement|null)?.closest?.('#cpContent')){if(ev.key==='Escape'){ev.preventDefault();CPD.close();return;}if(!(ev.ctrlKey||ev.metaKey)||/^[zy]$/i.test(ev.key)){ev.preventDefault();return;}}
   if(AGP&&AGP.busy()){if(ev.key==='Escape'){ev.preventDefault();AGP.stop();}else if(!(ev.target as HTMLElement|null)?.closest?.('#agentRoot'))ev.preventDefault();return;} // az agent dolgozik: a kézi szerkesztés szünetel
   const t=ev.target as HTMLElement|null;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'))return;
   const k=ev.key.toLowerCase();
@@ -604,17 +606,32 @@ let toastTimer: ReturnType<typeof setTimeout>|undefined;
 function toast(m: string,err?: boolean){log(m,err);const t=$('#toast');t.textContent=m;t.classList.toggle('err',!!err);t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.hidden=true;},5000);}
 $('#toast').addEventListener('click',()=>{$('#toast').hidden=true;});
 const CPKEY='proofboard.compact';
-const CPD=mountCompactDialog($<HTMLDialogElement>('#dlgCompact'),{
-  D:()=>CP_ORIG||D,
-  selected:()=>{const g=selG();return g?[...g.parts]:[];},
-  preview:(d,origins)=>{if(d){if(!CP_ORIG)CP_ORIG=D;D=d;CP_ORIGINS=origins;}else{if(CP_ORIG)D=CP_ORIG;CP_ORIG=null;CP_ORIGINS=null;}recompute();},
-  apply:r=>{if(CP_ORIG){D=CP_ORIG;CP_ORIG=null;}CP_ORIGINS=null;pushUndo();applyCompaction(D,r);if(D.settings.autoRoute&&D.links.length)route({full:true});commit(true);toast(tr('Tömörítve: {n} alkatrész mozdult. Visszavonás: Ctrl+Z.',{n:r.moves.length}));},
+/* Tömörítés (ui/compactdlg.ts): lebegő ablakban, vagy a jobb sáv Kapcsolatok fülének tetejére rögzítve; amíg nyitva
+   van, a panel az előnézetet mutatja, és a kézi szerkesztés szünetel (a nézet görgethető, nagyítható) */
+const CPWKEY='proofboard.compact.win';
+const CPD=mountCompactDialog($<HTMLElement>('#cpContent'),{
+  D:()=>D,
+  selected:()=>{const g=selG();return g?[...g.parts].filter(id=>D.parts.some(p=>p.id===id)):[];},
+  preview:(d,origins)=>{if(d){const A=analyzeNet(d,{hidden:autoHidden});CP_PV={D:d,A,layout:layoutOf(d),linkState:linkStatesOf(d,A)};CP_ORIGINS=origins;}else{CP_PV=null;CP_ORIGINS=null;}draw();},
+  apply:r=>{CP_PV=null;CP_ORIGINS=null;pushUndo();applyCompaction(D,r);if(D.settings.autoRoute&&D.links.length)route({full:true});commit(true);toast(tr('Tömörítve: {n} alkatrész mozdult. Visszavonás: Ctrl+Z.',{n:r.moves.length}));},
+  shown:open=>{$('.app').classList.toggle('cp-preview',open);if(open){ui.placing=null;ui.drag=null;}cpPlace();renderLeft();draw();},
   loadPrefs:()=>{try{return{...COMPACT_DEFAULTS,...JSON.parse(localStorage.getItem(CPKEY)||'{}')};}catch(e){return{...COMPACT_DEFAULTS};}},
   savePrefs:p=>{try{localStorage.setItem(CPKEY,JSON.stringify(p));}catch(e){}},
   tr});
-function openCompact(){if(ui.sim)return;closeMenu();CPD.open();}
+const CPW=mountFloatWin({win:$('#cpWin'),head:$('#cpHead'),body:$('#cpWinBody'),area:$('#carea'),
+  load:()=>{try{return parseWin({w:340,...JSON.parse(localStorage.getItem(CPWKEY)||'{}')});}catch(e){return parseWin({w:340});}},
+  save:st=>{try{localStorage.setItem(CPWKEY,JSON.stringify(st));}catch(e){}},
+  onDock:()=>{cpPlace();},compact:()=>MOB.matches});
+/** a tartalom helye: rögzítve a Kapcsolatok fül tetején (mobilon mindig a lebegő ablakban) */
+function cpPlace(){const open=CPD.isOpen(),docked=CPW.state().docked&&!MOB.matches;
+  (docked?$('#cpDockBody'):$('#cpWinBody')).appendChild($('#cpContent'));
+  $('#cpDock').hidden=!(open&&docked);CPW.show(open&&!docked);
+  if(open&&docked){sideCollapse('r',false);if(ui.rtab!=='design')rtab('design');$('#cpDock').scrollIntoView({block:'nearest'});}}
+function openCompact(){if(ui.sim)return;closeMenu();if(CPD.isOpen()){cpPlace();return;}CPD.open();}
 $('#bCompact').onclick=openCompact;
 $('#sbFoot').onclick=openCompact;
+$('#cpCol').onclick=()=>CPW.collapse();$('#cpDockBtn').onclick=()=>CPW.dock(true);$('#cpUndock').onclick=()=>CPW.dock(false);$('#cpDockClose').onclick=()=>CPD.close();
+MOB.addEventListener('change',()=>cpPlace());
 function openDlg(sel: string){const d=$<HTMLDialogElement>(sel);closeMenu();if(!d.open)d.showModal();}
 function closeDlg(sel: string){const d=$<HTMLDialogElement>(sel);if(d&&d.open)d.close();}
 $$<HTMLDialogElement>('dialog.dlg').forEach(d=>{d.addEventListener('click',e=>{if(e.target===d||(e.target as HTMLElement).closest<HTMLElement>('[data-close]'))d.close();});});
@@ -1024,7 +1041,7 @@ function mcpEnd(){if(!MCP_RUN)return;const r=MCP_RUN;MCP_RUN=null;if(r.timer)cle
 async function mcpExec(name: string,input: Record<string,unknown>,readOnly: boolean): Promise<ToolResult>{
   if(name===CALL_EXPORT)return {text:JSON.stringify(D)};
   if(AGP&&AGP.busy())return {text:'The user is running the built-in agent in the app right now. Try again in a moment.',isError:true};
-  if(CP_ORIG||$<HTMLDialogElement>('#dlgCompact').open)return {text:'The user has the compaction dialog open in the app. Try again when it is closed.',isError:true};
+  if(CPD.isOpen())return {text:'The user has the compaction window open in the app (it previews a new layout). Try again when it is closed.',isError:true};
   const def=AGENT_TOOLS.find(t=>t.name===name);
   const mutates=name===CALL_IMPORT||!!(def&&def.mutates)||name==='set_project_notes';
   if(readOnly&&mutates)return {text:'The app is in read-only mode: the user allows Claude to read and check the design, but not to change it. Suggest the change instead.',isError:true};

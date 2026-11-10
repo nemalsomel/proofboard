@@ -944,3 +944,16 @@ html.simple [data-adv]{display:none!important}
 .mcp-state.ok{color:var(--ok)} .mcp-state.wait{color:var(--warn)} .mcp-state.err{color:var(--err)}
 .mcp-adv summary{cursor:pointer;color:var(--muted);font-size:var(--fs-sm)}
 a.btn{text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+/* Tömörítés: lebegő ablak / a Kapcsolatok fül tetejére rögzítve; amíg nyitva, a panel előnézet (nem szerkeszthető) */
+.cp-content{display:flex;flex-direction:column;gap:10px}
+.cp-content>.help{margin:0}
+.cp-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:10px}
+.cp-foot .sp{flex:1}
+.cp-dock{border:1px solid color-mix(in srgb,var(--primary) 45%,var(--line));border-radius:var(--r-lg);margin-bottom:10px;background:var(--panel)}
+.cp-dock .dock-body{padding:4px 12px 12px}
+.fwin.compact #cpDockBtn{display:none}
+.fwin.collapsed #cpCol .ic{transform:rotate(-90deg)}
+.cp-preview #cv{pointer-events:none}
+.cp-preview #scroll{box-shadow:inset 0 0 0 3px color-mix(in srgb,var(--primary) 40%,transparent)}
+.cp-preview .left,.cp-preview .toolstrip,.cp-preview #rpProps,.cp-preview #propWin,.cp-preview #rpDesign>:not(#cpDock){pointer-events:none;opacity:.55}
+.cp-foot .help{flex-basis:100%;margin:0}

@@ -70,14 +70,15 @@ test('Tömörítés ablak: a Problémák jelzi; élő előnézet, Mégse vissza�
   const hint = page.locator('#issues li', { hasText: 'A terv szellős' });
   await expect(hint).toBeVisible();
   await hint.locator('[data-act="compact"]').click();
-  const dlg = page.locator('#dlgCompact');
+  const dlg = page.locator('#cpWin');
   await expect(dlg).toBeVisible();
+  await expect(page.locator('.app')).toHaveClass(/cp-preview/);
   // alapból a gomb (kezelőszerv) és a Pico a helyén
   await expect(page.locator('#cpRes')).toContainText('A helyén marad: PICO1 (vezérlőlap), S1 (kezelőszerv)');
   await expect(page.locator('#cpRes')).toContainText('Mozdul:');
-  expect(await pos()).not.toBe(before); // előnézet
+  expect(await pos()).toBe(before); // csak előnézet: a terv nem változik
   // Mégse: vissza az eredetire, nincs visszavonási lépés
-  await dlg.locator('[data-close]').last().click();
+  await dlg.locator('[data-cp-close]').last().click();
   await expect(dlg).toBeHidden();
   expect(await pos()).toBe(before);
   await expect(page.locator('#bUndo')).toBeDisabled();
@@ -119,4 +120,38 @@ test('Tömörítés ablak: csak a kijelöltek', async ({ page }) => {
   await expect(page.locator('#cpRes')).toContainText('R2 (nincs kijelölve)');
   await page.locator('#cpSel').uncheck();
   await expect(page.locator('#cpRes')).not.toContainText('nincs kijelölve');
+});
+
+test('Tömörítés ablak: húzható, a Kapcsolatok fül tetejére rögzíthető (és vissza); a helye megmarad', async ({ page }) => {
+  await page.evaluate(d => (window as any).pcb.load(d), SPREAD);
+  await page.click('#bCompact');
+  const win = page.locator('#cpWin');
+  await expect(win).toBeVisible();
+  const b0 = (await win.boundingBox())!;
+  const h = (await page.locator('#cpHead').boundingBox())!;
+  await page.mouse.move(h.x + 40, h.y + h.height / 2); await page.mouse.down();
+  await page.mouse.move(h.x - 160, h.y + 120, { steps: 6 }); await page.mouse.up();
+  const b1 = (await win.boundingBox())!;
+  expect(b1.x).toBeLessThan(b0.x - 100); expect(b1.y).toBeGreaterThan(b0.y + 80);
+  // rögzítés: a jobb sáv Kapcsolatok fülén, a tetején
+  await page.click('#cpDockBtn');
+  await expect(win).toBeHidden();
+  await expect(page.locator('#cpDock')).toBeVisible();
+  await expect(page.locator('#cpDock #cpStrength')).toBeVisible();
+  await expect(page.locator('.right [data-rtab="design"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#cpRes')).toContainText('Mozdul:');
+  // bezárás és újranyitás: rögzítve marad
+  await page.click('#cpDockClose');
+  await expect(page.locator('#cpDock')).toBeHidden();
+  await expect(page.locator('.app')).not.toHaveClass(/cp-preview/);
+  await page.reload(); await page.waitForFunction(() => !!(window as any).pcb);
+  await page.click('#bCompact');
+  await expect(page.locator('#cpDock')).toBeVisible();
+  // vissza lebegőbe, a korábbi helyére
+  await page.click('#cpUndock');
+  await expect(win).toBeVisible();
+  const b2 = (await win.boundingBox())!;
+  expect(Math.abs(b2.x - b1.x)).toBeLessThan(4); expect(Math.abs(b2.y - b1.y)).toBeLessThan(4);
+  await page.keyboard.press('Escape');
+  await expect(win).toBeHidden();
 });

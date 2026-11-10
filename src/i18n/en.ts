@@ -1490,4 +1490,6 @@ export const EN: Readonly<Record<string, string>> = {
   "Blokkok szétkötése": "Disconnect blocks",
   "Program elrendezése": "Arrange program",
   "Program futtatása": "Run program",
+  "Rögzítés a jobb sávba (a Kapcsolatok fül tetejére)": "Dock to the right sidebar (top of the Links tab)",
+  "Bezárás (Esc) – a terv nem változik": "Close (Esc) – the design does not change",
 };
