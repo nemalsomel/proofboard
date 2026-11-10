@@ -10,7 +10,7 @@ import { DEFS, isMcu, isOff } from './defs';
 import { placedPins, xf } from './geometry';
 import { equivPins, findPin, linkStates, partGroups } from './links';
 import { analyze } from './netlist';
-import { route } from './route';
+import { autoCutOn, route } from './route';
 import type { Design } from './types';
 
 export interface LayoutStats {
@@ -69,7 +69,8 @@ export interface CompactOpts {
   maxPasses?: number;
 }
 /** A bekötés és a terület egy pillanatban. */
-export interface CompactMetrics { stats: LayoutStats; links: number; linksOk: number; bridges: number; wires: number; cuts: number }
+/** `shorts`: hány kapcsolatcsoport olvadt össze egy másikkal (rövidzár a kapcsolatok szerint) */
+export interface CompactMetrics { stats: LayoutStats; links: number; linksOk: number; bridges: number; wires: number; cuts: number; shorts: number }
 export interface CompactMove { id: string; label: string; from: { r: number; c: number; rot: number }; to: { r: number; c: number; rot: number } }
 /** Miért marad egy alkatrész a helyén. */
 export type KeepReason = 'fixed' | 'mcu' | 'control' | 'manual' | 'off' | 'scope';
@@ -86,9 +87,32 @@ const dist = (a: { r: number; c: number }, b: { r: number; c: number }) => Math.
 
 /** A terv bekötésének mérőszámai (a terv mostani `auto` bekötéséből és netlistájából). */
 export function compactMetrics(D: Design): CompactMetrics {
-  const st = linkStates(D, analyze(D));
+  const A = analyze(D), st = linkStates(D, A);
   let ok = 0; for (const s of st.values()) if (s.ok) ok++;
-  return { stats: layoutStats(D), links: D.links.length, linksOk: ok, bridges: D.bridges.length + D.auto.bridges.length, wires: D.wires.length + D.auto.wires.length, cuts: (D.cuts || []).length + (D.auto.cuts || []).length };
+  return { stats: layoutStats(D), links: D.links.length, linksOk: ok, bridges: D.bridges.length + D.auto.bridges.length, wires: D.wires.length + D.auto.wires.length, cuts: (D.cuts || []).length + (D.auto.cuts || []).length, shorts: linkShorts(D, A) };
+}
+
+/** Rövidzár a kapcsolatok szerint: a kapcsolatok lábcsoportjai (GND egy csoport) közül hány került közös hálózatba egy másikkal. */
+function linkShorts(D: Design, A: ReturnType<typeof analyze>): number {
+  const par = new Map<string, string>();
+  const f = (x: string): string => { const p = par.get(x); if (p == null || p === x) { par.set(x, x); return x; } const r = f(p); par.set(x, r); return r; };
+  const uni = (a: string, b: string) => { const x = f(a), y = f(b); if (x !== y) par.set(x, y); };
+  const refs: string[] = [];
+  for (const l of D.links) {
+    refs.push(l.a);
+    if (l.b === 'GND') uni(l.a, 'GND'); else if (l.b === 'GPIO') { if (l.gpio) { uni(l.a, l.gpio); refs.push(l.gpio); } } else { uni(l.a, l.b); refs.push(l.b); }
+  }
+  const groupsOfNet = new Map<number, Set<string>>();
+  for (const ref of refs) {
+    const i = ref.indexOf('.'), bp = A.byPart.get(ref.slice(0, i)), q = bp && bp.map[ref.slice(i + 1)];
+    if (!q || q.net < 0) continue;
+    if (!groupsOfNet.has(q.net)) groupsOfNet.set(q.net, new Set());
+    groupsOfNet.get(q.net)!.add(f(ref));
+  }
+  // a vezérlő föld-lábai a GND-csoporthoz tartoznak
+  for (const p of D.parts) if (isMcu(p)) for (const q of placedPins(p)) if (q.role === 'gnd') { const bp = A.byPart.get(p.id), x = bp && bp.map[q.id]; if (x && groupsOfNet.has(x.net)) groupsOfNet.get(x.net)!.add(f('GND')); }
+  let n = 0; for (const g of groupsOfNet.values()) n += g.size - 1;
+  return n;
 }
 const reroute = (D: Design) => { if (D.settings.autoRoute && D.links.length) route(D, { full: true }); };
 
@@ -119,6 +143,10 @@ export function planCompaction(D0: Design, o: CompactOpts = {}): CompactResult {
   for (const p of D.parts) { const g = partGroups(p); for (const k in g) uni(p.id + '.' + k, p.id + '.' + g[k]); for (const q of placedPins(p)) if (isMcu(p) && q.role === 'gnd') uni(p.id + '.' + q.id, 'GND'); }
   for (const l of D.links) { if (l.b === 'GND') uni(l.a, 'GND'); else if (l.b === 'GPIO') { if (l.gpio) uni(l.a, l.gpio); } else uni(l.a, l.b); }
   const netOf = (pid: string, pin: string) => f(pid + '.' + pin);
+  // automatikus csíkvágásnál a különböző kapcsolatok lábai közös csíkon lehetnek (közéjük vágás kerül); kapcsolat nélküli lábnál nem tudjuk a szándékot
+  const autoCut = autoCutOn(D), linked = new Set<string>();
+  for (const l of D.links) { linked.add(f(l.a)); if (l.b !== 'GND' && l.b !== 'GPIO') linked.add(f(l.b)); }
+  const canShare = (n1: string, n2: string) => n1 === n2 || (autoCut && linked.has(n1) && linked.has(n2));
 
   // ki mozdulhat
   const kept: Record<string, KeepReason> = {};
@@ -138,7 +166,7 @@ export function planCompaction(D0: Design, o: CompactOpts = {}): CompactResult {
     for (const q of placedPins(p)) {
       const k = cellOf(q.r, q.c); if (k < 0) continue;
       const n = netOf(p.id, q.id);
-      if ((manualCells.has(k) && k >= 0) || (occ.get(k) || []).some(x => x.pid !== p.id && x.net !== n)) { kept[p.id] = 'manual'; break; }
+      if ((manualCells.has(k) && k >= 0) || (occ.get(k) || []).some(x => x.pid !== p.id && !canShare(x.net, n))) { kept[p.id] = 'manual'; break; }
     }
   }
   const movable = D.parts.filter(p => !kept[p.id]);
@@ -218,9 +246,9 @@ export function planCompaction(D0: Design, o: CompactOpts = {}): CompactResult {
     for (const pn of sh.pins) {
       const k = cellOf(pn.r + r, pn.c + c); if (k < 0) return false;
       const n = netOf(p.id, pn.id);
-      if (mine.has(k) && mine.get(k) !== n) return false; mine.set(k, n);
+      if (mine.has(k) && !canShare(mine.get(k)!, n)) return false; mine.set(k, n);
       if (manualCells.has(k)) return false;
-      for (const x of occ.get(k) || []) if (x.pid !== p.id && x.net !== n) return false;
+      for (const x of occ.get(k) || []) if (x.pid !== p.id && !canShare(x.net, n)) return false;
     }
     return true;
   };
@@ -231,7 +259,7 @@ export function planCompaction(D0: Design, o: CompactOpts = {}): CompactResult {
   };
   // a bekötés pontszáma (útvonalkeresés után): kevesebb híd, kisebb terület; laza beállításnál a híd számít többet
   const lam = 0.05 + 0.6 * s, score = (m: CompactMetrics) => m.bridges + lam * m.stats.area;
-  const okState = (): boolean => { const T = clone(D); reroute(T); const m = compactMetrics(T); return m.linksOk >= before.linksOk && m.wires <= before.wires && score(m) < score(before) - 1e-9; };
+  const okState = (): boolean => { const T = clone(D); reroute(T); const m = compactMetrics(T); return m.linksOk >= before.linksOk && m.wires <= before.wires && m.shorts <= before.shorts && score(m) < score(before) - 1e-9; };
   const snaps: Array<Map<string, { r: number; c: number; rot: number }>> = [];
   const take = () => new Map(movable.map(p => [p.id, { r: p.r, c: p.c, rot: p.rot }]));
   const restore = (m: Map<string, { r: number; c: number; rot: number }>) => { for (const p of movable) { occMove(p, false); const x = m.get(p.id)!; p.r = x.r; p.c = x.c; p.rot = x.rot; setState(p); occMove(p, true); } };

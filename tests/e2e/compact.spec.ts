@@ -155,3 +155,13 @@ test('Tömörítés ablak: húzható, a Kapcsolatok fül tetejére rögzíthető
   await page.keyboard.press('Escape');
   await expect(win).toBeHidden();
 });
+
+test('csíkos panel automatikus csíkvágással: a közös csíkon lévő, különböző kapcsolatú lábak nem „kézi bekötés”; tömöríthető, rövidzár nélkül', async ({ page }) => {
+  await pcb(page, `pcb.example('strip');`);
+  const r = await pcb<{ moves: Array<{ label: string }>; kept: Record<string, string>; before: { stats: { area: number }; shorts: number }; after: { stats: { area: number }; linksOk: number; shorts: number } }>(page, `return pcb.compact({ strength: 1 });`);
+  expect(Object.values(r.kept)).not.toContain('manual');
+  expect(r.moves.length).toBeGreaterThan(0);
+  expect(r.after.linksOk).toBe(3);
+  expect(r.after.shorts).toBe(0);
+  expect(r.after.stats.area).toBeLessThan(r.before.stats.area);
+});
