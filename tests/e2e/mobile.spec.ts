@@ -117,3 +117,20 @@ test('mobilon a tulajdonságok a Részletek lapon (saját fülön); a lap lefel�
   await expect(page.locator('.app')).not.toHaveClass(/sheet-right/);
   await expect(page.locator('#tabbar [data-sheet=""]')).toHaveCount(0); // nincs külön Panel fül
 });
+
+test('program: él húzással és két koppintással akkor is bekötődik, ha az ujj nem pontosan a bemenetre kerül', async ({ page }) => {
+  await page.evaluate(() => { const pcb = (window as any).pcb; pcb.example('led-auto'); pcb.program({ nodes: [{ id: 'n1', type: 'blink', x: 20, y: 40, props: {} }, { id: 'n2', type: 'not', x: 20, y: 260, props: {} }, { id: 'n3', type: 'toggle', x: 20, y: 420, props: {} }], edges: [] }); pcb.work('prog'); });
+  const c = async (sel: string): Promise<XY> => { const b = (await page.locator(sel).boundingBox())!; return [b.x + b.width / 2, b.y + b.height / 2]; };
+  await expect(page.locator('[data-port="n1.v"]')).toBeVisible();
+  // húzás: a kimenetről a cél blokk közepére (nem a bemeneti pontra)
+  const out = await c('[data-port="n1.v"]'), body = await c('[data-node="n2"]');
+  await gesture(page, [out], [body], { steps: 10 });
+  await expect.poll(() => page.evaluate(() => (window as any).pcb.program().edges.map((e: any) => e.from + '>' + e.to))).toEqual(['n1.v>n2.a']);
+  // két koppintás: kimenet, majd a bemenet mellé (20 px-re)
+  const out2 = await c('[data-port="n2.v"]'), in3 = await c('[data-port="n3.a"]');
+  await gesture(page, [out2], [out2], { steps: 1 });
+  await expect(page.locator('[data-port="n2.v"]')).toHaveClass(/\bpend\b/);
+  await gesture(page, [[in3[0] + 20, in3[1] + 6]], [[in3[0] + 20, in3[1] + 6]], { steps: 1 });
+  await expect.poll(() => page.evaluate(() => (window as any).pcb.program().edges.length)).toBe(2);
+  expect(await page.evaluate(() => (window as any).pcb.program().edges[1].to)).toBe('n3.a');
+});

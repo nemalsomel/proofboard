@@ -272,7 +272,11 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
       const ed = prog.edges.find(x => x.to === ref); if (ed) select({ kind: 'edge', id: ed.id });
       return;
     }
-    if (pending) { pending = null; renderNodes(); }
+    if (pending) {
+      const tgt = targetIn(e.clientX, e.clientY, pending, e.pointerType !== 'mouse');
+      if (tgt) { connect(pending, tgt.dataset.port!); pending = null; render(); return; }
+      pending = null; renderNodes();
+    }
     if (edge) { select({ kind: 'edge', id: (edge as HTMLElement).dataset.edge! }); return; }
     if (head) {
       const n = node(head.dataset.node!)!;
@@ -298,8 +302,23 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     if (drag.kind === 'wire') {
       if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 5) return;
       drag.moved = true; const [x, y] = toWorld(e.clientX, e.clientY); tmp = { x, y }; renderEdges();
+      hot(targetIn(e.clientX, e.clientY, drag.from, e.pointerType !== 'mouse'));
     }
   });
+  /** A célzott bemenet: a pont alatt, a blokkon belül a legközelebbi bemenete, vagy a közelben (érintésnél nagyobb sugárral)
+   *  egy másik blokk bemenete; a saját blokkja nem. */
+  function targetIn(x: number, y: number, from: string | null, coarse: boolean): HTMLElement | null {
+    const own = from ? from.slice(0, from.lastIndexOf('.')) : '';
+    const under = document.elementFromPoint(x, y) as Element | null;
+    const hit = under?.closest('.pg-port.in') as HTMLElement | null;
+    if (hit && hit.dataset.port!.split('.')[0] !== own) return hit;
+    const nodeEl = under?.closest('.pg-node') as HTMLElement | null;
+    const pool = [...(nodeEl && nodeEl.dataset.node !== own ? nodeEl : nodesEl).querySelectorAll<HTMLElement>('.pg-port.in')].filter(p => p.dataset.port!.split('.')[0] !== own);
+    let best: HTMLElement | null = null, bd = nodeEl && nodeEl.dataset.node !== own ? Infinity : (coarse ? 44 : 18);
+    for (const p of pool) { const r = p.getBoundingClientRect(), d = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y); if (d < bd) { bd = d; best = p; } }
+    return best;
+  }
+  const hot = (el: HTMLElement | null) => { for (const p of nodesEl.querySelectorAll('.pg-port.hot')) if (p !== el) p.classList.remove('hot'); if (el) el.classList.add('hot'); };
   const end = (e: PointerEvent) => {
     const d = drag; drag = null; tmp = null; root.classList.remove('wiring');
     if (!d) return;
@@ -307,13 +326,14 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
     if (d.kind === 'move' && !d.moved && (!sel || sel.kind !== 'node' || sel.id !== d.id)) select({ kind: 'node', id: d.id });
     if (d.kind === 'wire') {
       if (!d.moved) { pending = pending === d.from ? null : d.from; renderNodes(); renderEdges(); return; } // érintés: kimenet kiválasztva, a következő bemenetre köt
-      const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-port]') as HTMLElement | null;
-      if (over && over.classList.contains('in')) connect(d.from, over.dataset.port!);
+      const over = targetIn(e.clientX, e.clientY, d.from, e.pointerType !== 'mouse');
+      hot(null);
+      if (over) connect(d.from, over.dataset.port!);
       render();
     }
   };
   canvas.addEventListener('pointerup', end);
-  canvas.addEventListener('pointercancel', () => { drag = null; tmp = null; root.classList.remove('wiring'); renderEdges(); });
+  canvas.addEventListener('pointercancel', () => { drag = null; tmp = null; hot(null); root.classList.remove('wiring'); renderEdges(); });
   canvas.addEventListener('wheel', e => { e.preventDefault(); zoom(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY); }, { passive: false });
   root.addEventListener('keydown', e => {
     const t = e.target as HTMLElement;

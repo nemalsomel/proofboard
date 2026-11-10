@@ -351,6 +351,9 @@ input:disabled::placeholder{color:var(--muted)}
 .pg-port.num{border-radius:3px}
 .pg-port.in.can{box-shadow:0 0 0 3px var(--accent-soft),0 0 0 1px var(--accent)}
 .pg-port.pend{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.pg-port.in.hot{background:var(--accent);box-shadow:0 0 0 5px var(--accent-soft),0 0 0 1px var(--accent)}
+/* érintésnél nagyobb fogási terület a pontok körül */
+@media (pointer:coarse){.pg-port::after{content:"";position:absolute;inset:-14px;border-radius:50%}}
 .pg-sum{padding:4px 10px 8px;font:11px var(--mono);color:var(--muted);border-top:1px solid var(--line);margin-top:6px}
 .pg-sum>div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pg-err{color:var(--err);font:600 11px var(--display);white-space:normal}
@@ -1000,3 +1003,4 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .imp-notes li{display:flex;gap:8px;align-items:baseline;color:var(--warn)}
 .imp-ln{flex:none;min-width:30px;font:600 11px/1 var(--mono);padding:3px 5px;border:1px solid var(--line);border-radius:4px;background:var(--panel2);color:var(--fg);cursor:pointer}
 .imp-ln:hover{border-color:var(--primary)}
+#toast{pointer-events:none} /* az értesítésen nincs gomb: ne nyelje el az alatta lévő koppintást */
