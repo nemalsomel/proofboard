@@ -176,3 +176,10 @@ h3 { font: 700 21px/1.25 var(--wide); font-stretch: 112%; margin: 0 0 8px; }
 footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var(--muted); font-size: 15px; }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
 footer .sp { flex: 1; }
+
+/* képnagyító */
+.zoom { padding: 0; border: 0; background: transparent; max-width: 96vw; max-height: 94vh; overflow: visible; }
+.zoom::backdrop { background: rgba(10, 14, 12, .82); }
+.zoom img { max-width: 96vw; max-height: 94vh; width: auto; border-radius: 8px; box-shadow: 0 30px 80px rgba(0,0,0,.5); cursor: zoom-out; }
+.zoom-x { position: absolute; top: -14px; right: -14px; width: 36px; height: 36px; border-radius: 50%; border: 0; background: #fff; color: #1d231f; font: 600 22px/1 var(--wide); cursor: pointer; }
+.frame a, .shot-hero a { cursor: zoom-in; }

@@ -14,6 +14,15 @@ for (const [path, lang, h1, open] of [['about/hu/', 'hu', 'Tervezd meg a próbap
     const imgs = await page.locator('img').evaluateAll(els => els.map(e => (e as HTMLImageElement).currentSrc || (e as HTMLImageElement).src));
     expect(imgs.length).toBeGreaterThanOrEqual(6);
     for (const src of imgs) expect((await page.request.get(src)).status(), src).toBe(200);
+    // a képek linkjei is a képre mutatnak (nem a domain gyökerére), kattintásra nagyítóban nyílnak
+    const links = await page.locator('a[href$=".jpg"]').evaluateAll(els => els.map(e => (e as HTMLAnchorElement).href));
+    expect(links.length).toBeGreaterThanOrEqual(7);
+    for (const href of links) { expect(href).toContain('/proofboard/about/img/'); expect((await page.request.get(href)).status(), href).toBe(200); }
+    await page.locator('.shot-hero a').click();
+    await expect(page.locator('dialog.zoom')).toBeVisible();
+    await expect(page.locator('dialog.zoom img')).toHaveAttribute('src', links[0]);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('dialog.zoom')).toBeHidden();
     // a megnyitás gomb az appra visz
     const href = await page.getByRole('link', { name: open }).first().getAttribute('href');
     expect(new URL(href!, page.url()).pathname).toBe('/proofboard/');
