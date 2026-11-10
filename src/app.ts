@@ -639,7 +639,7 @@ menu.addEventListener('keydown',e=>{const it=[...menu.querySelectorAll<HTMLEleme
   else if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();it[(i+(e.key==='ArrowDown'?1:it.length-1))%it.length].focus();}});
 $('#bExamples').onclick=()=>{renderExamples();openDlg('#dlgEx');};
 /* Névjegy; telepítés alkalmazásként (PWA); új verzió értesítése */
-function aboutUI(){$('#aboutVer').textContent=tr('Verzió: {v} · {d}',{v:__APP_VERSION__,d:__BUILD_DATE__});
+function aboutUI(){{const a=document.getElementById('aboutPage') as HTMLAnchorElement|null;if(a)a.href=getLang()==='en'?'about/':'about/hu/';}$('#aboutVer').textContent=tr('Verzió: {v} · {d}',{v:__APP_VERSION__,d:__BUILD_DATE__});
   $('#aboutOffline').textContent=standalone()?tr('Telepített alkalmazásként fut; internet nélkül is működik.'):offlineReady()?tr('Internet nélkül is működik (a böngésző eltárolta). Telepíthető is önálló alkalmazásként.'):'';
   $('#aboutOffline').hidden=!$('#aboutOffline').textContent;installUI();}
 function installUI(){const c=canInstall();$('#bInstall').hidden=!c;$('#bInstall2').hidden=!c;}

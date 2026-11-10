@@ -1640,4 +1640,5 @@ export const EN: Readonly<Record<string, string>> = {
   "a csatorna": "the channel",
   "a várakozás": "the wait",
   "az ADC": "the ADC",
+  "Bemutató oldal": "Product page",
 };

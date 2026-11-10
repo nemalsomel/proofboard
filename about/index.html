@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proofboard – perfboard and stripboard designer and simulator in your browser</title>
+<meta name="description" content="Plan your perfboard before you solder: dot-grid, tripad and stripboard layouts, automatic bridges and track cuts, simulation, and a block program with MicroPython or Arduino code for Raspberry Pi Pico W and ESP32. Free, nothing to install.">
+<meta name="theme-color" content="#0f5c66">
+<link rel="canonical" href="https://nemalsomel.github.io/proofboard/about/">
+<link rel="alternate" hreflang="hu" href="https://nemalsomel.github.io/proofboard/about/hu/">
+<link rel="alternate" hreflang="en" href="https://nemalsomel.github.io/proofboard/about/">
+<link rel="alternate" hreflang="x-default" href="https://nemalsomel.github.io/proofboard/about/">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Proofboard">
+<meta property="og:locale" content="en_GB">
+<meta property="og:title" content="Proofboard – perfboard designer and simulator">
+<meta property="og:description" content="Board layout, wiring, simulation and program in one place, in the browser. Pico W, ESP32, MicroPython, Arduino.">
+<meta property="og:url" content="https://nemalsomel.github.io/proofboard/about/">
+<meta property="og:image" content="https://nemalsomel.github.io/proofboard/about/img/og-en.jpg">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="./about.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Proofboard","applicationCategory":"DesignApplication","operatingSystem":"Web browser","url":"https://nemalsomel.github.io/proofboard/","inLanguage":["en","hu"],"offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"description":"Perfboard and stripboard designer and simulator: dot-grid, tripad and stripboard layouts, automatic wiring, simulation, block programs, MicroPython and Arduino code.","image":"https://nemalsomel.github.io/proofboard/about/img/hero-en.jpg"}
+</script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="wrap top">
+  <a class="brand" href="./"><img src="/icon.svg" alt="" width="28" height="28">Proofboard</a>
+  <nav aria-label="Page">
+    <a href="#how">How it works</a>
+    <a href="#features">Features</a>
+    <a href="#claude">With Claude</a>
+    <a href="#faq">Questions</a>
+  </nav>
+  
+  <div class="langsw" role="group" aria-label="Language / Nyelv"><a aria-current="page">EN</a><a href="./hu/" hreflang="hu" lang="hu">HU</a></div>
+  <a class="btn go sm" href="../">Open</a>
+</header>
+
+<main id="content">
+<div class="hero">
+  <div class="hero-bg" aria-hidden="true"></div>
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <h1>Plan your perfboard before you solder.</h1>
+      <p class="lead">Parts on dot-grid, tripad or stripboard, automatic bridges and track cuts, simulation, and the controller's program built from blocks – with MicroPython or Arduino code.</p>
+      <div class="cta">
+        <a class="btn go" href="../">Open Proofboard</a>
+        <a class="btn alt" href="https://github.com/nemalsomel/proofboard">Source on GitHub</a>
+      </div>
+      <p class="fine">Free, no installation or sign-up. Your designs stay in your browser.</p>
+    </div>
+    <figure class="shot-hero" style="margin:0">
+      <a href="/about/img/hero-en.jpg"><img src="/about/img/hero-en.jpg" width="2160" height="1350" alt="The Proofboard interface: on the left the board with a Raspberry Pi Pico W, a push button and a lit LED; on the right the program blocks (Digital input, Toggle, Digital output) and the running simulation." fetchpriority="high"></a>
+    </figure>
+  </div>
+</div>
+
+<section id="how" class="wrap" aria-labelledby="h-how">
+  <div class="sec-head">
+    <h2 id="h-how">From idea to soldering, in four steps</h2>
+    <p>One design all the way: what you draw and program is what you simulate, and the code comes from it too.</p>
+  </div>
+  <div class="steps">
+    <article class="step">
+      <div class="step-copy">
+        <span class="step-num" aria-hidden="true">1</span>
+        <h3>Design it</h3>
+        <p>Place the parts and say what connects to what. The router lays the solder bridges, and on stripboard the track cuts too.</p>
+        <ul>
+          <li>the Problems tab flags shorts, floating inputs and excess current</li>
+          <li>Compact rearranges a sparse layout into a smaller area</li>
+        </ul>
+      </div>
+      <div class="frame"><a href="/about/img/design-en.jpg"><img src="/about/img/design-en.jpg" width="2160" height="1350" loading="lazy" alt="Design: Pico W, MOSFET, LED and resistors on the board with coloured automatic bridges; on the right the list of connections with bridge counts."></a></div>
+    </article>
+    <article class="step">
+      <div class="step-copy">
+        <span class="step-num" aria-hidden="true">2</span>
+        <h3>Program it</h3>
+        <p>Build what the controller does from blocks: input, logic, clock, counter, timer, sequence, PWM output. A block refers to a pin on the board and the wiring supplies the GPIO, so it stays valid after a board swap.</p>
+        <ul>
+          <li>existing Arduino or MicroPython code can be turned into blocks</li>
+          <li>Claude can put the blocks together and test them too</li>
+        </ul>
+      </div>
+      <div class="frame"><a href="/about/img/program-en.jpg"><img src="/about/img/program-en.jpg" width="2160" height="1350" loading="lazy" alt="Program view next to the board: Analog input (joystick) → PWM output, and Compare → Digital output; the blocks show their pins and settings."></a></div>
+    </article>
+    <article class="step">
+      <div class="step-copy">
+        <span class="step-num" aria-hidden="true">3</span>
+        <h3>Try it</h3>
+        <p>Start the simulation: the program runs, the button can be pressed, the potentiometer turned, the LED glows with its current, the motor turns and the display backlight comes on.</p>
+        <ul>
+          <li>block wires and ports show their current values</li>
+          <li>GPIO levels and voltages are shown live</li>
+        </ul>
+      </div>
+      <div class="frame"><a href="/about/img/sim-en.jpg"><img src="/about/img/sim-en.jpg" width="2160" height="1350" loading="lazy" alt="Simulation: a Nokia 5110 display on the board; on the right the GPIO modes, voltages and the LED current."></a></div>
+    </article>
+    <article class="step">
+      <div class="step-copy">
+        <span class="step-num" aria-hidden="true">4</span>
+        <h3>Build it</h3>
+        <p>The program becomes MicroPython or Arduino code, or a PlatformIO project. Check the board from the copper side: where to cut, where the bridges go.</p>
+        <ul>
+          <li>existing Arduino or MicroPython code can be read back into blocks</li>
+          <li>save the design to a file, or share it as a link</li>
+        </ul>
+      </div>
+      <div class="pair">
+        <div class="frame"><a href="/about/img/code-en.jpg"><img src="/about/img/code-en.jpg" width="2160" height="1350" loading="lazy" alt="Program view: Clock, Sequence and four Digital output blocks; on the right the generated Arduino code with line numbers."></a></div>
+        <div class="frame"><a href="/about/img/strip-en.jpg"><img src="/about/img/strip-en.jpg" width="2160" height="1350" loading="lazy" alt="Stripboard from the copper side: the copper tracks, solder bridges and track cuts."></a></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<div class="strip" role="presentation"></div>
+
+<section id="features" class="wrap" aria-labelledby="h-features">
+  <div class="sec-head">
+    <h2 id="h-features">What's inside</h2>
+    <p>Made for hobby and teaching circuits, with the rules of real boards.</p>
+  </div>
+  <div class="features">
+    <section aria-labelledby="f1">
+      <h3 id="f1">Board and wiring</h3>
+      <ul>
+        <li><b>Dot-grid, tripad and stripboard</b> of any size; component and copper side views</li>
+        <li><b>Connections</b> with automatic routing, manual bridges and wires</li>
+        <li><b>Track cuts</b> by hand or automatically from the connections</li>
+        <li><b>Compact</b>: rearranges a sparse layout into a smaller area, with preview</li>
+      </ul>
+    </section>
+    <section aria-labelledby="f2">
+      <h3 id="f2">Simulation and checks</h3>
+      <ul>
+        <li><b>DC simulation</b>: LED, diode, transistor, MOSFET, capacitor, PWM</li>
+        <li><b>Motor, servo, stepper</b>, displays, joystick, potentiometer</li>
+        <li><b>Checks</b>: shorts, overcurrent, voltage ranges, wrong GPIO (e.g. analog signal without ADC)</li>
+      </ul>
+    </section>
+    <section aria-labelledby="f3">
+      <h3 id="f3">Program and code</h3>
+      <ul>
+        <li><b>Blocks</b>: input, logic, clock, counter, timer, sequence, PWM</li>
+        <li><b>Code generation</b> for MicroPython and Arduino, with a PlatformIO project</li>
+        <li><b>Code import</b>: a block program from an existing sketch</li>
+      </ul>
+    </section>
+    <section aria-labelledby="f4">
+      <h3 id="f4">Parts</h3>
+      <ul>
+        <li><b>Controller boards</b>: Raspberry Pi Pico W, ESP32 DevKit V1, ESP32-C3 SuperMini, with board swap</li>
+        <li><b>Modules</b>: SSD1306 OLED, Nokia 5110, TP4056, ULN2003, 74HC logic</li>
+        <li><b>Custom parts</b> with an editor: pins, internal circuit as a diagram, slider parameters</li>
+      </ul>
+    </section>
+    <figure class="feat-fig">
+      <div class="frame"><a href="/about/img/editor-en.jpg"><img src="/about/img/editor-en.jpg" width="2160" height="1350" loading="lazy" alt="Part editor: preview of a custom XOR module with its pins, and its internal circuit as a diagram (two inputs, XOR gate, output)."></a></div>
+      <figcaption>A custom part in the editor: pins, the internal circuit as a diagram (gates, electrical elements, push button), slider parameters. Simulation and checks treat it just like the built-in parts.</figcaption>
+    </figure>
+    <section aria-labelledby="f5">
+      <h3 id="f5">Working</h3>
+      <ul>
+        <li><b>Share as a link</b>, no server involved; save to a file</li>
+        <li><b>Works offline</b>, installable as an app</li>
+        <li><b>Command palette</b> (Ctrl+K) and shortcuts; English and Hungarian interface</li>
+      </ul>
+    </section>
+    <section aria-labelledby="f6">
+      <h3 id="f6">For learning</h3>
+      <ul>
+        <li><b>Examples</b> with explanatory notes: LED, button, transistor, motor, logic gates, programs</li>
+        <li><b>Simple mode</b>: advanced parts hidden, only errors shown</li>
+      </ul>
+    </section>
+  </div>
+</section>
+
+<section id="claude" class="claude" aria-labelledby="h-claude">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 id="h-claude">Designing with Claude</h2>
+      <p>Describe what you want to build: Claude places the parts, wires them, writes the program and runs the simulation – in the design you are looking at.</p>
+    </div>
+    <div class="duo">
+      <div class="opt">
+        <h3>Built-in agent, inside the app</h3>
+        <p>Chat on the Agent tab. In Discuss mode it only advises; in Build mode it makes changes after you approve. One task is one undo step, and conversations are kept per project.</p>
+        <p class="need">Needs: your own Anthropic API key.</p>
+      </div>
+      <p class="or" aria-hidden="true"><span>or</span></p>
+      <div class="opt">
+        <h3>Claude Desktop or Claude Code, via MCP</h3>
+        <p>With the Proofboard MCP extension Claude works with your own subscription, and the design updates live in the browser. Set it up in the app: File › Claude connection; npm package: <a href="https://www.npmjs.com/package/proofboard-mcp">proofboard-mcp</a>.</p>
+        <p class="need">Needs: a Claude subscription and Claude Desktop or Claude Code.</p>
+      </div>
+    </div>
+    <div class="ask" aria-label="An example request">
+      <p class="me">Put a button on GP14 and make every press toggle the LED.</p>
+      <p class="it">I placed the button next to GP14, wired it to GND, and the program now has Digital input → Toggle → Digital output. In simulation I tried two presses: on, then off.<br><code>place_part · connect · add_block ×3 · run_program</code></p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" aria-labelledby="h-who">
+  <div class="sec-head"><h2 id="h-who">Who it is for</h2></div>
+  <div class="who">
+    <div><h3>Hobby builders</h3><p>Find out on screen whether it fits, whether the signal lands on the right pin and whether anything is shorted. Soldering is just the execution.</p></div>
+    <div><h3>Teaching</h3><p>Examples explain with notes, Simple mode hides the advanced parts, and problems take you straight to where the issue is.</p></div>
+    <div><h3>Quick prototypes</h3><p>A board layout and a starting program for a Pico W or ESP32 circuit in an afternoon, shared as a link.</p></div>
+  </div>
+</section>
+
+<div class="strip" role="presentation"></div>
+
+<section id="faq" class="wrap" aria-labelledby="h-faq">
+  <div class="sec-head"><h2 id="h-faq">Questions</h2></div>
+  <div class="faq">
+    <details><summary>How much does it cost?</summary><p>Nothing. Proofboard is free and its source code is public on GitHub. Only the built-in agent needs your own Anthropic API key; the Claude Desktop extension works with your existing Claude subscription.</p></details>
+    <details><summary>Where are my designs stored?</summary><p>In your browser's storage, on your own machine. You can save them to a file or share them as a link: the design travels inside the link, nothing is uploaded.</p></details>
+    <details><summary>Do I need to install anything?</summary><p>No, it runs in the browser. If you like, install it as an app (File › Install) and it works offline too.</p></details>
+    <details><summary>Which controller boards does it know?</summary><p>Raspberry Pi Pico W, ESP32 DevKit V1 (30 pins) and ESP32-C3 SuperMini, with their pin capabilities (ADC, strapping pins, buses). Other parts can be made with the editor, and Claude can make them too.</p></details>
+    <details><summary>How accurate is the simulation?</summary><p>It is a fast DC approximation made for design and debugging – currents, levels, shorts. It does not replace measuring and is not a circuit simulator like SPICE.</p></details>
+    <details><summary>Does it work on a phone?</summary><p>Yes, with touch: one finger to move, two to zoom. A larger screen is more comfortable.</p></details>
+  </div>
+</section>
+
+<section class="wrap end" aria-labelledby="h-end">
+  <h2 id="h-end">Start your next board here.</h2>
+  <div class="cta"><a class="btn go" href="../">Open Proofboard</a><a class="btn alt" href="https://github.com/nemalsomel/proofboard/issues">Report a bug or idea</a></div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Proofboard</span>
+    <a href="https://github.com/nemalsomel/proofboard">GitHub</a>
+    <a href="https://github.com/nemalsomel/proofboard/issues">Issues</a>
+    <span class="sp"></span>
+    <a href="./hu/" hreflang="hu" lang="hu">Magyar</a>
+  </div>
+</footer>
+<script type="module" src="./about.ts"></script>
+</body>
+</html>

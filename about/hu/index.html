@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proofboard – áramkörtervező és -szimulátor próbapanelhez, a böngészőben</title>
+<meta name="description" content="Tervezd meg az áramkört a próbapanelen, forrasztás előtt: pontraszteres, szekciós és csíkos panel, automatikus hidak és csíkvágások, szimuláció, blokkos program és MicroPython- vagy Arduino-kód Raspberry Pi Pico W-hez és ESP32-höz. Ingyenes, telepítés nélkül.">
+<meta name="theme-color" content="#0f5c66">
+<link rel="canonical" href="https://nemalsomel.github.io/proofboard/about/hu/">
+<link rel="alternate" hreflang="hu" href="https://nemalsomel.github.io/proofboard/about/hu/">
+<link rel="alternate" hreflang="en" href="https://nemalsomel.github.io/proofboard/about/">
+<link rel="alternate" hreflang="x-default" href="https://nemalsomel.github.io/proofboard/about/">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Proofboard">
+<meta property="og:locale" content="hu_HU">
+<meta property="og:title" content="Proofboard – áramkörtervező és -szimulátor próbapanelhez">
+<meta property="og:description" content="Panel, bekötés, szimuláció és program egy helyen, a böngészőben. Pico W, ESP32, MicroPython, Arduino.">
+<meta property="og:url" content="https://nemalsomel.github.io/proofboard/about/hu/">
+<meta property="og:image" content="https://nemalsomel.github.io/proofboard/about/img/og-hu.jpg">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../about.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Proofboard","applicationCategory":"DesignApplication","operatingSystem":"Web böngésző","url":"https://nemalsomel.github.io/proofboard/","inLanguage":["hu","en"],"offers":{"@type":"Offer","price":"0","priceCurrency":"HUF"},"description":"Áramkörtervező és -szimulátor próbapanelhez: pontraszteres, szekciós és csíkos panel, automatikus bekötés, szimuláció, blokkos program, MicroPython- és Arduino-kód.","image":"https://nemalsomel.github.io/proofboard/about/img/hero-hu.jpg"}
+</script>
+</head>
+<body>
+<a class="skip" href="#tartalom">Ugrás a tartalomra</a>
+<header class="wrap top">
+  <a class="brand" href="./"><img src="/icon.svg" alt="" width="28" height="28">Proofboard</a>
+  <nav aria-label="Oldal">
+    <a href="#hogyan">Hogyan működik</a>
+    <a href="#funkciok">Funkciók</a>
+    <a href="#claude">Claude-dal</a>
+    <a href="#gyik">Kérdések</a>
+  </nav>
+  
+  <div class="langsw" role="group" aria-label="Nyelv / Language"><a href="../" hreflang="en" lang="en">EN</a><a aria-current="page">HU</a></div>
+  <a class="btn go sm" href="../../">Megnyitás</a>
+</header>
+
+<main id="tartalom">
+<div class="hero">
+  <div class="hero-bg" aria-hidden="true"></div>
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <h1>Tervezd meg a próbapanelt, mielőtt forrasztasz.</h1>
+      <p class="lead">Alkatrészek pontraszteres, szekciós vagy csíkos panelen, automatikus hidak és csíkvágások, szimuláció, és a vezérlőlap programja blokkokból – MicroPython- vagy Arduino-kóddal.</p>
+      <div class="cta">
+        <a class="btn go" href="../../">Proofboard megnyitása</a>
+        <a class="btn alt" href="https://github.com/nemalsomel/proofboard">Forráskód a GitHubon</a>
+      </div>
+      <p class="fine">Ingyenes, telepítés és regisztráció nélkül. A terveid a böngésződben maradnak.</p>
+    </div>
+    <figure class="shot-hero" style="margin:0">
+      <a href="/about/img/hero-hu.jpg"><img src="/about/img/hero-hu.jpg" width="2160" height="1350" alt="A Proofboard felülete: balra a panel egy Raspberry Pi Pico W-vel, gombbal és világító LED-del, jobbra a program blokkjai (Digitális bemenet, Váltókapcsoló, Digitális kimenet) és a futó szimuláció adatai." fetchpriority="high"></a>
+    </figure>
+  </div>
+</div>
+
+<section id="hogyan" class="wrap" aria-labelledby="h-hogyan">
+  <div class="sec-head">
+    <h2 id="h-hogyan">Ötlettől a forrasztásig, négy lépésben</h2>
+    <p>Ugyanaz a terv végig: amit megrajzolsz és beprogramozol, azt szimulálod, és abból készül a kód is.</p>
+  </div>
+  <div class="steps">
+    <article class="step">
+      <div class="step-copy">
+        <span class="step-num" aria-hidden="true">1</span>
+        <h3>Tervezd meg</h3>
+        <p>Rakd le az alkatrészeket, és add meg, mit mivel kell összekötni. Az útvonalkereső elkészíti a hidakat, csíkos panelen a vágásokat is.</p>
+        <ul>
+          <li>a Problémák fül jelzi a zárlatot, a lebegő bemenetet, a túl nagy áramot</li>
+          <li>a szellős tervet a Tömörítés kisebb területre rendezi</li>
+        </ul>
+      </div>
+      <div class="frame"><a href="/about/img/design-hu.jpg"><img src="/about/img/design-hu.jpg" width="2160" height="1350" loading="lazy" alt="Tervezés: Pico W, MOSFET, LED és ellenállások a panelen, színes automatikus hidakkal; jobbra a kapcsolatok listája hídszámokkal."></a></div>
+    </article>
+    <article class="step">
+      <div class="step-copy">
+        <span class="step-num" aria-hidden="true">2</span>
+        <h3>Programozd</h3>
+        <p>A vezérlőlap viselkedését blokkokból rakod össze: bemenet, logika, ütemadó, számláló, időzítő, sorozat, PWM-kimenet. A blokk a panel egy lábára hivatkozik, a GPIO-t a bekötés adja – lapcsere után is érvényes marad.</p>
+        <ul>
+          <li>meglévő Arduino- vagy MicroPython-kódot blokkokká alakít</li>
+          <li>a Claude is össze tudja rakni, és ki is próbálja</li>
+        </ul>
+      </div>
+      <div class="frame"><a href="/about/img/program-hu.jpg"><img src="/about/img/program-hu.jpg" width="2160" height="1350" loading="lazy" alt="Program nézet a panel mellett: Analóg bemenet (joystick) → PWM kimenet, és Összehasonlítás → Digitális kimenet; a blokkokon a lábuk és a beállításaik."></a></div>
+    </article>
+    <article class="step">
+      <div class="step-copy">
+        <span class="step-num" aria-hidden="true">3</span>
+        <h3>Próbáld ki</h3>
+        <p>Indítsd el a szimulációt: a program fut, a gomb nyomható, a potméter tekerhető, a LED az áramával arányosan világít, a motor forog, a kijelző háttérvilágítása kigyullad.</p>
+        <ul>
+          <li>a blokkok élei és portjai az aktuális értéket mutatják</li>
+          <li>a GPIO-k szintje és feszültsége élőben látszik</li>
+        </ul>
+      </div>
+      <div class="frame"><a href="/about/img/sim-hu.jpg"><img src="/about/img/sim-hu.jpg" width="2160" height="1350" loading="lazy" alt="Szimuláció: Nokia 5110 kijelző a panelen, jobbra a GPIO-k módja, feszültsége és a LED árama."></a></div>
+    </article>
+    <article class="step">
+      <div class="step-copy">
+        <span class="step-num" aria-hidden="true">4</span>
+        <h3>Építsd meg</h3>
+        <p>A programból MicroPython- vagy Arduino-kód lesz, PlatformIO-projekt is. A panelt rézoldalról is megnézheted: hol kell vágni, hová kerül a híd.</p>
+        <ul>
+          <li>meglévő Arduino- vagy MicroPython-kódot is visszaolvas blokkokká</li>
+          <li>a terv fájlba menthető, vagy linkkel megosztható</li>
+        </ul>
+      </div>
+      <div class="pair">
+        <div class="frame"><a href="/about/img/code-hu.jpg"><img src="/about/img/code-hu.jpg" width="2160" height="1350" loading="lazy" alt="Program nézet: Ütemadó, Sorozat és négy Digitális kimenet blokk; jobbra a generált Arduino-kód sorszámokkal."></a></div>
+        <div class="frame"><a href="/about/img/strip-hu.jpg"><img src="/about/img/strip-hu.jpg" width="2160" height="1350" loading="lazy" alt="Csíkos panel rézoldalról: a rézcsíkok, a forrasztóhidak és a csíkvágások helye."></a></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<div class="strip" role="presentation"></div>
+
+<section id="funkciok" class="wrap" aria-labelledby="h-funkciok">
+  <div class="sec-head">
+    <h2 id="h-funkciok">Ami benne van</h2>
+    <p>Hobbi- és oktatási célú áramkörökhöz készült, a valódi panelek szabályaival.</p>
+  </div>
+  <div class="features">
+    <section aria-labelledby="f1">
+      <h3 id="f1">Panel és bekötés</h3>
+      <ul>
+        <li><b>Pontraszteres, szekciós és csíkos panel</b>, állítható mérettel; alkatrész- és rézoldali nézet</li>
+        <li><b>Kapcsolatok</b> automatikus útvonalkereséssel, kézi hidak és vezetékek</li>
+        <li><b>Csíkvágás</b> kézzel vagy a kapcsolatok szerint, automatikusan</li>
+        <li><b>Tömörítés</b>: a szellős tervet kisebb területre rendezi, előnézettel</li>
+      </ul>
+    </section>
+    <section aria-labelledby="f2">
+      <h3 id="f2">Szimuláció és ellenőrzés</h3>
+      <ul>
+        <li><b>Egyenáramú szimuláció</b>: LED, dióda, tranzisztor, MOSFET, kondenzátor, PWM</li>
+        <li><b>Motor, szervó, léptetőmotor</b>, kijelzők, joystick, potméter</li>
+        <li><b>Ellenőrzés</b>: zárlat, túláram, feszültségtartomány, rossz GPIO (pl. analóg jel ADC nélkül)</li>
+      </ul>
+    </section>
+    <section aria-labelledby="f3">
+      <h3 id="f3">Program és kód</h3>
+      <ul>
+        <li><b>Blokkok</b>: bemenet, logika, ütemadó, számláló, időzítő, sorozat, PWM</li>
+        <li><b>Kódgenerálás</b> MicroPythonra és Arduinóra, PlatformIO-projekttel</li>
+        <li><b>Kód importálása</b>: meglévő vázlatból blokkprogram</li>
+      </ul>
+    </section>
+    <section aria-labelledby="f4">
+      <h3 id="f4">Alkatrészek</h3>
+      <ul>
+        <li><b>Vezérlőlapok</b>: Raspberry Pi Pico W, ESP32 DevKit V1, ESP32-C3 SuperMini, lapcserével</li>
+        <li><b>Modulok</b>: SSD1306 OLED, Nokia 5110, TP4056, ULN2003, 74HC logika</li>
+        <li><b>Saját alkatrész</b> szerkesztővel: lábak, belső kapcsolás diagramon, csúszkás paraméterek</li>
+      </ul>
+    </section>
+    <figure class="feat-fig">
+      <div class="frame"><a href="/about/img/editor-hu.jpg"><img src="/about/img/editor-hu.jpg" width="2160" height="1350" loading="lazy" alt="Alkatrész-szerkesztő: egy saját XOR modul előnézete a lábaival, és a belső kapcsolása diagramként (két bemenet, KIZÁRÓ VAGY kapu, kimenet)."></a></div>
+      <figcaption>Saját alkatrész a szerkesztőben: lábak, belső kapcsolás diagramon (kapuk, villamos elemek, nyomógomb), csúszkás paraméterek. A szimuláció és az ellenőrzés ugyanúgy kezeli, mint a beépítetteket.</figcaption>
+    </figure>
+    <section aria-labelledby="f5">
+      <h3 id="f5">Munka</h3>
+      <ul>
+        <li><b>Megosztás linkkel</b>, szerver nélkül; mentés fájlba</li>
+        <li><b>Offline is működik</b>, telepíthető alkalmazásként</li>
+        <li><b>Parancspaletta</b> (Ctrl+K) és gyorsbillentyűk; magyar és angol felület</li>
+      </ul>
+    </section>
+    <section aria-labelledby="f6">
+      <h3 id="f6">Tanuláshoz</h3>
+      <ul>
+        <li><b>Példák</b> magyarázó jegyzetekkel: LED, gomb, tranzisztor, motor, logikai kapuk, program</li>
+        <li><b>Egyszerű mód</b>: a haladó részek rejtve, csak a hibák látszanak</li>
+      </ul>
+    </section>
+  </div>
+</section>
+
+<section id="claude" class="claude" aria-labelledby="h-claude">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 id="h-claude">Tervezés Claude-dal</h2>
+      <p>Mondd el, mit szeretnél építeni: a Claude lerakja az alkatrészeket, beköti, megírja a programot és lefuttatja a szimulációt – a tervben, amit közben látsz.</p>
+    </div>
+    <div class="duo">
+      <div class="opt">
+        <h3>Beépített agent, az appban</h3>
+        <p>Az Agent fülön beszélgetsz. Megbeszélés módban csak tanácsot ad, Megvalósítás módban jóváhagyás után épít. Egy feladat egy visszavonási lépés, a beszélgetések projektenként megmaradnak.</p>
+        <p class="need">Kell hozzá: saját Anthropic API-kulcs.</p>
+      </div>
+      <p class="or" aria-hidden="true"><span>vagy</span></p>
+      <div class="opt">
+        <h3>Claude Desktop vagy Claude Code, MCP&#8209;vel</h3>
+        <p>A Proofboard MCP-bővítményével a Claude a saját előfizetéseddel dolgozik, a terv pedig élőben változik a böngészőben. Telepítés az appban: Fájl › Claude-kapcsolat; npm-csomag: <a href="https://www.npmjs.com/package/proofboard-mcp">proofboard-mcp</a>.</p>
+        <p class="need">Kell hozzá: Claude-előfizetés és a Claude Desktop vagy a Claude Code.</p>
+      </div>
+    </div>
+    <div class="ask" aria-label="Példa egy kérésre">
+      <p class="me">Tegyél egy gombot a GP14-re, és minden nyomásra váltson a LED.</p>
+      <p class="it">Lerakom a gombot a GP14 mellé, bekötöm GND-re, és a programba Digitális bemenet → Váltókapcsoló → Digitális kimenet kerül. Szimulációban két nyomással kipróbáltam: be, majd ki.<br><code>place_part · connect · add_block ×3 · run_program</code></p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" aria-labelledby="h-kinek">
+  <div class="sec-head"><h2 id="h-kinek">Kinek szól</h2></div>
+  <div class="who">
+    <div><h3>Hobbiból építőknek</h3><p>Előbb a képernyőn derül ki, hogy elfér-e, jó lábra kerül-e a jel, és nem zárlatos-e. A forrasztás már csak kivitelezés.</p></div>
+    <div><h3>Tanításhoz</h3><p>A példák jegyzetekkel magyaráznak, az Egyszerű mód elrejti a haladó részeket, a hibák kattintásra odavisznek, ahol a gond van.</p></div>
+    <div><h3>Gyors prototípushoz</h3><p>Pico W- vagy ESP32-alapú kapcsolás panelterve és kiinduló programja egy délután alatt, linkkel megosztva.</p></div>
+  </div>
+</section>
+
+<div class="strip" role="presentation"></div>
+
+<section id="gyik" class="wrap" aria-labelledby="h-gyik">
+  <div class="sec-head"><h2 id="h-gyik">Gyakori kérdések</h2></div>
+  <div class="faq">
+    <details><summary>Mennyibe kerül?</summary><p>Semennyibe. A Proofboard ingyenes, a forráskódja nyilvános a GitHubon. Csak a beépített agenthez kell saját Anthropic API-kulcs; a Claude Desktop-bővítmény a meglévő Claude-előfizetéseddel működik.</p></details>
+    <details><summary>Hol vannak a terveim?</summary><p>A böngésződ tárolójában, a saját gépeden. Fájlba menthetők, és linkkel is megoszthatók: a terv a linkben van, szerverre nem kerül.</p></details>
+    <details><summary>Kell telepíteni?</summary><p>Nem, a böngészőben fut. Ha szeretnéd, telepítheted alkalmazásként (Fájl › Telepítés), és akkor internet nélkül is működik.</p></details>
+    <details><summary>Milyen vezérlőlapokat ismer?</summary><p>Raspberry Pi Pico W, ESP32 DevKit V1 (30 láb) és ESP32-C3 SuperMini, a lábak képességeivel (ADC, indítási lábak, buszok). Más alkatrész a szerkesztővel elkészíthető, és a Claude is meg tudja csinálni.</p></details>
+    <details><summary>Mennyire pontos a szimuláció?</summary><p>Egyenáramú, gyors közelítés: tervezéshez és hibakereséshez készült – áramok, szintek, zárlatok –, nem helyettesíti a mérést és nem áramkör-szimulátor (SPICE).</p></details>
+    <details><summary>Működik telefonon?</summary><p>Igen, érintéssel: egy ujjal mozgatsz, kettővel nagyítasz. Nagyobb képernyőn kényelmesebb.</p></details>
+  </div>
+</section>
+
+<section class="wrap end" aria-labelledby="h-end">
+  <h2 id="h-end">A következő panelt kezdd itt.</h2>
+  <div class="cta"><a class="btn go" href="../../">Proofboard megnyitása</a><a class="btn alt" href="https://github.com/nemalsomel/proofboard/issues">Hibajelzés, ötlet</a></div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Proofboard</span>
+    <a href="https://github.com/nemalsomel/proofboard">GitHub</a>
+    <a href="https://github.com/nemalsomel/proofboard/issues">Hibajelzés</a>
+    <span class="sp"></span>
+    <a href="../" hreflang="en" lang="en">English</a>
+  </div>
+</footer>
+<script type="module" src="../about.ts"></script>
+</body>
+</html>

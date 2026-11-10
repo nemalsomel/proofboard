@@ -35,7 +35,9 @@ const pwa = VitePWA({
     globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
     cleanupOutdatedCaches: true,
     // a Claude Desktop-bővítmény letöltése a hálózatról menjen, ne az app oldala jöjjön helyette
-    navigateFallbackDenylist: [/\.mcpb$/],
+    navigateFallbackDenylist: [/\.mcpb$/, /\/about\//],
+    // a bemutató oldal (about/) nem része az appnak: nem kerül az offline tárba
+    globIgnores: ['about/**'],
     // a betűtípusok a Google Fonts-ról: első használat után offline is megvannak
     runtimeCaching: [
       { urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/, handler: 'StaleWhileRevalidate', options: { cacheName: 'google-fonts-css' } },
@@ -50,6 +52,10 @@ export default defineConfig(({ mode }) => ({
   base: mode === 'single' ? './' : process.env.PAGES_BASE ?? '/proofboard/',
   define: { __APP_VERSION__: JSON.stringify(version), __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)) },
   plugins: mode === 'single' ? [viteSingleFile()] : [pwa],
-  build: { outDir: mode === 'single' ? 'dist-single' : 'dist', target: 'es2022' },
+  build: {
+    outDir: mode === 'single' ? 'dist-single' : 'dist', target: 'es2022',
+    // a bemutató oldal (magyar és angol) külön statikus lap ugyanabban a kiadásban
+    rollupOptions: mode === 'single' ? undefined : { input: { main: 'index.html', about: 'about/index.html', aboutHu: 'about/hu/index.html' } },
+  },
   test: { include: ['tests/unit/**/*.test.ts'], environment: 'node' },
 }));

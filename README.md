@@ -2,7 +2,7 @@
 
 Próbanyák-tervező és -szimulátor a böngészőben: 1×3-as szekciós (tripad), pontraszteres és csíkos panelekhez.
 
-**Élő változat:** https://nemalsomel.github.io/proofboard/
+**Élő változat:** https://nemalsomel.github.io/proofboard/ · **Bemutató oldal:** https://nemalsomel.github.io/proofboard/about/ (magyarul: [/about/hu/](https://nemalsomel.github.io/proofboard/about/hu/))
 
 ## Mit tud
 
