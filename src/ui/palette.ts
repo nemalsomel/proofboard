@@ -5,6 +5,7 @@
  */
 import { fmtKey, rank } from './commands';
 import { esc } from './links';
+import { icon } from './icons';
 
 export type PalKind = 'cmd' | 'part' | 'example';
 export interface PalItem {
@@ -25,13 +26,13 @@ const MAX = 60;
 
 export function mountPalette(dlg: HTMLDialogElement, host: PaletteHost): Palette {
   const tr = host.tr;
-  dlg.innerHTML = `<div class="pal-head"><span class="pal-ic" aria-hidden="true">⌕</span><input class="pal-q" type="search" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="palList" aria-autocomplete="list"><kbd class="pal-esc">Esc</kbd></div>
+  dlg.innerHTML = `<div class="pal-head"><span class="pal-ic" aria-hidden="true">${icon('search')}</span><input class="pal-q" type="search" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="palList" aria-autocomplete="list"><kbd class="pal-esc">Esc</kbd></div>
     <div class="pal-list" id="palList" role="listbox"></div>
     <div class="pal-foot small muted"></div>`;
   const q = dlg.querySelector<HTMLInputElement>('.pal-q')!, list = dlg.querySelector<HTMLElement>('.pal-list')!, foot = dlg.querySelector<HTMLElement>('.pal-foot')!;
   let shown: PalItem[] = [], act = 0;
 
-  const kbd = (ks?: string[]) => (ks || []).slice(0, 2).map(k => `<kbd>${esc(fmtKey(k))}</kbd>`).join('');
+  const kbd = (ks?: string[]) => (ks || []).slice(0, 2).map(k => `<kbd>${esc(fmtKey(k).replace('⇧', 'Shift+'))}</kbd>`).join('');
   const row = (it: PalItem, i: number, tag: boolean) =>
     `<div class="pal-row${it.enabled ? '' : ' off'}${i === act ? ' on' : ''}" role="option" id="pal-${i}" data-i="${i}" aria-selected="${i === act}" aria-disabled="${!it.enabled}">`
     + `<span class="pal-l">${it.checked != null ? `<span class="pal-chk${it.checked ? ' y' : ''}" aria-hidden="true">${it.checked ? '✓' : ''}</span>` : ''}${esc(it.label)}${it.sub ? ` <span class="pal-sub">${esc(it.sub)}</span>` : ''}</span>`
