@@ -4,7 +4,7 @@
  * a kézi módosítás elrendezésenként megmarad. Tiszta, DOM-mentes állapotkezelés; a tárolás a gazdáé.
  */
 import { N_ } from '../i18n/i18n';
-export type LayoutId = 'design' | 'prog' | 'sim';
+export type LayoutId = 'design' | 'prog' | 'sim' | 'mfg';
 export type Work = 'board' | 'prog' | 'split';
 export type RightTab = 'design' | 'sim' | 'code' | 'agent';
 export interface LayoutState {
@@ -20,11 +20,13 @@ export const LAYOUTS: { id: LayoutId; name: string; hint: string }[] = [
   { id: 'design', name: N_('Tervezés'), hint: N_('Alkatrészek lerakása és bekötése') },
   { id: 'prog', name: N_('Program'), hint: N_('A panel és a program egymás mellett, jobbra a kód') },
   { id: 'sim', name: N_('Szimuláció'), hint: N_('Vezérlők és GPIO-k; a szimuláció indításakor erre vált') },
+  { id: 'mfg', name: N_('Gyártás'), hint: N_('Anyaglista, beültetési sorrend, nyomtatható lapok') },
 ];
 export const LAYOUT_DEFAULTS: Record<LayoutId, LayoutState> = {
   design: { l: false, r: false, bottom: false, work: 'board', rtab: 'design' },
   prog: { l: true, r: false, bottom: false, work: 'split', rtab: 'code' },
   sim: { l: true, r: false, bottom: false, work: 'board', rtab: 'sim' },
+  mfg: { l: true, r: true, bottom: false, work: 'board', rtab: 'design' },
 };
 const IDS = Object.keys(LAYOUT_DEFAULTS) as LayoutId[];
 const WORKS: Work[] = ['board', 'prog', 'split'];

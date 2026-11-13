@@ -21,6 +21,7 @@
         <button class="menu-item" role="menuitem" id="bNew" data-icon="filePlus">Új terv…<kbd>Alt+N</kbd></button>
         <button class="menu-item" role="menuitem" id="bOpenFile" data-icon="open" title="Terv betöltése fájlból; a saját alkatrészeid megmaradnak">Megnyitás…<kbd>Ctrl+O</kbd></button>
         <button class="menu-item" role="menuitem" id="bSaveFile" data-icon="save" title="A teljes terv (a benne használt saját alkatrészekkel együtt) fájlba">Mentés fájlba<kbd>Ctrl+S</kbd></button>
+        <button class="menu-item" role="menuitem" id="bMfg" data-icon="print" title="Anyaglista, beültetési sorrend, 1:1-ben nyomtatható alkatrész- és rézoldal">Gyártás: anyaglista, lapok…</button>
         <button class="menu-item" role="menuitem" id="bShare" data-icon="link" title="Link a tervhez: aki megnyitja, a saját böngészőjében kapja meg a terv másolatát">Megosztás linkkel…</button>
         <button class="menu-item" role="menuitem" id="bExamples" data-icon="book">Példák…</button>
         <button class="menu-item" role="menuitem" id="bBoard" data-icon="board">Panel beállításai…</button>
@@ -54,6 +55,7 @@
       <button class="btn" data-layout="design" data-kbd="Alt+1" title="Tervezés: alkatrészek és bekötés (Alt+1)">Tervezés</button>
       <button class="btn" data-layout="prog" data-kbd="Alt+2" title="Program: a panel és a program egymás mellett (Alt+2)">Program</button>
       <button class="btn" data-layout="sim" data-kbd="Alt+3" title="Szimuláció: vezérlők és GPIO-k (Alt+3)">Szimuláció</button>
+      <button class="btn" data-layout="mfg" data-kbd="Alt+4" title="Gyártás: anyaglista, beültetési sorrend, nyomtatható lapok (Alt+4)">Gyártás</button>
     </div>
     <button class="btn icon ghost desk-only" id="layReset" data-icon="restore" aria-label="Az elrendezés alapállapota" title="Az elrendezés visszaállítása az alapállapotára" hidden></button>
     <span class="top-sp"></span>
@@ -153,6 +155,7 @@
       </section>
       <section class="progview" id="progView" aria-label="Program" hidden></section>
       <section class="partview" id="partView" aria-label="Alkatrész-szerkesztő" hidden></section>
+      <section class="mfgview" id="mfgView" aria-label="Gyártás" hidden></section>
       <div class="splitgut" id="splitGut" role="separator" tabindex="0" aria-label="A panel és a program aránya" title="Húzd az arány állításához, dupla kattintás: fele-fele"></div>
       <div class="toolstrip" id="toolstrip" role="toolbar" aria-label="Eszközök">
         <button class="btn icon ghost ts-tog" id="tsTog" aria-label="Eszközsáv összecsukása" aria-expanded="true" title="Eszközsáv összecsukása / kinyitása" data-icon="left"></button>

@@ -15,6 +15,7 @@ import { defToForm, formToDef, type Form } from '../core/partform';
 import { EL_KINDS } from '../core/circuit';
 import { decodeShare, shareCode, shareUrl } from '../core/share';
 import { applyImport, importCode } from '../engine/codeimport';
+import { assembly, bom } from '../engine/manufacture';
 import { PARTS } from '../parts/builtin';
 import { fmt, t as translate, type Tr } from '../i18n/i18n';
 import { checkAll, type Issue } from '../engine/check';
@@ -630,6 +631,30 @@ export const TOOLS: ToolDef[] = [
       const rows = Math.max(5, Math.min(200, num(i.rows) || 78)), cols = Math.max(5, Math.min(120, num(i.cols) || 39)), sec = Math.max(1, Math.min(rows, num(i.section) || 3));
       const d = emptyDesign(); d.board = { rows, cols, sec }; ctx.setD(normalize(d)); ctx.commit();
       return ok(`New empty design: ${rows}×${cols}, section ${sec}.`, true);
+    },
+  },
+  {
+    name: 'get_manufacturing', mutates: false,
+    description: 'Manufacturing package of the current design: bill of materials (quantities, labels, values, off-board parts), board and consumables (wire lengths by colour, solder bridges, track cuts), and the assembly order (low parts first; cuts X1…, bridge chains H1…, wires V1… as numbered on the printable sheets). Use it when the user asks what to buy, how to build/solder the board, or for a parts list. The user can print 1:1 component- and copper-side sheets in the Manufacturing layout (Alt+4).',
+    input_schema: S.obj({ part: { type: 'string', enum: ['bom', 'assembly', 'both'], description: 'which part to return (default both)' } }),
+    async run(ctx, i) {
+      const D = ctx.D(), what = String(i.part || 'both'), out: string[] = [];
+      if (what !== 'assembly') {
+        const b = bom(D, en), x = b.extra;
+        out.push(`Board: ${x.board.kind}, ${x.board.cols}×${x.board.rows} holes (${x.board.w}×${x.board.h} mm)`);
+        out.push('Bill of materials (qty | labels | part | value | note):');
+        for (const r of b.rows) out.push(`- ${r.qty} | ${r.labels.join(', ')} | ${r.name} | ${r.value || '-'}${r.note ? ' | ' + r.note : ''}`);
+        for (const w of x.wires) out.push(`- wire ${w.color || 'default'}: ${w.count} pcs, ${w.mm} mm total`);
+        out.push(`Track cuts: ${x.cuts}; solder bridges: ${x.bridges} in ${x.chains} chain(s)`);
+      }
+      if (what !== 'bom') {
+        out.push('Assembly order:');
+        assembly(D, en).forEach((s, k) => {
+          out.push(`${k + 1}. ${s.title}${s.side ? ` [${s.side === 'cu' ? 'copper side' : 'component side'}]` : ''} – ${s.tip}`);
+          for (const it of s.items) out.push(`   - ${it.mark ? it.mark + ' ' : ''}${it.text}`);
+        });
+      }
+      return ok(out.join('\n'));
     },
   },
   {

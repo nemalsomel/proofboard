@@ -31,7 +31,7 @@ export interface UiState extends InteractState {
   prog?: ProgRun | null; progTimer?: ReturnType<typeof setInterval> | null; progAuto?: boolean;
   progSel?: string | null; progHi?: string | null;
   /* nézetek és panelek */
-  work?: string; pvTab?: string; part?: boolean;
+  work?: string; pvTab?: string; part?: boolean; /** a Gyártás nézet látszik */ mfg?: boolean;
   ltab?: string; rtab?: string; rtabProps?: string; rtabBeforeCode?: string; btab?: string;
   layBack?: string | null; layApplying?: boolean; pwHad?: boolean;
   libQ?: string; exCat?: string; exF?: Set<string>;

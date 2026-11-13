@@ -12,6 +12,10 @@ import { exportLibrary, importLibrary, typeKeyFor } from './core/library';
 import { type Command, commandFor, fmtKey } from './ui/commands';
 import { type PalItem, mountPalette } from './ui/palette';
 import { mountImportDialog } from './ui/codeimpdlg';
+import { mountMfgView } from './ui/mfgview';
+import { printHtml, type PrintOpts } from './ui/mfgprint';
+import { assembly as mfgAssembly, bom as mfgBom, marks as mfgMarks } from './engine/manufacture';
+import { sheetSvg } from './engine/mfgsheet';
 import { applyImport, importCode as importCodeOf, type ImportResult } from './engine/codeimport';
 import { SHARE_LONG, canShare, decodeShare, shareCode, shareUrl } from './core/share';
 import { History } from './ui/history';
@@ -206,7 +210,7 @@ function pushUndo(){HIST.push(snap());}
 let CP_PV: {D: Design; A: Netlist; layout: Layout; linkState: typeof ui.linkState}|null=null,CP_ORIGINS: PartInstance[]|null=null;
 /** az agent panelje (az első megnyitáskor jön létre) */
 let AGP: AgentPanel|null=null;
-function commit(noRoute?: boolean){queueMicrotask(progRefresh);syncDefs(D.customParts);const bk=JSON.stringify(D.board);if(!noRoute&&D.settings.autoRoute&&D.links.length)route({moved:ui.moved});ui.moved=null;save();if(bk!==ui.lastBoard){ui.lastBoard=bk;resize();boardUI();}recompute();renderLeft();if(AGP&&ui.rtab==='agent'&&!AGP.busy()&&D.id!==AGP.project())AGP.render();if(CPD.isOpen())CPD.refresh();}
+function commit(noRoute?: boolean){queueMicrotask(progRefresh);syncDefs(D.customParts);const bk=JSON.stringify(D.board);if(!noRoute&&D.settings.autoRoute&&D.links.length)route({moved:ui.moved});ui.moved=null;save();if(bk!==ui.lastBoard){ui.lastBoard=bk;resize();boardUI();}recompute();renderLeft();if(AGP&&ui.rtab==='agent'&&!AGP.busy()&&D.id!==AGP.project())AGP.render();if(CPD.isOpen())CPD.refresh();if(ui.mfg)MFG.render();}
 function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(D));}catch(e){}}
 function sameSec(r1: number,c1: number,r2: number,c2: number){const L=LAY();return L.cell(r1,c1)===L.cell(r2,c2);}
 function addBridge(r1: number,c1: number,r2: number,c2: number){return OPS.addBridge(D,r1,c1,r2,c2);}
@@ -380,9 +384,10 @@ document.addEventListener('keydown',ev=>{
   if(CPD.isOpen()&&!(ev.target as HTMLElement|null)?.closest?.('#cpContent')){if(ev.key==='Escape'){ev.preventDefault();CPD.close();return;}if(!(ev.ctrlKey||ev.metaKey)||/^[zy]$/i.test(ev.key)){ev.preventDefault();return;}}
   if(AGP&&AGP.busy()){if(ev.key==='Escape'){ev.preventDefault();AGP.stop();}else if(!(ev.target as HTMLElement|null)?.closest?.('#agentRoot'))ev.preventDefault();return;} // az agent dolgozik: a kézi szerkesztés szünetel
   const t=ev.target as HTMLElement|null;
-  if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT')){const c=commandFor(CMDS,ev,['input']);if(c){ev.preventDefault();c.run();}return;}
+  if(t&&(t.tagName==='TEXTAREA'||t.tagName==='SELECT'||(t.tagName==='INPUT'&&!/^(checkbox|radio|button|submit|reset)$/.test((t as HTMLInputElement).type)))){const c=commandFor(CMDS,ev,['input']);if(c){ev.preventDefault();c.run();}return;}
   {const c=commandFor(CMDS,ev,['input','global']);if(c){ev.preventDefault();c.run();return;}}
-  if(t&&t.closest&&t.closest('#progView,#partView,.pg,dialog'))return; // a program- és az alkatrész-szerkesztő, valamint a párbeszédablakok saját billentyűi
+  if(t&&t.closest&&t.closest('#progView,#partView,#mfgView,.pg,dialog'))return;
+  if(ui.mfg)return; // a Gyártás nézet látszik: a panel billentyűi nem élnek // a program- és az alkatrész-szerkesztő, valamint a párbeszédablakok saját billentyűi
   if(ui.part&&!$('.app').classList.contains('part-split')&&!['Digit1','Digit2','Digit3','Numpad1','Numpad2','Numpad3'].includes(ev.code)&&!(ev.ctrlKey||ev.metaKey))return; // az Alkatrész-szerkesztő látszik (panel nélkül): a panel billentyűi nem élnek
   const c=commandFor(CMDS,ev,['board']);if(c){ev.preventDefault();c.run();}
 });
@@ -709,7 +714,7 @@ function layUI(){$$('[data-layout]').forEach(b=>{const on=b.dataset.layout===LAY
 /** Kézi módosítás a mostani elrendezésben (oldalsáv, alsó panel, nézet, jobb fül). */
 function layPatch(o: Partial<LayoutState>){if(ui.layApplying)return;LAY_S=layRemember(LAY_S,o);layStore();layUI();}
 function applyLayout(id: string,store=true,over?: Partial<ReturnType<typeof stateOf>>){const lid: LayoutId=isLayout(id)?id:'design';const r=laySwitch(LAY_S,lid);LAY_S=r.store;const st={...r.state,...(over||{})};ui.layApplying=true;
-  try{sideCollapse('l',st.l,false);sideCollapse('r',st.r,false);setWork(MOB.matches&&st.work==='split'?'prog':st.work,false);rtab(st.rtab,false);bottomPanel(st.bottom,undefined,false);}
+  try{if(lid!=='mfg')mfgShow(false);sideCollapse('l',st.l,false);sideCollapse('r',st.r,false);setWork(MOB.matches&&st.work==='split'?'prog':st.work,false);rtab(st.rtab,false);bottomPanel(st.bottom,undefined,false);if(lid==='mfg')mfgShow(true);}
   finally{ui.layApplying=false;}
   if(id==='sim'&&!SIM_TOOLS.has(ui.tool))setTool('select'); // a Szimuláció elrendezésben csak Kijelölés és Mozgatás (a Programban a panelen minden eszköz kell)
   if(store)layStore();layUI();return id;}
@@ -825,6 +830,21 @@ $('#bSaveFile').onclick=()=>{const blob=new Blob([JSON.stringify(D,null,1)],{typ
 $('#bOpenFile').onclick=()=>$('#planFile').click();
 $('#planFile').addEventListener('change',async e=>{const fs=(e.target as HTMLInputElement).files,f=fs&&fs[0];(e.target as HTMLInputElement).value='';if(!f)return;
   try{toast(importPlan(JSON.parse(await f.text())));resize();boardUI();homeView();}catch(err){toast(tr('Nem sikerült betölteni: {x}',{x:(err as Error).message}),true);}});
+/* ---------- Gyártás: anyaglista, beültetési sorrend, nyomtatható lapok (engine/manufacture.ts, engine/mfgsheet.ts, ui/mfgview.ts) ---------- */
+const MFGKEY='proofboard.mfg.done.';
+const mfgTitle=()=>{const b=(D.brief||'').split('\n').map(x=>x.replace(/^#+\s*/,'').trim()).find(Boolean);return b?b.slice(0,60):tr('Proofboard-terv');};
+function mfgPrintHtml(o: Omit<PrintOpts,'title'|'lang'>){return printHtml(D,{...o,title:mfgTitle(),lang:getLang()},tr);}
+const MFG=mountMfgView({design:()=>D,tr,title:mfgTitle,
+  print(o){const w=window.open('','_blank');if(!w){toast(tr('A böngésző letiltotta az új ablakot; engedélyezd a felugró ablakokat ehhez az oldalhoz.'),true);return;}
+    w.document.open();w.document.write(mfgPrintHtml(o));w.document.close();const go=()=>{try{w.focus();w.print();}catch(e){}};if(w.document.readyState==='complete')setTimeout(go,300);else w.addEventListener('load',()=>setTimeout(go,300));},
+  download(name,text,mime){const url=URL.createObjectURL(new Blob([text],{type:mime})),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);},
+  load(k){try{const v=JSON.parse(localStorage.getItem(MFGKEY+k)||'[]');return Array.isArray(v)?v.map(String):[];}catch(e){return[];}},
+  save(k,done){try{if(done.length)localStorage.setItem(MFGKEY+k,JSON.stringify(done));else localStorage.removeItem(MFGKEY+k);}catch(e){}},
+});
+$('#mfgView').appendChild(MFG.el);
+/** A Gyártás nézet a középen (a Gyártás elrendezésben); a panel szerkesztése közben szünetel. */
+function mfgShow(on: boolean){if(!!ui.mfg===on)return;ui.mfg=on;$('#mfgView').hidden=!on;$('.app').classList.toggle('work-mfg',on);if(on){if(ui.part)partShow(null);if(ui.sim)setSim(false);MFG.render();}else{resize();draw();}toolFit();}
+$('#bMfg').onclick=()=>{closeMenu();applyLayout('mfg');};
 /* ---------- Megosztás linkkel: a terv a link # része mögött (core/share.ts) ---------- */
 const shareBase=()=>location.origin+location.pathname;
 function shareLink(){return shareUrl(shareBase(),D);}
@@ -936,7 +956,7 @@ function partTabs(){const c=$('#partTabs');c.hidden=!PT.size;
   c.innerHTML=[...PT].map(([id,t])=>{const on=ui.part&&partCur===id,x=pxOf(id,t);return `<div class="grp seg ptab${on?' cur':''}" data-pt="${esc(id)}"><button class="btn pgo${on?' on':''}" aria-pressed="${on}" title="${tr('Az alkatrész szerkesztése')}">${esc(t.title)}</button><button class="btn icon px" aria-label="${esc(x.lab)}" title="${esc(x.tip)}">${icon(x.ic)}</button></div>`;}).join('');
   ptWrap();}
 /** A látható szerkesztő váltása (null: egyik sem, a Panel / Program látszik). Csak a látható van a DOM-ban. */
-function partShow(id: string|null){queueMicrotask(undoUI);const on=id!=null&&PT.has(id);if(on)partCur=id;ui.part=on;const v=$('#partView');v.hidden=!on;
+function partShow(id: string|null){queueMicrotask(undoUI);const on=id!=null&&PT.has(id);if(on&&ui.mfg)applyLayout('design');if(on)partCur=id;ui.part=on;const v=$('#partView');v.hidden=!on;
   if(on){const el=PT.get(id!)!.el;if(v.firstChild!==el)v.replaceChildren(el);}else v.replaceChildren();
   $('.app').classList.toggle('work-part',on);
   // Panel a szerkesztő mellett: a vászon bal fele látszik és használható (a beállítás megmarad)
@@ -1107,6 +1127,8 @@ $('#bMcp').onclick=()=>{closeMenu();MCPP.open();};
   reveal:(r,c)=>{const sc=$('#scroll'),[vx,vy]=toScreen(hx(c),hy(r));sc.scrollTo(vpX(vx)-sc.clientWidth/2,vpY(vy)-sc.clientHeight/2);const rc=cv.getBoundingClientRect();return{x:rc.left+vx,y:rc.top+vy};},
   loadExample,libSearch:q=>{ui.libQ=q;$('#libSearch').value=q;ltab('lib');renderLib();return[...$$('#lib [data-lib]')].map(b=>b.dataset.lib!);},
   saveCustom:def=>editorHost.save(null,def),openEditor:type=>openEditor(editorHost,type?{type}:{}),importPlan,shareLink,
+  mfg:()=>({bom:mfgBom(D,tr),steps:mfgAssembly(D,tr),marks:mfgMarks(D)}),mfgSheet:side=>sheetSvg(D,{side,tr,title:mfgTitle()}).svg,
+  mfgPrintHtml:(o={})=>mfgPrintHtml({comp:true,cu:true,bom:true,steps:true,...o}),mfgTab:t=>MFG.tab(t==='bom'||t==='asm'||t==='sheets'?t:undefined),
   commands:()=>CMDS.map(c=>({id:c.id,label:cmdLabel(c),group:tr(c.group),keys:c.keys||[],enabled:!c.enabled||c.enabled(),hidden:!!c.hidden&&c.hidden()})),
   importCode:(code,o={})=>{const r=importCodeOf(D,code,{lang:o.lang,tr});if(o.apply!==false&&r.program.nodes.length)applyCodeImport(r,o.mode||'replace');return{lang:r.lang,blocks:r.program.nodes.length,summary:r.summary,notes:r.notes};},
   runCommand:id=>{const c=CMDS.find(x=>x.id===id);if(!c||(c.enabled&&!c.enabled())||(c.hidden&&c.hidden()))return false;c.run();return true;},
@@ -1131,6 +1153,8 @@ const CMDS: Command[]=[
   btnCmd('bOpenFile',N_('Megnyitás…'),G.file,{keys:['Ctrl+O'],scope:'global',words:'open file load'}),
   btnCmd('bSaveFile',N_('Mentés fájlba'),G.file,{keys:['Ctrl+S'],scope:'global',words:'save file download'}),
   btnCmd('bShare',N_('Megosztás linkkel…'),G.file,{keys:['Alt+L'],scope:'global',words:'share link url'}),
+  btnCmd('bMfg',N_('Gyártás: anyaglista, lapok…'),G.file,{words:'manufacturing bom bill of materials assembly print solder gyártás'}),
+  {id:'mfgPrint',label:N_('Gyártási lapok nyomtatása…'),group:G.file,keys:['Ctrl+P'],scope:'input',words:'print sheets manufacturing',enabled:()=>!!ui.mfg,run:()=>MFG.print()},
   btnCmd('bExamples',N_('Példák…'),G.file,{keys:['Alt+P'],scope:'global',words:'examples'}),
   btnCmd('bBoard',N_('Panel beállításai…'),G.file,{keys:['Alt+B'],words:'board settings size'}),
   btnCmd('bMcp',N_('Claude-kapcsolat…'),G.file,{keys:['Alt+C'],words:'mcp claude desktop code'}),

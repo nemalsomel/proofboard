@@ -28,6 +28,7 @@ import { PARTS } from '../parts/builtin';
 import { EXAMPLES } from './examples';
 import { grp, type Group } from './hit';
 import type { ProgRun } from './state';
+import type { AsmStep, Bom, Marks } from '../engine/manufacture';
 
 /* ---------- Eredménytípusok ---------- */
 
@@ -46,6 +47,8 @@ export interface ApiSwap { dropped: string[]; fits: boolean; msg: string }
 export interface ApiExample { id: string; cat: string; title: string }
 
 /** A `window.pcb` felülete. A címke (`label`) az alkatrész neve a tervben (pl. „R1”, „PICO1”). */
+export interface ApiMfg { bom: Bom; steps: AsmStep[]; marks: Marks }
+export interface ApiMfgPrint { comp: boolean; cu: boolean; bom: boolean; steps: boolean }
 export interface PcbApi {
   /* terv */
   /** Terv betöltése (objektum vagy JSON-szöveg); a kijelölés törlődik. */ load(d: Design | string): boolean;
@@ -122,6 +125,10 @@ export interface PcbApi {
   /** A lyuk helye a képernyőn; a reveal előbb odagörget. */ at(r: number, c: number): { x: number; y: number }; reveal(r: number, c: number): { x: number; y: number };
   /** Megosztás: a jelenlegi terv linkje (`#d=…`). */ shareLink(): Promise<string>;
   /** Kód (Arduino / MicroPython) → blokkprogram; alapból a tervbe is (csere), `apply: false`-szal csak az eredmény. */ importCode(code: string, o?: ApiImportOpts): ApiImport;
+  /** Gyártás: anyaglista, beültetési lépések, jelölések (X vágás, H híd, V vezeték). */ mfg(): ApiMfg;
+  /** Gyártási lap SVG-ben (mm), 'comp' alkatrészoldal / 'cu' rézoldal (tükrözve). */ mfgSheet(side: 'comp' | 'cu'): string;
+  /** A nyomtatható gyártási csomag HTML-je (amit a Nyomtatás… új ablakban megnyit). */ mfgPrintHtml(o?: Partial<ApiMfgPrint>): string;
+  /** A Gyártás nézet füle: 'bom' | 'asm' | 'sheets'. */ mfgTab(t?: string): string;
   /** A parancsok (a palettán és a billentyűkhöz): azonosító, név, csoport, billentyűk, elérhető-e, rejtett-e. */ commands(): ApiCommand[];
   /** Parancs végrehajtása azonosító szerint; ha nincs vagy nem elérhető, false. */ run(id: string): boolean;
   readonly version: string;
@@ -173,6 +180,7 @@ export interface ApiHost {
   shareLink(): Promise<string>;
   commands(): ApiCommand[]; runCommand(id: string): boolean;
   importCode(code: string, o?: ApiImportOpts): ApiImport;
+  mfg(): ApiMfg; mfgSheet(side: 'comp' | 'cu'): string; mfgPrintHtml(o?: Partial<ApiMfgPrint>): string; mfgTab(t?: string): string;
   readonly version: string;
 }
 
@@ -295,6 +303,10 @@ export function createApi(H: ApiHost): PcbApi {
     shareLink() { return H.shareLink(); },
     commands() { return H.commands(); },
     importCode(code, o) { return H.importCode(code, o); },
+    mfg() { return H.mfg(); },
+    mfgSheet(side) { return H.mfgSheet(side); },
+    mfgPrintHtml(o) { return H.mfgPrintHtml(o); },
+    mfgTab(t) { return H.mfgTab(t); },
     run(id) { return H.runCommand(id); },
     version: H.version,
   };
