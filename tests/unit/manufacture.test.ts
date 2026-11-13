@@ -99,3 +99,50 @@ describe('gyártás: agent', () => {
     expect(b.text).not.toContain('Assembly order');
   });
 });
+
+describe('gyártás: méretrajz', () => {
+  it('elemek: mm-ben, origó a bal alsó sarok; kívülről fontos alapból; az USB kiemelt pont', async () => {
+    const { dimItems, holeMm, shownItems } = await import('../../src/engine/dimension');
+    const D = load('esp32');
+    expect(holeMm(D, D.board.rows - 1, 0)).toEqual({ x: 1.27, y: 1.27 });
+    const it = dimItems(D), by = (l: string) => it.find(i => i.label === l)!;
+    expect(by('R1').def).toBe(false);
+    expect(by('SW1').def).toBe(true);
+    const usb = by('ESP1 USB');
+    expect(usb).toMatchObject({ feature: 'USB', w: 0, def: true });
+    // a vezérlőlap szélén (a test befoglalóján)
+    const esp = by('ESP1');
+    expect(Math.min(Math.abs(usb.x - (esp.x - esp.w / 2)), Math.abs(usb.x - (esp.x + esp.w / 2)))).toBeLessThan(0.01);
+    const on = shownItems(it, ['+' + by('R1').id, '-' + by('SW1').id]);
+    expect(on.has(by('R1').id)).toBe(true);
+    expect(on.has(by('SW1').id)).toBe(false);
+  });
+
+  it('SVG: körvonal-méretek és koordináták; kikapcsolt elem nem méretezett', async () => {
+    const { dimItems, dimSvg } = await import('../../src/engine/dimension');
+    const D = load('esp32'), sw = dimItems(D).find(i => i.label === 'SW1')!;
+    const all = dimSvg(D).svg;
+    expect(all).toContain('>99.1<');
+    expect(all).toContain('>121.9<');
+    expect(all).toContain(`>${sw.x.toFixed(1)}<`);
+    const none = dimSvg(D, { show: new Set() }).svg;
+    expect(none).not.toContain(`>${sw.x.toFixed(1)}<`);
+  });
+
+  it('DXF: R12, mm, rétegek; a panel körvonala 4 vonal', async () => {
+    const { dimDxf } = await import('../../src/engine/dimension');
+    const dxf = dimDxf(load('strip'));
+    expect(dxf).toContain('AC1009');
+    expect(dxf).toMatch(/\$INSUNITS\n70\n4/);
+    expect(dxf.match(/^LINE\n8\nBOARD$/gm)).toHaveLength(4);
+    expect(dxf.trim().endsWith('EOF')).toBe(true);
+  });
+
+  it('agent: get_dimensions táblázat és DXF', async () => {
+    const ctx = engineCtx(load('esp32'));
+    const t = (await runTool(ctx, 'get_dimensions', {})).text;
+    expect(t).toContain('Board outline: 99.1 × 121.9 mm');
+    expect(t).toMatch(/ESP1 USB \| USB \(feature point\)/);
+    expect((await runTool(ctx, 'get_dimensions', { format: 'dxf' })).text).toContain('ENTITIES');
+  });
+});

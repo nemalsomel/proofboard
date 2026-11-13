@@ -3,18 +3,21 @@
  *  - Anyaglista: táblázat, a panel és a fogyóanyagok (vezeték színenként, hidak, vágások); CSV.
  *  - Beültetés: lépések alacsonytól a magasig, pipálható tételekkel (tervenként megmaradnak), mellette a lépés
  *    oldala (alkatrész- vagy rézoldal) a tételek kiemelésével; rámutatva egy tétel külön is kiemelődik.
+ *  - Méretrajz: felülnézet koordinátaméretekkel (origó a bal alsó sarok), elemenként ki-be kapcsolható méretezés
+ *    (tervenként megmarad), koordináta-táblázat; SVG, DXF, nyomtatás.
  *  - Lapok: az alkatrész- és a rézoldal előnézete, a nyomtatás tartalmának kiválasztása.
  * A tartalom az engine-ből (`manufacture.ts`, `mfgsheet.ts`); a nyomtatás a gazdáé (`print`).
  */
 import type { Tr } from '../i18n/i18n';
 import { assembly, bom, bomCsv, boardKindName, marks, type AsmStep } from '../engine/manufacture';
 import { sheetSvg, type Side } from '../engine/mfgsheet';
+import { dimDxf, dimItems, dimSvg, shownItems } from '../engine/dimension';
 import type { Design } from '../engine/types';
 import { icon } from './icons';
 import { esc } from './links';
 import type { PrintOpts } from './mfgprint';
 
-export type MfgTab = 'bom' | 'asm' | 'sheets';
+export type MfgTab = 'bom' | 'asm' | 'dims' | 'sheets';
 export interface MfgHost {
   design(): Design;
   tr: Tr;
@@ -31,9 +34,13 @@ export function mountMfgView(host: MfgHost): MfgView {
   const el = document.createElement('div');
   el.className = 'mfg';
   let tab: MfgTab = 'asm', step = '', hover = '';
-  const pr = { comp: true, cu: true, bom: true, steps: true };
+  const pr = { comp: true, cu: true, bom: true, steps: true, dims: true };
   const doneKey = () => host.design().id || 'local';
-  let done = new Set<string>();
+  let done = new Set<string>(), dimHi = '';
+  const dimKey = () => 'dim:' + doneKey();
+  /** a méretezett elemek: alapértelmezés + a felhasználó felülírásai (`+id` / `-id`) */
+  const dimShow = () => shownItems(dimItems(host.design()), host.load(dimKey()));
+  const fileBase = () => (host.title().replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'proofboard').slice(0, 60);
 
   /** fit: a lépés előnézete a nézet magasságához igazodik (nem kell görgetni) */
   function sheet(side: Side, hi: string[] | null, fit = false) {
@@ -72,10 +79,24 @@ export function mountMfgView(host: MfgHost): MfgView {
     </div>`;
   }
 
+  function dimsHtml(): string {
+    const D = host.design(), items = dimItems(D), show = dimShow();
+    const d = dimSvg(D, { show, tr, hi: dimHi || null });
+    const svg = d.svg.replace(/ width="[\d.]+mm" height="[\d.]+mm"/, ` style="width:min(100%, calc((100vh - 200px) * ${(d.w / d.h).toFixed(4)}));height:auto"`);
+    const mm = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
+    const rows = items.map(it => `<tr data-dim-row="${esc(it.id)}"${show.has(it.id) ? '' : ' class="off"'}><td><input type="checkbox" data-dim="${esc(it.id)}"${show.has(it.id) ? ' checked' : ''} aria-label="${esc(tr('{x} méretezése', { x: it.label }))}"></td><td class="lbl">${esc(it.label)}</td><td>${esc(it.feature ? it.name : tr(it.name))}</td><td class="n">${mm(it.x)}</td><td class="n">${mm(it.y)}</td><td class="n">${it.feature ? '' : `${mm(it.w)}×${mm(it.h)}`}</td></tr>`).join('');
+    return `<div class="mf-dims">
+      <div class="mf-prev"><div class="mf-svg">${svg}</div></div>
+      <div class="mf-dtab"><p class="help">${esc(tr('Az origó a panel bal alsó sarka, x jobbra, y fölfelé (mm). Bejelölve a rajzon méretezve; alapból a kívülről fontos elemek: kezelőszervek, csatlakozók, LED-ek, kijelzők, a vezérlőlap USB-je.'))}</p>
+        <div class="mf-dbtn"><button class="btn ghost" data-mf="ddef">${esc(tr('Alapértelmezés'))}</button><button class="btn ghost" data-mf="dall">${esc(tr('Mind'))}</button><button class="btn ghost" data-mf="dnone">${esc(tr('Egyik sem'))}</button></div>
+        <table class="tbl mf-tbl"><thead><tr><th></th><th>${esc(tr('Jelölés'))}</th><th>${esc(tr('Elem'))}</th><th class="n">x</th><th class="n">y</th><th class="n">${esc(tr('Méret'))}</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
+  }
+
   function sheetsHtml(): string {
     const ck = (k: keyof typeof pr, label: string) => `<label class="mf-ck"><input type="checkbox" data-pr="${k}"${pr[k] ? ' checked' : ''}> ${esc(label)}</label>`;
     return `<div class="mf-scroll"><div class="mf-sheets">
-      <div class="mf-opts"><span class="small muted">${esc(tr('Nyomtatásra:'))}</span>${ck('comp', tr('Alkatrészoldal 1:1'))}${ck('cu', tr('Rézoldal 1:1'))}${ck('bom', tr('Anyaglista'))}${ck('steps', tr('Beültetési sorrend'))}
+      <div class="mf-opts"><span class="small muted">${esc(tr('Nyomtatásra:'))}</span>${ck('comp', tr('Alkatrészoldal 1:1'))}${ck('cu', tr('Rézoldal 1:1'))}${ck('bom', tr('Anyaglista'))}${ck('steps', tr('Beültetési sorrend'))}${ck('dims', tr('Méretrajz'))}
         <span class="sp"></span><button class="btn primary" data-mf="print">${icon('print')}${esc(tr('Nyomtatás…'))}</button></div>
       <p class="help">${esc(tr('Nyomtatáskor a méretarány legyen 100 % (ne „Igazítás a laphoz”); a lap alján lévő 50 mm-es vonalzóval ellenőrizheted. A rézoldal tükrözve van, ahogy a panelt megfordítva látod.'))}</p>
       <div class="mf-two"><figure><figcaption>${esc(tr('Alkatrészoldal'))}</figcaption><div class="mf-svg">${sheet('comp', null)}</div></figure><figure><figcaption>${esc(tr('Rézoldal'))}</figcaption><div class="mf-svg">${sheet('cu', null)}</div></figure></div>
@@ -85,12 +106,12 @@ export function mountMfgView(host: MfgHost): MfgView {
   function render() {
     done = new Set(host.load(doneKey()));
     const D = host.design();
-    const tabs: Array<[MfgTab, string]> = [['bom', tr('Anyaglista')], ['asm', tr('Beültetés')], ['sheets', tr('Lapok')]];
+    const tabs: Array<[MfgTab, string]> = [['bom', tr('Anyaglista')], ['asm', tr('Beültetés')], ['dims', tr('Méretrajz')], ['sheets', tr('Lapok')]];
     const head = `<div class="mf-bar"><div class="grp seg" role="tablist" aria-label="${esc(tr('Gyártás'))}">${tabs.map(([k, l]) => `<button class="btn${k === tab ? ' on' : ''}" role="tab" aria-selected="${k === tab}" data-mtab="${k}">${esc(l)}</button>`).join('')}</div>
-      <span class="sp"></span>${tab === 'bom' ? `<button class="btn" data-mf="csv">${icon('download')}${esc(tr('CSV letöltése'))}</button>` : ''}<button class="btn${tab === 'sheets' ? '' : ' primary'}" data-mf="print"${tab === 'sheets' ? ' hidden' : ''}>${icon('print')}${esc(tr('Nyomtatás…'))}</button></div>`;
+      <span class="sp"></span>${tab === 'bom' ? `<button class="btn" data-mf="csv">${icon('download')}${esc(tr('CSV letöltése'))}</button>` : ''}${tab === 'dims' ? `<button class="btn" data-mf="svg">${icon('download')}SVG</button><button class="btn" data-mf="dxf">${icon('download')}DXF</button>` : ''}<button class="btn${tab === 'sheets' ? '' : ' primary'}" data-mf="${tab === 'dims' ? 'dprint' : 'print'}"${tab === 'sheets' ? ' hidden' : ''}>${icon('print')}${esc(tr('Nyomtatás…'))}</button></div>`;
     let body = '';
     if (!D.parts.length && !D.bridges.length && !D.wires.length) body = `<div class="mf-empty"><p>${esc(tr('Üres a terv: rakj le alkatrészeket a Tervezés elrendezésben, és itt megjelenik az anyaglista, a beültetési sorrend és a nyomtatható lapok.'))}</p></div>`;
-    else body = tab === 'bom' ? bomHtml() : tab === 'asm' ? asmHtml(assembly(D, tr)) : sheetsHtml();
+    else body = tab === 'bom' ? bomHtml() : tab === 'asm' ? asmHtml(assembly(D, tr)) : tab === 'dims' ? dimsHtml() : sheetsHtml();
     el.innerHTML = head + `<div class="mf-body">${body}</div>`;
   }
 
@@ -99,17 +120,38 @@ export function mountMfgView(host: MfgHost): MfgView {
     const tb = t.closest<HTMLElement>('[data-mtab]'); if (tb) { tab = tb.dataset.mtab as MfgTab; render(); return; }
     const sh = t.closest<HTMLElement>('button[data-step]'); if (sh) { step = sh.dataset.step!; hover = ''; render(); return; }
     const b = t.closest<HTMLElement>('[data-mf]'); if (!b) return;
-    if (b.dataset.mf === 'print') host.print({ ...pr });
+    if (b.dataset.mf === 'print') host.print({ ...pr, dimShow: [...dimShow()] });
+    else if (b.dataset.mf === 'dprint') host.print({ comp: false, cu: false, bom: false, steps: false, dims: true, dimShow: [...dimShow()] });
+    else if (b.dataset.mf === 'svg') host.download(fileBase() + ' - meretrajz.svg', dimSvg(host.design(), { show: dimShow(), tr, title: host.title() }).svg, 'image/svg+xml');
+    else if (b.dataset.mf === 'dxf') host.download(fileBase() + ' - meretrajz.dxf', dimDxf(host.design(), { show: dimShow(), tr }), 'application/dxf');
+    else if (b.dataset.mf === 'dall' || b.dataset.mf === 'dnone' || b.dataset.mf === 'ddef') {
+      const items = dimItems(host.design()), m = b.dataset.mf;
+      host.save(dimKey(), m === 'ddef' ? [] : items.filter(i => (m === 'dall') !== i.def).map(i => (m === 'dall' ? '+' : '-') + i.id)); render();
+    }
     else if (b.dataset.mf === 'csv') host.download('anyaglista.csv', '﻿' + bomCsv(host.design(), tr), 'text/csv');
     else if (b.dataset.mf === 'reset') { host.save(doneKey(), []); render(); }
   });
   el.addEventListener('change', e => {
     const t = e.target as HTMLInputElement;
     if (t.dataset.key) { const s = new Set(host.load(doneKey())); if (t.checked) s.add(t.dataset.key); else s.delete(t.dataset.key); host.save(doneKey(), [...s]); render(); return; }
-    if (t.dataset.pr) { pr[t.dataset.pr as keyof typeof pr] = t.checked; }
+    if (t.dataset.pr) { pr[t.dataset.pr as keyof typeof pr] = t.checked; return; }
+    if (t.dataset.dim) {
+      const id = t.dataset.dim, it = dimItems(host.design()).find(i => i.id === id); if (!it) return;
+      const over = host.load(dimKey()).filter(o => o.slice(1) !== id);
+      if (t.checked !== it.def) over.push((t.checked ? '+' : '-') + id);
+      host.save(dimKey(), over); render();
+    }
   });
   // rámutatva a tétel külön kiemelődik a rajzon
   el.addEventListener('mouseover', e => {
+    if (tab === 'dims') {
+      const tr0 = (e.target as HTMLElement).closest<HTMLElement>('[data-dim-row]'), id = tr0 ? tr0.dataset.dimRow || '' : '';
+      if (id === dimHi) return; dimHi = id;
+      const prev = el.querySelector<HTMLElement>('.mf-prev .mf-svg'); if (!prev) return;
+      const D = host.design(), d = dimSvg(D, { show: dimShow(), tr, hi: dimHi || null });
+      prev.innerHTML = d.svg.replace(/ width="[\d.]+mm" height="[\d.]+mm"/, ` style="width:min(100%, calc((100vh - 200px) * ${(d.w / d.h).toFixed(4)}));height:auto"`);
+      return;
+    }
     const li = (e.target as HTMLElement).closest<HTMLElement>('.mf-items li'); const r = li ? li.dataset.ref || '' : '';
     if (r === hover) return; hover = r;
     const prev = el.querySelector<HTMLElement>('.mf-prev .mf-svg'); if (!prev) return;
@@ -117,5 +159,5 @@ export function mountMfgView(host: MfgHost): MfgView {
     const side: Side = cur.side || 'comp';
     prev.innerHTML = sheet(side, hover ? [hover] : cur.side ? cur.items.map(i => i.ref).filter(Boolean) : null, true);
   });
-  return { el, render, print: () => host.print({ ...pr }), tab(t) { if (t) { tab = t; render(); } return tab; }, step(id) { if (id) { step = id; render(); } return step; } };
+  return { el, render, print: () => host.print({ ...pr, dimShow: [...dimShow()] }), tab(t) { if (t) { tab = t; render(); } return tab; }, step(id) { if (id) { step = id; render(); } return step; } };
 }

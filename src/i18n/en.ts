@@ -1723,4 +1723,11 @@ export const EN: Readonly<Record<string, string>> = {
   "Multiméterrel: a GND és a táp (3V3, 5V) között nincs zárlat": "With a multimeter: no short between GND and power (3V3, 5V)",
   "Irány: LED-ek, diódák, elektrolit kondenzátorok, IC-k és modulok a rajz szerint": "Orientation: LEDs, diodes, electrolytic capacitors, ICs and modules as on the drawing",
   "Első bekapcsolás: figyeld a melegedést; a feszültségeket mérd meg a vezérlőlap lábain": "First power-up: watch for heat; measure the voltages on the controller board's pins",
+  "{x} méretezése": "Dimension {x}",
+  "Az origó a panel bal alsó sarka, x jobbra, y fölfelé (mm). Bejelölve a rajzon méretezve; alapból a kívülről fontos elemek: kezelőszervek, csatlakozók, LED-ek, kijelzők, a vezérlőlap USB-je.": "The origin is the bottom-left corner of the board, x to the right, y up (mm). Ticked items are dimensioned on the drawing; by default the ones that matter from outside: controls, connectors, LEDs, displays, the controller board's USB.",
+  "Alapértelmezés": "Default",
+  "Egyik sem": "None",
+  "Méretrajz": "Drawing",
+  "Méretrajz, felülnézet": "Dimension drawing, top view",
+  "origó: a panel bal alsó sarka": "origin: bottom-left corner of the board",
 };

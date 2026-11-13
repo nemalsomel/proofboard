@@ -16,6 +16,7 @@ import { mountMfgView } from './ui/mfgview';
 import { printHtml, type PrintOpts } from './ui/mfgprint';
 import { assembly as mfgAssembly, bom as mfgBom, marks as mfgMarks } from './engine/manufacture';
 import { sheetSvg } from './engine/mfgsheet';
+import { dimDxf, dimItems, dimSvg, shownItems } from './engine/dimension';
 import { applyImport, importCode as importCodeOf, type ImportResult } from './engine/codeimport';
 import { SHARE_LONG, canShare, decodeShare, shareCode, shareUrl } from './core/share';
 import { History } from './ui/history';
@@ -842,6 +843,8 @@ const MFG=mountMfgView({design:()=>D,tr,title:mfgTitle,
   save(k,done){try{if(done.length)localStorage.setItem(MFGKEY+k,JSON.stringify(done));else localStorage.removeItem(MFGKEY+k);}catch(e){}},
 });
 $('#mfgView').appendChild(MFG.el);
+/** A méretrajzon méretezett elemek (a Gyártás nézetben elemenként kapcsolható, tervenként megmarad). */
+function mfgDimShow(){let over: string[]=[];try{const v=JSON.parse(localStorage.getItem(MFGKEY+'dim:'+(D.id||'local'))||'[]');if(Array.isArray(v))over=v.map(String);}catch(e){}return shownItems(dimItems(D),over);}
 /** A Gyártás nézet a középen (a Gyártás elrendezésben); a panel szerkesztése közben szünetel. */
 function mfgShow(on: boolean){if(!!ui.mfg===on)return;ui.mfg=on;$('#mfgView').hidden=!on;$('.app').classList.toggle('work-mfg',on);if(on){if(ui.part)partShow(null);if(ui.sim)setSim(false);MFG.render();}else{resize();draw();}toolFit();}
 $('#bMfg').onclick=()=>{closeMenu();applyLayout('mfg');};
@@ -1128,7 +1131,8 @@ $('#bMcp').onclick=()=>{closeMenu();MCPP.open();};
   loadExample,libSearch:q=>{ui.libQ=q;$('#libSearch').value=q;ltab('lib');renderLib();return[...$$('#lib [data-lib]')].map(b=>b.dataset.lib!);},
   saveCustom:def=>editorHost.save(null,def),openEditor:type=>openEditor(editorHost,type?{type}:{}),importPlan,shareLink,
   mfg:()=>({bom:mfgBom(D,tr),steps:mfgAssembly(D,tr),marks:mfgMarks(D)}),mfgSheet:side=>sheetSvg(D,{side,tr,title:mfgTitle()}).svg,
-  mfgPrintHtml:(o={})=>mfgPrintHtml({comp:true,cu:true,bom:true,steps:true,...o}),mfgTab:t=>MFG.tab(t==='bom'||t==='asm'||t==='sheets'?t:undefined),
+  mfgPrintHtml:(o={})=>mfgPrintHtml({comp:true,cu:true,bom:true,steps:true,dims:true,dimShow:[...mfgDimShow()],...o}),mfgTab:t=>MFG.tab(t==='bom'||t==='asm'||t==='dims'||t==='sheets'?t:undefined),
+  mfgDims:()=>{const items=dimItems(D),show=mfgDimShow();return{items,shown:[...show],svg:dimSvg(D,{show,tr,title:mfgTitle()}).svg,dxf:dimDxf(D,{show,tr})};},
   commands:()=>CMDS.map(c=>({id:c.id,label:cmdLabel(c),group:tr(c.group),keys:c.keys||[],enabled:!c.enabled||c.enabled(),hidden:!!c.hidden&&c.hidden()})),
   importCode:(code,o={})=>{const r=importCodeOf(D,code,{lang:o.lang,tr});if(o.apply!==false&&r.program.nodes.length)applyCodeImport(r,o.mode||'replace');return{lang:r.lang,blocks:r.program.nodes.length,summary:r.summary,notes:r.notes};},
   runCommand:id=>{const c=CMDS.find(x=>x.id===id);if(!c||(c.enabled&&!c.enabled())||(c.hidden&&c.hidden()))return false;c.run();return true;},

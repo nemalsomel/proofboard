@@ -6,9 +6,13 @@
 import type { Tr } from '../i18n/i18n';
 import { assembly, bom, boardKindName, marks } from '../engine/manufacture';
 import { sheetSvg } from '../engine/mfgsheet';
+import { dimSvg } from '../engine/dimension';
 import type { Design } from '../engine/types';
 
-export interface PrintOpts { comp: boolean; cu: boolean; bom: boolean; steps: boolean; title: string; lang: string }
+export interface PrintOpts {
+  comp: boolean; cu: boolean; bom: boolean; steps: boolean; title: string; lang: string;
+  /** méretrajz (1:1), a méretezett elemekkel (hiányzóként az alapértelmezés) */ dims?: boolean; dimShow?: string[];
+}
 
 const esc = (s: string) => s.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]!));
 /** A4 nyomtatható terület (mm), 10 mm-es margóval. */
@@ -16,8 +20,8 @@ const PW = 190, PH = 277;
 
 export function printHtml(D: Design, o: PrintOpts, tr: Tr): string {
   const mk = marks(D), pages: string[] = [];
-  const sheet = (side: 'comp' | 'cu') => {
-    const s = sheetSvg(D, { side, tr, mk, title: o.title });
+  const sheet = (side: 'comp' | 'cu' | 'dims') => {
+    const s = side === 'dims' ? dimSvg(D, { show: o.dimShow ? new Set(o.dimShow) : null, tr, title: o.title }) : sheetSvg(D, { side, tr, mk, title: o.title });
     const land = s.w > PW && s.w <= PH && s.h <= PW;
     const fits = land ? true : s.w <= PW && s.h <= PH;
     // ha nem fér el 1:1-ben, kicsinyítve (és ezt ki is írja)
@@ -27,6 +31,7 @@ export function printHtml(D: Design, o: PrintOpts, tr: Tr): string {
   };
   if (o.comp) sheet('comp');
   if (o.cu) sheet('cu');
+  if (o.dims) sheet('dims');
   if (o.bom) {
     const b = bom(D, tr), x = b.extra;
     const rows = b.rows.map(r => `<tr><td class="n">${r.qty}</td><td>${esc(r.labels.join(', '))}</td><td>${esc(r.name)}</td><td>${esc(r.value)}</td><td>${esc(r.note)}</td><td class="ck">☐</td></tr>`).join('');

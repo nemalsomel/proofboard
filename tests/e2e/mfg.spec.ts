@@ -52,9 +52,10 @@ test('Gyártás (Alt+4): anyaglista, lépések pipálása (megmarad), rézoldal 
   await page.locator('#mfgView [data-mtab="sheets"]').click();
   await expect(page.locator('#mfgView .mf-two svg')).toHaveCount(2);
   await page.locator('#mfgView [data-pr="steps"]').uncheck();
+  // alkatrész- és rézoldal, anyaglista, méretrajz
   const [pop] = await Promise.all([page.waitForEvent('popup'), page.keyboard.press('Control+p')]);
   await pop.waitForLoadState();
-  await expect(pop.locator('section.page')).toHaveCount(3);
+  await expect(pop.locator('section.page')).toHaveCount(4);
   await pop.close();
 
   // vissza a Tervezésbe: a gyártás nézet eltűnik, a panel billentyűi újra élnek
@@ -73,4 +74,33 @@ test('Gyártás: üres terv üzenete; API: anyaglista, lépések, lap SVG', asyn
   // új (üres) terv a Fájl menüből, a gyártás nézet frissül
   await page.click('#bFile'); await page.click('#bNew'); await page.click('#bNewOk');
   await expect(page.locator('#mfgView .mf-empty')).toBeVisible();
+});
+
+test('Méretrajz: koordináta-táblázat, elemenként kapcsolható méretezés (megmarad), SVG és DXF letöltés, nyomtatásban is', async ({ page }) => {
+  await page.goto('./'); await ready(page);
+  await page.evaluate(() => { const p = (window as any).pcb; p.example('esp32'); p.layout('mfg'); p.mfgTab('dims'); });
+  const v = page.locator('#mfgView');
+  const rows = v.locator('.mf-dtab tbody tr');
+  await expect(rows).toHaveCount(6);
+  await expect(v.locator('[data-dim-row]').filter({ hasText: 'ESP1 USB' })).toHaveCount(1);
+  // R1 alapból nincs méretezve; bekapcsolva a rajzon is megjelenik a koordinátája
+  const r1 = v.locator('[data-dim-row]').filter({ hasText: 'R1' }), x = (await r1.locator('td.n').first().innerText()).trim();
+  await expect(r1.locator('input')).not.toBeChecked();
+  await expect(v.locator('.mf-prev svg')).not.toContainText(x);
+  await r1.locator('input').check();
+  await expect(v.locator('.mf-prev svg')).toContainText(x);
+  expect(await page.evaluate(() => (window as any).pcb.mfgDims().shown.length)).toBe(6);
+  await page.reload(); await ready(page);
+  await page.evaluate(() => { const p = (window as any).pcb; if (p.layout() !== 'mfg') p.layout('mfg'); p.mfgTab('dims'); });
+  await expect(page.locator('#mfgView [data-dim-row]').filter({ hasText: 'R1' }).locator('input')).toBeChecked();
+  await page.locator('#mfgView [data-mf="ddef"]').click();
+  await expect(page.locator('#mfgView [data-dim-row]').filter({ hasText: 'R1' }).locator('input')).not.toBeChecked();
+
+  const [svg] = await Promise.all([page.waitForEvent('download'), page.locator('#mfgView [data-mf="svg"]').click()]);
+  expect(svg.suggestedFilename()).toMatch(/meretrajz\.svg$/);
+  const [dxf] = await Promise.all([page.waitForEvent('download'), page.locator('#mfgView [data-mf="dxf"]').click()]);
+  expect(dxf.suggestedFilename()).toMatch(/meretrajz\.dxf$/);
+  const html = await page.evaluate(() => (window as any).pcb.mfgPrintHtml({ comp: false, cu: false, bom: false, steps: false, dims: true }));
+  expect(html.match(/<section class="page/g)).toHaveLength(1);
+  expect(html).toContain('99.1');
 });
