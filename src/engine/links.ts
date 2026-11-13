@@ -79,7 +79,7 @@ export function linkStates(D: Design, A: Netlist): Map<string, LinkState> {
 export const ROLE_HU: Record<string, string> = {
   gnd: N_('föld'), vin: N_('tápbemenet'), pwr: N_('táp'), p33: N_('3,3 V'), gpio: 'GPIO', sig: N_('jel'), adc: N_('analóg jel'), out: N_('kimenet'), pout: N_('tápkimenet'),
   A: N_('kapcsoló A'), B: N_('kapcsoló B'), base: N_('bázis'), col: N_('kollektor'), emit: N_('emitter'), g: N_('gate'), d: N_('drain'), s: N_('source'),
-  an: N_('anód'), ka: N_('katód'), cp: '+', cn: '−', bp: '+', bn: '−', coil: N_('tekercs'), chg: N_('töltés'), r: N_('ellenállás'), c: N_('kondenzátor'), j: N_('átkötés'), h: N_('tüske'),
+  an: N_('anód'), ka: N_('katód'), cp: '+', cn: '−', bp: '+', bn: '−', coil: N_('tekercs'), chg: N_('töltés'), r: N_('ellenállás'), c: N_('kondenzátor'), j: N_('átkötés'), h: N_('tüske'), mech: N_('rögzítés'),
 };
 /** Kötelező lábak: ha az alkatrész már be van kötve, de ezek lebegnek, a Problémák között jelezzük. */
 export const REQUIRED_ROLES = new Set(['gnd', 'vin']);

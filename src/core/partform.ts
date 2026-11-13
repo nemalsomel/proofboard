@@ -46,6 +46,35 @@ export interface Form {
   /** A test kiterjesztése a lábakon túl (lyukban): fent, lent, balra, jobbra. */
   ext: { t: number; b: number; l: number; r: number };
   pins: PinRow[]; model: ModelRow[]; press: [string, string] | null;
+  /** Mechanika (méretrajz, beültetési sorrend): magasság a panel fölött, valós méret, kívülről fontos, kiemelt pontok. */
+  mech?: Mech;
+}
+/** A leírás `meta` mechanikai mezői: `h`, `size` ([szélesség, mélység] mm), `front`, `features` (pl. az USB helye – csak átvitt). */
+export interface Mech { h?: number; w?: number; d?: number; front?: boolean; features?: unknown[]; /** rögzítőfurat (csak átvitt) */ drill?: unknown; head?: unknown }
+
+/** A leírás `meta`-jából a mechanikai adatok (üres, ha nincs). */
+export function mechOf(meta: unknown): Mech | undefined {
+  if (!meta || typeof meta !== 'object') return undefined;
+  const m = meta as { h?: unknown; size?: unknown; front?: unknown; features?: unknown; drill?: unknown; head?: unknown }, o: Mech = {};
+  if (typeof m.h === 'number' && m.h >= 0) o.h = m.h;
+  if (Array.isArray(m.size) && m.size.length === 2 && m.size.every(v => typeof v === 'number' && v > 0)) { o.w = m.size[0]; o.d = m.size[1]; }
+  if (m.front === true) o.front = true;
+  if (Array.isArray(m.features) && m.features.length) o.features = JSON.parse(JSON.stringify(m.features));
+  if (m.drill != null) o.drill = m.drill;
+  if (m.head != null) o.head = m.head;
+  return Object.keys(o).length ? o : undefined;
+}
+/** Űrlapból a `meta` mechanikai mezői. */
+export function mechMeta(m: Mech | undefined): Record<string, unknown> {
+  const o: Record<string, unknown> = {};
+  if (!m) return o;
+  if (typeof m.h === 'number' && isFinite(m.h) && m.h >= 0) o.h = m.h;
+  if (m.w && m.d && m.w > 0 && m.d > 0) o.size = [m.w, m.d];
+  if (m.front) o.front = true;
+  if (m.features && m.features.length) o.features = m.features;
+  if (m.drill != null) o.drill = m.drill;
+  if (m.head != null) o.head = m.head;
+  return o;
 }
 
 export const FILLS = ['#1b4f8a', '#1f6b4a', '#7a1f2b', '#2a2a2a', '#5f3dc4', '#c2410c', '#d9d2bf'];
@@ -133,7 +162,7 @@ export function formToDef(f: Form, tr: Tr = fmt): PartDef {
       p.role === 'gpio' && splitCaps(p.caps).length ? { caps: splitCaps(p.caps) } : {}, p.role !== 'gpio' && p.fn ? { fn: p.fn } : {})),
     bounds: { r: [B.r0, B.r1], c: [B.c0, B.c1] },
     graphics,
-    meta: { editor: 1, form: JSON.parse(JSON.stringify(f)) },
+    meta: { editor: 1, ...mechMeta(f.mech), form: JSON.parse(JSON.stringify(f)) },
   };
   if (groups.length) def.groups = groups;
   if (f.off) { def.mount = 'off'; def.fp = tr('külső · {n} kivezetés', { n: pins.length }); }
@@ -198,6 +227,7 @@ export function defToForm(def: PartDef, base?: { form: Form; graphics: unknown; 
   if (f.logic) delete f.logic.graph;
   f.ext = Object.assign({ t: 0, b: 0, l: 0, r: 0 }, f.ext || {});
   f.name = String(def.name ?? ''); f.prefix = String(def.prefix ?? ''); f.cat = String(def.cat ?? '');
+  { const mk = mechOf(def.meta); if (mk) f.mech = mk; else delete f.mech; }
   f.off = def.mount === 'off';
   const gOf = new Map<string, string>();
   (def.groups || []).forEach((g, i) => { if (Array.isArray(g)) for (const id of g) gOf.set(id, 'g' + (i + 1)); });

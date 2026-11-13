@@ -431,6 +431,13 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
           <label for="pe_cat">${tr('Kategória')}</label><input type="text" id="pe_cat" data-f="cat" value="${esc(f.cat)}">
           <label></label><label class="check small" title="${tr('A panel mellé kerül; a lábaihoz kábel (vezeték) köt be')}"><input type="checkbox" data-f="off" ${f.off ? 'checked' : ''}> ${tr('Külső alkatrész (kábellel bekötve)')}</label>
         </div>
+        <p class="h">${tr('Méretek')}</p>
+        <div class="pe-grid">
+          <label for="pe_mh">${tr('Magasság')}</label><span class="pe-mech"><input type="number" id="pe_mh" data-mech="h" value="${f.mech?.h ?? ''}" min="0" max="200" step="0.1" style="width:72px" placeholder="${tr('becslés')}"> mm</span>
+          <label for="pe_mw">${tr('Valós méret')}</label><span class="pe-mech"><input type="number" id="pe_mw" data-mech="w" value="${f.mech?.w ?? ''}" min="0" max="500" step="0.1" style="width:72px" aria-label="${tr('Szélesség (mm)')}"> × <input type="number" id="pe_md" data-mech="d" value="${f.mech?.d ?? ''}" min="0" max="500" step="0.1" style="width:72px" aria-label="${tr('Mélység (mm)')}"> mm</span>
+          <label></label><label class="check small"><input type="checkbox" data-mech="front" ${f.mech?.front ? 'checked' : ''}> ${tr('Kívülről fontos (a méretrajzon alapból méretezve)')}</label>
+          <label></label><span class="help" style="margin:0">${tr('A magasság a panel fölött mérve (a beültetési sorrendhez és az oldalnézethez). A valós méret felülnézetben, a lábak irányában (szélesség) és arra merőlegesen; üresen a rajz teste számít.')}</span>
+        </div>
       </section>
       <section class="pe-sec" id="pe_s_look" data-vpane="look">
         <p class="h">${tr('Megjelenés')}</p>
@@ -787,6 +794,13 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
       refresh(); return;
     }
     if (t.dataset.ext) { form.ext[t.dataset.ext as keyof Form['ext']] = Math.max(0, Math.min(40, +t.value || 0)); refresh(); return; }
+    if (t.dataset.mech) {
+      const k = t.dataset.mech, m = form.mech || (form.mech = {});
+      if (k === 'front') { if (t.checked) m.front = true; else delete m.front; }
+      else if (k === 'h' || k === 'w' || k === 'd') { const v = t.value.trim() === '' ? NaN : +t.value; if (isFinite(v) && v >= 0) m[k] = Math.min(500, v); else delete m[k]; }
+      if (!Object.keys(m).length) delete form.mech;
+      refresh(); return;
+    }
     if (t.dataset.pin != null) {
       const p = form.pins[+t.dataset.pin], k = t.dataset.k as keyof PinRow;
       if (k === 'lr' || k === 'lc') p[k] = Math.round(+t.value || 0);

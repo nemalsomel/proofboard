@@ -110,9 +110,9 @@ describe('gyártás: méretrajz', () => {
     expect(by('SW1').def).toBe(true);
     const usb = by('ESP1 USB');
     expect(usb).toMatchObject({ feature: 'USB', w: 0, def: true });
-    // a vezérlőlap szélén (a test befoglalóján)
+    // a vezérlőlap szélén (a csatlakozó kicsit kilóghat a lapból)
     const esp = by('ESP1');
-    expect(Math.min(Math.abs(usb.x - (esp.x - esp.w / 2)), Math.abs(usb.x - (esp.x + esp.w / 2)))).toBeLessThan(0.01);
+    expect(Math.min(Math.abs(usb.x - (esp.x - esp.w / 2)), Math.abs(usb.x - (esp.x + esp.w / 2)))).toBeLessThan(2);
     const on = shownItems(it, ['+' + by('R1').id, '-' + by('SW1').id]);
     expect(on.has(by('R1').id)).toBe(true);
     expect(on.has(by('SW1').id)).toBe(false);
@@ -144,5 +144,50 @@ describe('gyártás: méretrajz', () => {
     expect(t).toContain('Board outline: 99.1 × 121.9 mm');
     expect(t).toMatch(/ESP1 USB \| USB \(feature point\)/);
     expect((await runTool(ctx, 'get_dimensions', { format: 'dxf' })).text).toContain('ENTITIES');
+  });
+});
+
+describe('gyártás: magasság, rögzítőfurat', () => {
+  it('magasság a leírásból (meta.h), valós méret (meta.size) elforgatva; a legmagasabb', async () => {
+    const { dimItems, maxHeight } = await import('../../src/engine/dimension');
+    const D = load('esp32'), it = dimItems(D), by = (l: string) => it.find(i => i.label === l)!;
+    expect(by('SW1')).toMatchObject({ w: 12, h: 12, z: 7.3 });
+    const esp = by('ESP1'), rot = D.parts.find(p => p.label === 'ESP1')!.rot;
+    expect([esp.w, esp.h]).toEqual(rot & 1 ? [28.3, 51.5] : [51.5, 28.3]);
+    expect(maxHeight(D)).toEqual({ z: 32, label: 'JS1' });
+  });
+
+  it('rögzítőfurat: anyaglistában, a panel előkészítésében, a méretrajzon körként; ütközés a csavarfejjel', async () => {
+    const { dimItems, dimSvg, dimDxf } = await import('../../src/engine/dimension');
+    const { checkAll } = await import('../../src/engine/check');
+    const { analyze } = await import('../../src/engine/netlist');
+    const D = load('strip');
+    const mh = OPS.placePart(D, 'mhole', 1, 24)!;
+    expect(mh).toBeTruthy();
+    expect(mh.label).toBe('MH1');
+    expect(bom(D).rows.find(r => r.labels[0] === 'MH1')).toMatchObject({ value: 'M3 (⌀3,2 mm furat)', note: 'csavar, anya vagy távtartó' });
+    const prep = assembly(D)[0];
+    expect(prep.items.map(i => i.text)).toContain('⌀3.2 mm rögzítőfurat a 1:24 lyuknál');
+    expect(assembly(D).some(s => s.items.some(i => i.key === 'part:' + mh.id && s.id !== 'board'))).toBe(false);
+    const it = dimItems(D).find(i => i.label === 'MH1')!;
+    expect(it).toMatchObject({ drill: 3.2, head: 6.5, def: true, z: 0 });
+    expect(dimSvg(D).svg).toContain('MH1 ⌀3.2');
+    expect(dimDxf(D)).toMatch(/CIRCLE\n8\nHOLES/);
+    const ctx = (d: typeof D) => ({ A0: analyze(d), AS: null, SIM: null, linkState: new Map() } as unknown as Parameters<typeof checkAll>[1]);
+    expect(checkAll(D, ctx(D)).filter(x => x.msg.startsWith('MH1'))).toEqual([]);
+    expect(OPS.placePart(D, 'led', 2, 24)).toBeTruthy();
+    expect(checkAll(D, ctx(D)).some(x => /MH1: a csavarfej helyén/.test(x.msg))).toBe(true);
+  });
+
+  it('alkatrész-szerkesztő: a mechanikai adatok oda-vissza (meta.h, size, front; az USB helye átvitt)', async () => {
+    const { defToForm, formToDef } = await import('../../src/core/partform');
+    const { PARTS } = await import('../../src/parts/builtin');
+    const feats = [{ name: 'USB', at: [1, -1] }];
+    const f = defToForm({ ...PARTS.button, meta: { ...PARTS.button.meta, features: feats } }).form!;
+    expect(f.mech).toMatchObject({ h: 7.3, w: 12, d: 12, front: true });
+    f.mech!.h = 9;
+    const m = formToDef(f).meta as Record<string, unknown>;
+    expect(m).toMatchObject({ h: 9, size: [12, 12], front: true });
+    expect(m.features).toEqual(feats);
   });
 });

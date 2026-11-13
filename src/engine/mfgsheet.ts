@@ -8,7 +8,7 @@ import { fmt, type Tr } from '../i18n/i18n';
 import { buildLayout } from './board';
 import { DEFS, isOff } from './defs';
 import { placedPins, xf } from './geometry';
-import { boardMm, marks, PITCH, type Marks } from './manufacture';
+import { boardMm, drillOf, headOf, marks, PITCH, type Marks } from './manufacture';
 import type { Design } from './types';
 
 export type Side = 'comp' | 'cu';
@@ -77,9 +77,13 @@ export function sheetSvg(D: Design, o: SheetOpts): Sheet {
     const bb = bodyBox(D, p.id)!, k = p.id;
     const x0 = cu ? n2(ML + (B.cols - 1 - bb.c1) * P + P / 2) : n2(ML + bb.c0 * P + P / 2), x1 = cu ? n2(ML + (B.cols - 1 - bb.c0) * P + P / 2) : n2(ML + bb.c1 * P + P / 2);
     const y0 = n2(MT + bb.r0 * P + P / 2), y1 = n2(MT + bb.r1 * P + P / 2), w = n2(x1 - x0), h = n2(y1 - y0);
-    const pins = placedPins(p);
+    const pins = placedPins(p), drill = drillOf(p);
     out.push(`<g${dim(k)}>`);
-    if (cu) {
+    if (drill) { // rögzítőfurat: a furat és a csavarfej helye, mindkét oldalon
+      const cx = hx(p.c), cy = hy(p.r), head = headOf(p) || drill * 2;
+      out.push(`<circle cx="${cx}" cy="${cy}" r="${n2(head / 2)}" fill="none" stroke="#868e96" stroke-width="0.18" stroke-dasharray="0.7 0.5"/><circle cx="${cx}" cy="${cy}" r="${n2(drill / 2)}" fill="#fff" stroke="#22262a" stroke-width="0.3"/><path d="M${n2(cx - drill / 2 - 0.6)} ${cy}h${n2(drill + 1.2)}M${cx} ${n2(cy - drill / 2 - 0.6)}v${n2(drill + 1.2)}" stroke="#22262a" stroke-width="0.14"/>`);
+      text(cx, n2(cy + head / 2 + 1.3), p.label, 1.5, '#22262a', 'middle', 600);
+    } else if (cu) {
       out.push(`<rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="0.4" fill="none" stroke="#9aa0a6" stroke-width="0.16" stroke-dasharray="0.8 0.6"/>`);
       for (const q of pins) out.push(`<circle cx="${hx(q.c)}" cy="${hy(q.r)}" r="0.82" fill="#5f666d"/>`);
     } else {
@@ -90,7 +94,7 @@ export function sheetSvg(D: Design, o: SheetOpts): Sheet {
     }
     out.push('</g>');
     const size = Math.max(1.2, Math.min(2.3, Math.min(h * 0.42, (w / Math.max(2, p.label.length)) * 1.55)));
-    tags.push(() => { out.push(`<g${dim(k)}>`); text((x0 + x1) / 2, (y0 + y1) / 2, p.label, size, cu ? '#868e96' : '#111', 'middle', 700, ' paint-order="stroke" stroke="#fff" stroke-width="0.5"'); out.push('</g>'); });
+    if (!drill) tags.push(() => { out.push(`<g${dim(k)}>`); text((x0 + x1) / 2, (y0 + y1) / 2, p.label, size, cu ? '#868e96' : '#111', 'middle', 700, ' paint-order="stroke" stroke="#fff" stroke-width="0.5"'); out.push('</g>'); });
   }
 
   // vezetékek (alkatrészoldalon színesen, rézoldalon csak a forrasztási pontjuk)

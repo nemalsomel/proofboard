@@ -104,3 +104,22 @@ test('Méretrajz: koordináta-táblázat, elemenként kapcsolható méretezés (
   expect(html.match(/<section class="page/g)).toHaveLength(1);
   expect(html).toContain('99.1');
 });
+
+test('Rögzítőfurat és magasság: a könyvtárból lerakható, a méretrajzon furat, elöl- és oldalnézet a legmagasabb ponttal', async ({ page }) => {
+  await page.goto('./'); await ready(page);
+  await page.evaluate(() => { (window as any).pcb.example('esp32'); });
+  const n = await page.evaluate(() => (window as any).pcb.libSearch('rögzítőfurat'));
+  expect(n).toContain('mhole');
+  await page.evaluate(() => { const p = (window as any).pcb, d = p.get(); d.parts.push({ id: 'mh1', type: 'mhole', label: 'MH1', r: 1, c: 1, rot: 0, props: { size: 'M2.5' } }); p.load(d); p.layout('mfg'); p.mfgTab('dims'); });
+  const v = page.locator('#mfgView');
+  await expect(v.locator('[data-dim-row="mh1"]')).toContainText('⌀2.7');
+  await expect(v.locator('[data-dim-row="mh1"] input')).toBeChecked();
+  await expect(v.locator('.mf-max')).toContainText('JS1');
+  await expect(v.locator('.mf-prev svg')).toContainText('Elölnézet');
+  await expect(v.locator('.mf-prev svg')).toContainText('Oldalnézet');
+  // a panel előkészítése lépésben a furat
+  await v.locator('[data-mtab="asm"]').click();
+  await expect(v.locator('.mf-step[data-step="board"] .mf-cnt')).toHaveText('0/2');
+  const dims = await page.evaluate(() => (window as any).pcb.mfgDims());
+  expect(dims.dxf).toContain('HOLES');
+});

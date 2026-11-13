@@ -11,7 +11,7 @@
 import type { Tr } from '../i18n/i18n';
 import { assembly, bom, bomCsv, boardKindName, marks, type AsmStep } from '../engine/manufacture';
 import { sheetSvg, type Side } from '../engine/mfgsheet';
-import { dimDxf, dimItems, dimSvg, shownItems } from '../engine/dimension';
+import { BOARD_T, dimDxf, dimItems, dimSvg, LEGS, maxHeight, shownItems } from '../engine/dimension';
 import type { Design } from '../engine/types';
 import { icon } from './icons';
 import { esc } from './links';
@@ -84,12 +84,14 @@ export function mountMfgView(host: MfgHost): MfgView {
     const d = dimSvg(D, { show, tr, hi: dimHi || null });
     const svg = d.svg.replace(/ width="[\d.]+mm" height="[\d.]+mm"/, ` style="width:min(100%, calc((100vh - 200px) * ${(d.w / d.h).toFixed(4)}));height:auto"`);
     const mm = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
-    const rows = items.map(it => `<tr data-dim-row="${esc(it.id)}"${show.has(it.id) ? '' : ' class="off"'}><td><input type="checkbox" data-dim="${esc(it.id)}"${show.has(it.id) ? ' checked' : ''} aria-label="${esc(tr('{x} méretezése', { x: it.label }))}"></td><td class="lbl">${esc(it.label)}</td><td>${esc(it.feature ? it.name : tr(it.name))}</td><td class="n">${mm(it.x)}</td><td class="n">${mm(it.y)}</td><td class="n">${it.feature ? '' : `${mm(it.w)}×${mm(it.h)}`}</td></tr>`).join('');
+    const rows = items.map(it => `<tr data-dim-row="${esc(it.id)}"${show.has(it.id) ? '' : ' class="off"'}><td><input type="checkbox" data-dim="${esc(it.id)}"${show.has(it.id) ? ' checked' : ''} aria-label="${esc(tr('{x} méretezése', { x: it.label }))}"></td><td class="lbl">${esc(it.label)}</td><td>${esc(it.feature ? it.name : tr(it.name))}</td><td class="n">${mm(it.x)}</td><td class="n">${mm(it.y)}</td><td class="n">${it.feature ? '' : it.drill ? `⌀${mm(it.drill)}` : `${mm(it.w)}×${mm(it.h)}`}</td><td class="n">${it.feature || it.drill ? '' : mm(it.z)}</td></tr>`).join('');
+    const mx = maxHeight(D);
     return `<div class="mf-dims">
       <div class="mf-prev"><div class="mf-svg">${svg}</div></div>
       <div class="mf-dtab"><p class="help">${esc(tr('Az origó a panel bal alsó sarka, x jobbra, y fölfelé (mm). Bejelölve a rajzon méretezve; alapból a kívülről fontos elemek: kezelőszervek, csatlakozók, LED-ek, kijelzők, a vezérlőlap USB-je.'))}</p>
+        ${mx.z ? `<p class="mf-max">${esc(tr('Legmagasabb: {l}, {z} mm a panel fölött; a panellel és a lábakkal együtt {t} mm.', { l: mx.label, z: mm(mx.z), t: mm(mx.z + BOARD_T + LEGS) }))}</p>` : ''}
         <div class="mf-dbtn"><button class="btn ghost" data-mf="ddef">${esc(tr('Alapértelmezés'))}</button><button class="btn ghost" data-mf="dall">${esc(tr('Mind'))}</button><button class="btn ghost" data-mf="dnone">${esc(tr('Egyik sem'))}</button></div>
-        <table class="tbl mf-tbl"><thead><tr><th></th><th>${esc(tr('Jelölés'))}</th><th>${esc(tr('Elem'))}</th><th class="n">x</th><th class="n">y</th><th class="n">${esc(tr('Méret'))}</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <table class="tbl mf-tbl"><thead><tr><th></th><th>${esc(tr('Jelölés'))}</th><th>${esc(tr('Elem'))}</th><th class="n">x</th><th class="n">y</th><th class="n">${esc(tr('Méret'))}</th><th class="n" title="${esc(tr('A panel fölött (mm), becslés'))}">z</th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
   }
 

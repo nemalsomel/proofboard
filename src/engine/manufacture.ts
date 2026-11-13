@@ -2,7 +2,7 @@
  * Gyártás: anyaglista, beültetési sorrend és a lapok jelölései (vágás X, hídlánc H, vezeték V).
  * DOM-mentes; a szövegek a `tr` fordítóval készülnek (alapból magyarul). A lapok rajza: `mfgsheet.ts`.
  */
-import { fmtSI } from '../core/expr';
+import { fmtSI, num } from '../core/expr';
 import type { PartDef, PartInstance } from '../core/schema';
 import { fmt, N_, type Tr } from '../i18n/i18n';
 import { buildLayout, type Cut } from './board';
@@ -80,7 +80,7 @@ export function bom(D: Design, tr: Tr = fmt): Bom {
     const c = DEFS[p.type]; if (!c) continue;
     const value = partValue(p, tr), off = isOff(p), key = p.type + '|' + value;
     let row = groups.get(key);
-    if (!row) { row = { qty: 0, labels: [], type: p.type, name: tr(c.name), value, note: '', off }; groups.set(key, row); }
+    if (!row) { row = { qty: 0, labels: [], type: p.type, name: tr(c.name), value, note: drillOf(p) ? tr('csavar, anya vagy távtartó') : '', off }; groups.set(key, row); }
     row.qty++; row.labels.push(p.label);
     if (off) {
       const sock = p.plug ? D.parts.find(q => q.id === p.plug) : null;
@@ -138,8 +138,24 @@ const GROUPS: Array<{ id: string; title: string; tip: string }> = [
   { id: 'tall', title: N_('Magas alkatrészek: elektrolit kondenzátorok'), tip: N_('Az elektrolit kondenzátor rövidebb lába, a csíkos oldal a negatív (−).') },
   { id: 'module', title: N_('Modulok és vezérlőlap'), tip: N_('Tüskesorral vagy foglalatba; a vezérlőlap USB-csatlakozója a rajz szerinti oldalra nézzen.') },
 ];
+/** Rögzítőfurat (a leírás `meta.drill` mezője, kifejezés is lehet): a furat átmérője (mm), különben null. */
+export function drillOf(p: PartInstance): number | null {
+  const m = DEFS[p.type]?.def.meta as { drill?: unknown } | undefined;
+  if (!m || m.drill == null) return null;
+  const d = num(m.drill, penv(p));
+  return isFinite(d) && d > 0 ? d : null;
+}
+/** A csavarfej (alátét) átmérője (mm), a furat körüli szabad terület. */
+export function headOf(p: PartInstance): number | null {
+  const m = DEFS[p.type]?.def.meta as { head?: unknown } | undefined;
+  if (!m || m.head == null) return null;
+  const d = num(m.head, penv(p));
+  return isFinite(d) && d > 0 ? d : null;
+}
+
 function groupOf(p: PartInstance): string {
   const t = p.type, c = DEFS[t];
+  if (drillOf(p)) return 'hole';
   if (isMcu(p)) return 'module';
   if (t === 'jumper' || t === 'res' || t === 'diode') return 'low';
   if (c.cat === 'Logika') return 'ic';
@@ -167,7 +183,9 @@ function pinText(p: PartInstance, tr: Tr): string {
 export function assembly(D: Design, tr: Tr = fmt): AsmStep[] {
   const m = marks(D), steps: AsmStep[] = [], { w, h } = boardMm(D);
   steps.push({ id: 'board', title: tr('A panel előkészítése'), side: null, tip: tr('Vágd méretre a panelt, és csiszold le az élét; a lyukakat tisztítsd meg (zsírtalanítás, fényes réz).'),
-    items: [{ key: 'board', mark: '', ref: '', text: tr('{k} panel, {c}×{r} lyuk ({w}×{h} mm)', { k: boardKindName(D, tr), c: D.board.cols, r: D.board.rows, w, h }) }] });
+    items: [{ key: 'board', mark: '', ref: '', text: tr('{k} panel, {c}×{r} lyuk ({w}×{h} mm)', { k: boardKindName(D, tr), c: D.board.cols, r: D.board.rows, w, h }) },
+      ...D.parts.filter(p => DEFS[p.type] && !isOff(p) && drillOf(p)).sort((a, b) => natural(a.label, b.label))
+        .map(p => ({ key: 'part:' + p.id, mark: p.label, ref: p.id, text: tr('⌀{d} mm rögzítőfurat a {h} lyuknál', { d: String(drillOf(p)), h: holeName(p.r, p.c) }) }))] });
   if (m.cuts.length) steps.push({ id: 'cuts', title: tr('Csíkvágások (rézoldal)'), side: 'cu', tip: tr('3–4 mm-es fúróval kézzel, vagy szikével két bevágással; utána nagyítóval nézd meg, hogy a réz tényleg megszakadt.'),
     items: m.cuts.map(x => ({ key: 'cut:' + x.cut.join(':'), mark: x.n, ref: x.n, text: x.cut[2] ? tr('kifúrt lyuk: {h}', { h: holeName(x.cut[0], x.cut[1]) }) : tr('a {c}. oszlop csíkja a {r1}. és {r2}. sor között', { c: x.cut[1], r1: x.cut[0], r2: x.cut[0] + 1 }) })) });
   if (m.wires.length) steps.push({ id: 'wires', title: tr('Átkötő vezetékek (alkatrészoldal)'), side: 'comp', tip: tr('A hossz a két lyuk távolsága; adj hozzá 2×5 mm-t a lábaknak. A vezeték feküdjön a panelon.'),

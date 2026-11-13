@@ -16,7 +16,7 @@ import { EL_KINDS } from '../core/circuit';
 import { decodeShare, shareCode, shareUrl } from '../core/share';
 import { applyImport, importCode } from '../engine/codeimport';
 import { assembly, bom, boardMm } from '../engine/manufacture';
-import { dimDxf, dimItems } from '../engine/dimension';
+import { BOARD_T, dimDxf, dimItems, LEGS, maxHeight } from '../engine/dimension';
 import { PARTS } from '../parts/builtin';
 import { fmt, t as translate, type Tr } from '../i18n/i18n';
 import { checkAll, type Issue } from '../engine/check';
@@ -660,14 +660,17 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'get_dimensions', mutates: false,
-    description: 'Dimension data of the board for enclosure / front panel design: board outline and the centre position and body size of every on-board part (mm; origin = bottom-left corner of the board, x right, y up, top view), plus feature points such as the controller board USB connector. "front" marks items that usually matter from outside (controls, connectors, LEDs, displays, USB). Heights are not known yet. format "dxf" returns an AutoCAD R12 DXF of the drawing instead (the user can also download SVG/DXF in the Manufacturing layout, Drawing tab).',
+    description: 'Dimension data of the board for enclosure / front panel design: board outline and the centre position and body size of every on-board part (mm; origin = bottom-left corner of the board, x right, y up, top view), plus feature points such as the controller board USB connector, mounting holes (part type "mhole", M2/M2.5/M3; place them with place_part) and the estimated height of each part above the board. "front" marks items that usually matter from outside (controls, connectors, LEDs, displays, USB, mounting holes). format "dxf" returns an AutoCAD R12 DXF of the drawing (top, front and side view) instead; the user can also download SVG/DXF in the Manufacturing layout, Drawing tab.',
     input_schema: S.obj({ format: { type: 'string', enum: ['table', 'dxf'], description: 'table (default) or dxf' } }),
     async run(ctx, i) {
       const D = ctx.D();
       if (i.format === 'dxf') return ok(dimDxf(D, { tr: en }));
       const b = boardMm(D), mm = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
-      const rows = dimItems(D).map(it => `- ${it.label} | ${it.feature ? it.feature + ' (feature point)' : en(DEFS[D.parts.find(p => p.id === it.id)!.type].name)} | x ${mm(it.x)} | y ${mm(it.y)}${it.feature ? '' : ` | ${mm(it.w)}×${mm(it.h)}`}${it.def ? ' | front' : ''}`);
-      return ok([`Board outline: ${mm(b.w)} × ${mm(b.h)} mm (${D.board.cols}×${D.board.rows} holes, 2.54 mm pitch; hole centres 1.27 mm from the edge).`, 'label | part | x | y | w×h (mm) | front', ...rows].join('\n'));
+      const rows = dimItems(D).map(it => `- ${it.label} | ${it.feature ? it.feature + ' (feature point)' : en(DEFS[D.parts.find(p => p.id === it.id)!.type].name)} | x ${mm(it.x)} | y ${mm(it.y)}${it.feature ? '' : it.drill ? ` | hole ⌀${mm(it.drill)}, keep ⌀${mm(it.head || 0)} clear` : ` | ${mm(it.w)}×${mm(it.h)} | z ${mm(it.z)}`}${it.def ? ' | front' : ''}`);
+      const mx = maxHeight(D);
+      return ok([`Board outline: ${mm(b.w)} × ${mm(b.h)} mm (${D.board.cols}×${D.board.rows} holes, 2.54 mm pitch; hole centres 1.27 mm from the edge; board ${BOARD_T} mm thick, legs ~${LEGS} mm below).`,
+        mx.z ? `Tallest: ${mx.label}, ${mm(mx.z)} mm above the board (heights are estimates from the part data).` : 'No part heights.',
+        'label | part | x | y | w×h (mm) | z height (mm) | front', ...rows].join('\n'));
     },
   },
   {

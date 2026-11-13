@@ -14,6 +14,7 @@ import { layoutOf, pinLabel, type Netlist } from './netlist';
 import { gpioMode, pwmCfg, type SimResult } from './simulate';
 import type { Design, Hole, NetPin } from './types';
 import { layoutStats } from './compact';
+import { drillOf, headOf, PITCH } from './manufacture';
 /** e kitöltés alatt jelez a Problémák a szellős tervre */
 export const SPARSE_FILL = 0.21;
 
@@ -62,6 +63,17 @@ export function checkAll(D: Design, { A0: A, AS, SIM, linkState, tr = fmt }: Che
   const hole = new Map<string, NetPin[]>();
   for (const q of A.pins) { if (!q.on) continue; const k = q.r + ':' + q.c; if (!hole.has(k)) hole.set(k, []); hole.get(k)!.push(q); }
   for (const [k, a] of hole) if (a.length > 1) add('err', tr('Ütközés a {a} lyukban: {b}', { a: k, b: a.map(pinLabel).join(', ') }), at(a[0]));
+  // rögzítőfurat: a csavarfej helyén ne legyen láb; a furat csíkján lévő más bekötést a fém csavar összeköti
+  for (const p of D.parts) {
+    const dr = drillOf(p); if (!dr || isOff(p)) continue;
+    const rad = (headOf(p) || dr * 2) / 2 / PITCH, me = A.byPart.get(p.id)?.pins[0];
+    const near = A.pins.filter(q => q.on && q.part.id !== p.id && Math.hypot(q.r - p.r, q.c - p.c) < rad + 0.35);
+    if (near.length) add('warn', tr('{a}: a csavarfej helyén alkatrészláb van ({b})', { a: p.label, b: near.slice(0, 4).map(pinLabel).join(', ') }), [[p.r, p.c]]);
+    else if (me && me.on) {
+      const same = A.pins.filter(q => q.on && q.net === me.net && q.part.id !== p.id);
+      if (same.length) add('info', tr('{a}: a furat csíkján bekötés is van ({b}); fém csavar ezt a házzal is összeköti – vágd el a csíkot a furat mellett, vagy használj műanyag csavart', { a: p.label, b: same.slice(0, 3).map(pinLabel).join(', ') }), [[p.r, p.c]]);
+    }
+  }
   // kifúrt (vágott) lyuk: nincs alatta réz
   {
     const LY = layoutOf(D);
