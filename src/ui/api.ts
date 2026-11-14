@@ -29,7 +29,7 @@ import { EXAMPLES } from './examples';
 import { grp, type Group } from './hit';
 import type { ProgRun } from './state';
 import type { AsmStep, Bom, Marks } from '../engine/manufacture';
-import type { DimItem, DimMode } from '../engine/dimension';
+import type { DimItem, DimMode, DimTo } from '../engine/dimension';
 
 /* ---------- Eredménytípusok ---------- */
 
@@ -49,8 +49,8 @@ export interface ApiExample { id: string; cat: string; title: string }
 
 /** A `window.pcb` felülete. A címke (`label`) az alkatrész neve a tervben (pl. „R1”, „PICO1”). */
 export interface ApiMfg { bom: Bom; steps: AsmStep[]; marks: Marks }
-export interface ApiMfgPrint { comp: boolean; cu: boolean; bom: boolean; steps: boolean; dims: boolean; dimShow: string[]; dimMode: DimMode; dimOrigin: string | null }
-export interface ApiDims { items: DimItem[]; shown: string[]; mode: DimMode; origin: string | null; svg: string; dxf: string }
+export interface ApiMfgPrint { comp: boolean; cu: boolean; bom: boolean; steps: boolean; dims: boolean; dimShow: string[]; dimMode: DimMode; dimOrigin: string | null; dimTo: DimTo }
+export interface ApiDims { items: DimItem[]; shown: string[]; mode: DimMode; origin: string | null; to: DimTo; svg: string; dxf: string }
 export interface PcbApi {
   /* terv */
   /** Terv betöltése (objektum vagy JSON-szöveg); a kijelölés törlődik. */ load(d: Design | string): boolean;
@@ -131,7 +131,7 @@ export interface PcbApi {
   /** Gyártási lap SVG-ben (mm), 'comp' alkatrészoldal / 'cu' rézoldal (tükrözve). */ mfgSheet(side: 'comp' | 'cu'): string;
   /** A nyomtatható gyártási csomag HTML-je (amit a Nyomtatás… új ablakban megnyit). */ mfgPrintHtml(o?: Partial<ApiMfgPrint>): string;
   /** A Gyártás nézet füle: 'bom' | 'asm' | 'dims' | 'sheets'. */ mfgTab(t?: string): string;
-  /** Méretrajz: az elemek (mm, a bal alsó saroktól), a méretezettek és a méretezés módja (a Gyártás nézet beállítása; `mode` megadásával átállítja: 'chain' | 'edge' | 'ord', `origin`: elem az 'ord'-hoz), SVG és DXF. */ mfgDims(mode?: DimMode, origin?: string | null): ApiDims;
+  /** Méretrajz: az elemek (mm, a bal alsó saroktól), a méretezettek és a méretezés módja (a Gyártás nézet beállítása; `mode` megadásával átállítja: 'gap' | 'chain' | 'edge' | 'ord', `origin`: elem az 'ord'-hoz, `to`: 'body' – a test széléig – vagy 'center'), SVG és DXF. */ mfgDims(mode?: DimMode, origin?: string | null, to?: DimTo): ApiDims;
   /** A Gyártás nézetben látható rajzok nagyítása (1 = az egész rajz). */ mfgZoom(): number[];
   /** A parancsok (a palettán és a billentyűkhöz): azonosító, név, csoport, billentyűk, elérhető-e, rejtett-e. */ commands(): ApiCommand[];
   /** Parancs végrehajtása azonosító szerint; ha nincs vagy nem elérhető, false. */ run(id: string): boolean;
@@ -184,7 +184,7 @@ export interface ApiHost {
   shareLink(): Promise<string>;
   commands(): ApiCommand[]; runCommand(id: string): boolean;
   importCode(code: string, o?: ApiImportOpts): ApiImport;
-  mfg(): ApiMfg; mfgSheet(side: 'comp' | 'cu'): string; mfgPrintHtml(o?: Partial<ApiMfgPrint>): string; mfgTab(t?: string): string; mfgDims(mode?: DimMode, origin?: string | null): ApiDims; mfgZoom(): number[];
+  mfg(): ApiMfg; mfgSheet(side: 'comp' | 'cu'): string; mfgPrintHtml(o?: Partial<ApiMfgPrint>): string; mfgTab(t?: string): string; mfgDims(mode?: DimMode, origin?: string | null, to?: DimTo): ApiDims; mfgZoom(): number[];
   readonly version: string;
 }
 
@@ -311,7 +311,7 @@ export function createApi(H: ApiHost): PcbApi {
     mfgSheet(side) { return H.mfgSheet(side); },
     mfgPrintHtml(o) { return H.mfgPrintHtml(o); },
     mfgTab(t) { return H.mfgTab(t); },
-    mfgDims(mode, origin) { return H.mfgDims(mode, origin); },
+    mfgDims(mode, origin, to) { return H.mfgDims(mode, origin, to); },
     mfgZoom() { return H.mfgZoom(); },
     run(id) { return H.runCommand(id); },
     version: H.version,

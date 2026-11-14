@@ -129,11 +129,11 @@ describe('gyártás: méretrajz', () => {
     expect(none).not.toContain(`>${sw.x.toFixed(1)}<`);
   });
 
-  it('lánc (alapértelmezés): a szakaszok a széltől széléig összeadódnak; széltől: a közelebbi szél; koordináta választott origóval', async () => {
+  it('lánc a középpontokig: a szakaszok a széltől széléig összeadódnak; széltől: a közelebbi szél; koordináta választott origóval', async () => {
     const { dimItems, dimSvg, dimDxf, edgeDist } = await import('../../src/engine/dimension');
     const { boardMm } = await import('../../src/engine/manufacture');
     const D = load('esp32'), items = dimItems(D), b = boardMm(D);
-    const svg = dimSvg(D).svg;
+    const svg = dimSvg(D, { mode: 'chain', to: 'center' }).svg;
     expect(svg).toContain('a szélektől és egymástól');
     // az x-lánc (alul) a bal széltől az első elemig és az utolsótól a jobb szélig is mér
     const xs = items.filter(i => i.def).map(i => i.x), f1 = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
@@ -141,12 +141,30 @@ describe('gyártás: méretrajz', () => {
     expect(svg).toContain(`>${f1(b.w - Math.max(...xs))}<`);
     const sw = items.find(i => i.label === 'SW1')!, e = edgeDist(D, sw);
     expect(e.left + e.right).toBeCloseTo(b.w, 5);
-    expect(dimSvg(D, { mode: 'edge' }).svg).toContain(`>${Math.min(e.left, e.right).toFixed(1)}<`);
+    expect(dimSvg(D, { mode: 'edge', to: 'center' }).svg).toContain(`>${Math.min(e.left, e.right).toFixed(1)}<`);
     const js = items.find(i => i.label === 'JS1')!;
     const o = dimSvg(D, { mode: 'ord', origin: js.id }).svg;
     expect(o).toContain('origó: JS1 középpontja');
     expect(o).toContain(`>${(Math.round((sw.x - js.x) * 10) / 10).toFixed(1)}<`);
     expect(dimDxf(D, { mode: 'edge' })).toContain('ENTITIES');
+  });
+
+  it('térköz (alapértelmezés): a testek között és a panel széléig; a test szélétől mért szabad hely', async () => {
+    const { dimItems, dimSvg, edgeDist, halfExt } = await import('../../src/engine/dimension');
+    const D = load('esp32'), items = dimItems(D), by = (l: string) => items.find(i => i.label === l)!;
+    const svg = dimSvg(D).svg, f1 = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
+    expect(svg).toContain('térközök: a testek között');
+    // SW1 és JS1 egymás fölött: a két test közti függőleges hézag
+    const sw = by('SW1'), js = by('JS1');
+    const gap = (sw.y - halfExt(sw, 'y')) - (js.y + halfExt(js, 'y'));
+    expect(gap).toBeGreaterThan(0);
+    expect(svg).toContain(`>${f1(gap)}<`);
+    // a test szélétől a panel széléig
+    const e = edgeDist(D, sw, 'body'), c = edgeDist(D, sw);
+    expect(e.left).toBeCloseTo(c.left - sw.w / 2, 5);
+    expect(svg).toContain(`>${f1(e.left)}<`);
+    // széltől mód a test széléig (alapból)
+    expect(dimSvg(D, { mode: 'edge' }).svg).toContain(`>${f1(Math.min(e.left, e.right))}<`);
   });
 
   it('DXF: R12, mm, rétegek; a panel körvonala 4 vonal', async () => {

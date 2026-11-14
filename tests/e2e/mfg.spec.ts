@@ -84,7 +84,7 @@ test('Méretrajz: koordináta-táblázat, elemenként kapcsolható méretezés (
   await expect(rows).toHaveCount(6);
   await expect(v.locator('[data-dim-row]').filter({ hasText: 'ESP1 USB' })).toHaveCount(1);
   // alapból láncméretezés; a Széltől mód: R1 alapból nincs méretezve, bekapcsolva a rajzon is megjelenik a közelebbi széltől mért távolsága
-  await expect(v.locator('[data-dmode="chain"]')).toHaveAttribute('aria-checked', 'true');
+  await expect(v.locator('[data-dmode="gap"]')).toHaveAttribute('aria-checked', 'true');
   await v.locator('[data-dmode="edge"]').click();
   await expect(v.locator('[data-dmode="edge"]')).toHaveAttribute('aria-checked', 'true');
   const r1 = v.locator('[data-dim-row]').filter({ hasText: 'R1' }), x = (await r1.locator('td.near').first().innerText()).trim();
@@ -116,7 +116,7 @@ test('Méretrajz: koordináta-táblázat, elemenként kapcsolható méretezés (
   expect(await page.evaluate(() => (window as any).pcb.mfgZoom()[0])).toBeGreaterThan(1.5);
   await page.locator('#mfgView .pan-ctl [data-z="fit"]').click();
   expect(await page.evaluate(() => (window as any).pcb.mfgZoom()[0])).toBe(1);
-  await page.evaluate(() => (window as any).pcb.mfgDims('chain'));
+  await page.evaluate(() => (window as any).pcb.mfgDims('gap'));
   await page.locator('#mfgView [data-mf="ddef"]').click();
   await expect(page.locator('#mfgView [data-dim-row]').filter({ hasText: 'R1' }).locator('input')).not.toBeChecked();
 

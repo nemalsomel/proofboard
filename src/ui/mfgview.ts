@@ -13,7 +13,7 @@
 import type { Tr } from '../i18n/i18n';
 import { assembly, bom, bomCsv, boardKindName, marks, type AsmStep } from '../engine/manufacture';
 import { sheetSvg, type Side } from '../engine/mfgsheet';
-import { BOARD_T, DIM_MODES, dimDxf, dimItems, dimSvg, edgeDist, LEGS, maxHeight, shownItems, type DimMode } from '../engine/dimension';
+import { BOARD_T, DIM_MODES, dimDxf, dimItems, dimSvg, edgeDist, LEGS, maxHeight, shownItems, type DimMode, type DimTo } from '../engine/dimension';
 import type { Design } from '../engine/types';
 import { icon } from './icons';
 import { esc } from './links';
@@ -32,7 +32,7 @@ export interface MfgHost {
 }
 export interface MfgView {
   el: HTMLElement; render(): void; tab(t?: MfgTab): MfgTab; step(id?: string): string; /** nyomtatás a kiválasztott tartalommal */ print(): void;
-  /** a méretezés módja és az origó (koordinátánál) */ dimMode(m?: DimMode, origin?: string | null): { mode: DimMode; origin: string | null };
+  /** a méretezés módja, az origó (koordinátánál) és hogy a test széléig vagy a középpontig mér */ dimMode(m?: DimMode, origin?: string | null, to?: DimTo): { mode: DimMode; origin: string | null; to: DimTo };
   /** a látható rajz(ok) nagyítása (1 = az egész rajz) */ zoom(): number[];
 }
 
@@ -49,11 +49,12 @@ export function mountMfgView(host: MfgHost): MfgView {
   const dimShow = () => shownItems(dimItems(host.design()), host.load(dimKey()));
   const modeKey = () => 'dimmode:' + doneKey();
   /** a méretezés módja és (koordinátánál) az origó elem, tervenként */
-  const dimMode = (): { mode: DimMode; origin: string | null } => {
+  const dimMode = (): { mode: DimMode; origin: string | null; to: DimTo } => {
     const [m, o] = host.load(modeKey());
-    return { mode: DIM_MODES.includes(m as DimMode) ? m as DimMode : 'chain', origin: m === 'ord' && o ? o : null };
+    const to: DimTo = host.load(modeKey())[2] === 'center' ? 'center' : 'body';
+    return { mode: DIM_MODES.includes(m as DimMode) ? m as DimMode : 'gap', origin: m === 'ord' && o ? o : null, to };
   };
-  const dimOpts = () => { const m = dimMode(); return { show: dimShow(), tr, mode: m.mode, origin: m.origin }; };
+  const dimOpts = () => { const m = dimMode(); return { show: dimShow(), tr, mode: m.mode, origin: m.origin, to: m.to }; };
   const pan = createSvgPan(tr);
   /** a tárolók (`[data-pan]`) rajzainak bekötése a nagyításhoz */
   const attachAll = () => el.querySelectorAll<HTMLElement>('[data-pan]').forEach(b => pan.attach(b, b.dataset.pan!));
@@ -102,22 +103,27 @@ export function mountMfgView(host: MfgHost): MfgView {
     const ord = m.mode === 'ord';
     const pos = (it: (typeof items)[number]) => {
       if (ord) return `<td class="n">${mm(it.x - ox)}</td><td class="n">${mm(it.y - oy)}</td>`;
-      const e = edgeDist(D, it), near = (a: number, b: number) => a <= b;
+      const e = edgeDist(D, it, m.to), near = (a: number, b: number) => a <= b;
       return `<td class="n${near(e.left, e.right) ? ' near' : ''}">${mm(e.left)}</td><td class="n${near(e.right, e.left) ? ' near' : ''}">${mm(e.right)}</td><td class="n${near(e.bottom, e.top) ? ' near' : ''}">${mm(e.bottom)}</td><td class="n${near(e.top, e.bottom) ? ' near' : ''}">${mm(e.top)}</td>`;
     };
     const rows = items.map(it => `<tr data-dim-row="${esc(it.id)}"${show.has(it.id) ? '' : ' class="off"'}><td><input type="checkbox" data-dim="${esc(it.id)}"${show.has(it.id) ? ' checked' : ''} aria-label="${esc(tr('{x} méretezése', { x: it.label }))}"></td><td class="lbl" title="${esc(it.feature ? it.name : tr(it.name))}">${esc(it.label)}</td>${pos(it)}<td class="n">${it.feature ? '' : it.drill ? `⌀${mm(it.drill)}` : `${mm(it.w)}×${mm(it.h)}`}</td><td class="n">${it.feature || it.drill ? '' : mm(it.z)}</td></tr>`).join('');
     const heads = ord ? `<th class="n">x</th><th class="n">y</th>`
       : `<th class="n" title="${esc(tr('A bal széltől'))}">${esc(tr('Bal'))}</th><th class="n" title="${esc(tr('A jobb széltől'))}">${esc(tr('Jobb'))}</th><th class="n" title="${esc(tr('Az alsó széltől'))}">${esc(tr('Alul'))}</th><th class="n" title="${esc(tr('A felső széltől'))}">${esc(tr('Fölül'))}</th>`;
     const modes: Array<[DimMode, string, string]> = [
+      ['gap', tr('Térköz'), tr('Minden elem testétől a legközelebbi szomszédig vagy a panel széléig, mind a négy irányban')],
       ['chain', tr('Lánc'), tr('A szélektől és egymástól: alul az x, balra az y irányú távolságok egymás után')],
       ['edge', tr('Széltől'), tr('Minden elem a hozzá legközelebbi széltől, vízszintesen és függőlegesen')],
       ['ord', tr('Koordináta'), tr('Egy közös origótól: a panel sarka vagy egy kiválasztott elem')],
     ];
-    const help = ord ? tr('Koordináták az origótól (mm), x jobbra, y fölfelé.') : tr('A középpont távolsága a panel széleitől (mm); kiemelve a közelebbi. Bejelölve a rajzon méretezve; alapból a kívülről fontos elemek: kezelőszervek, csatlakozók, LED-ek, kijelzők, a vezérlőlap USB-je.');
+    const help = ord ? tr('Koordináták az origótól a középpontig (mm), x jobbra, y fölfelé.')
+      : m.to === 'body' ? tr('A test szélének távolsága a panel széleitől (szabad hely, mm); kiemelve a közelebbi. Bejelölve a rajzon méretezve; alapból a kívülről fontos elemek: kezelőszervek, csatlakozók, LED-ek, kijelzők, a vezérlőlap USB-je.')
+        : tr('A középpont távolsága a panel széleitől (mm); kiemelve a közelebbi. Bejelölve a rajzon méretezve; alapból a kívülről fontos elemek: kezelőszervek, csatlakozók, LED-ek, kijelzők, a vezérlőlap USB-je.');
+    const tos: Array<[DimTo, string, string]> = [['body', tr('Test széle'), tr('A szélektől és egymástól a testek széléig: szabad hely, térközök')], ['center', tr('Középpont'), tr('A középpontokig (furatnál a furat közepéig)')]];
     return `<div class="mf-dims">
       <div class="mf-prev"><div class="mf-svg" data-pan="dims">${svg}</div></div>
       <div class="mf-dtab">
         <div class="mf-mode"><span class="small muted">${esc(tr('Méretezés:'))}</span><div class="grp seg" role="radiogroup" aria-label="${esc(tr('Méretezés'))}">${modes.map(([k, l, t]) => `<button class="btn${k === m.mode ? ' on' : ''}" role="radio" aria-checked="${k === m.mode}" data-dmode="${k}" title="${esc(t)}">${esc(l)}</button>`).join('')}</div>
+          ${ord || m.mode === 'gap' ? '' : `<span class="small muted">${esc(tr('Mérés:'))}</span><div class="grp seg" role="radiogroup" aria-label="${esc(tr('Mérés'))}">${tos.map(([k, l, t]) => `<button class="btn${k === m.to ? ' on' : ''}" role="radio" aria-checked="${k === m.to}" data-dto="${k}" title="${esc(t)}">${esc(l)}</button>`).join('')}</div>`}
           ${ord ? `<label class="mf-org"><span class="small muted">${esc(tr('Origó:'))}</span><select data-dorigin>${[`<option value="">${esc(tr('a panel bal alsó sarka'))}</option>`, ...items.map(it => `<option value="${esc(it.id)}"${it.id === m.origin ? ' selected' : ''}>${esc(it.label)}</option>`)].join('')}</select></label>` : ''}</div>
         <p class="help">${esc(help)}</p>
         ${mx(D, mm)}
@@ -152,13 +158,17 @@ export function mountMfgView(host: MfgHost): MfgView {
     el.innerHTML = head + `<div class="mf-body">${body}</div>`;
     attachAll();
   }
-  const setMode = (mode: DimMode, origin?: string | null) => { host.save(modeKey(), mode === 'chain' ? [] : mode === 'ord' && origin ? [mode, origin] : [mode]); render(); };
+  const setMode = (mode: DimMode, origin?: string | null, to?: DimTo) => {
+    const t = to || dimMode().to;
+    host.save(modeKey(), mode === 'gap' && t === 'body' ? [] : [mode, mode === 'ord' && origin ? origin : '', t]); render();
+  };
 
   el.addEventListener('click', e => {
     const t = e.target as HTMLElement;
     const tb = t.closest<HTMLElement>('[data-mtab]'); if (tb) { tab = tb.dataset.mtab as MfgTab; render(); return; }
     const sh = t.closest<HTMLElement>('button[data-step]'); if (sh) { step = sh.dataset.step!; hover = ''; render(); return; }
     const dm = t.closest<HTMLElement>('[data-dmode]'); if (dm) { setMode(dm.dataset.dmode as DimMode, dimMode().origin); return; }
+    const dt = t.closest<HTMLElement>('[data-dto]'); if (dt) { const c = dimMode(); setMode(c.mode, c.origin, dt.dataset.dto as DimTo); return; }
     const b = t.closest<HTMLElement>('[data-mf]'); if (!b) return;
     if (b.dataset.mf === 'print') host.print(printOpts());
     else if (b.dataset.mf === 'dprint') host.print({ ...printOpts(), comp: false, cu: false, bom: false, steps: false, dims: true });
@@ -201,8 +211,8 @@ export function mountMfgView(host: MfgHost): MfgView {
     prev.innerHTML = sheet(side, hover ? [hover] : cur.side ? cur.items.map(i => i.ref).filter(Boolean) : null);
     pan.attach(prev, 'asm:' + side);
   });
-  function printOpts() { const m = dimMode(); return { ...pr, dimShow: [...dimShow()], dimMode: m.mode, dimOrigin: m.origin }; }
+  function printOpts() { const m = dimMode(); return { ...pr, dimShow: [...dimShow()], dimMode: m.mode, dimOrigin: m.origin, dimTo: m.to }; }
   return { el, render, print: () => host.print(printOpts()),
-    dimMode(m, origin) { if (m) setMode(m, origin); return dimMode(); },
+    dimMode(m, origin, to) { if (m) setMode(m, origin, to); return dimMode(); },
     zoom() { return [...el.querySelectorAll<HTMLElement>('[data-pan]')].map(b => pan.zoom(b.dataset.pan!)); }, tab(t) { if (t) { tab = t; render(); } return tab; }, step(id) { if (id) { step = id; render(); } return step; } };
 }

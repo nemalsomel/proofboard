@@ -99,23 +99,32 @@ function spread(vals: number[], gap: number): number[] {
 /**
  * Méretezés módja:
  *  - `chain` (lánc): a panel szélétől az első elemig, elemtől elemig, az utolsótól a túlsó szélig (alul az x, balra az y);
+ *  - `gap` (térköz, alapértelmezés): minden elem testétől mind a négy irányban a legközelebbi szomszéd testéig vagy a panel széléig
+ *    (a szabad hely; csak a méretezett elemek számítanak, a pár egyszer);
  *  - `edge` (széltől): minden elem a hozzá legközelebbi függőleges és vízszintes széltől;
  *  - `ord` (koordináta): egy közös origótól – a panel bal alsó sarka vagy egy kiválasztott elem középpontja.
  * Minden méret a középpontig (furatnál a furat közepéig) mér.
  */
-export type DimMode = 'chain' | 'edge' | 'ord';
-export const DIM_MODES: readonly DimMode[] = ['chain', 'edge', 'ord'];
+export type DimMode = 'gap' | 'chain' | 'edge' | 'ord';
+export const DIM_MODES: readonly DimMode[] = ['gap', 'chain', 'edge', 'ord'];
+/** Mire mér a lánc és a széltől mért méret: a test szélére (`body`, alapértelmezés – szabad hely, térköz) vagy a középpontra. */
+export type DimTo = 'body' | 'center';
 export interface DimOpts {
   show?: ReadonlySet<string> | null;
   mode?: DimMode;
+  /** lánc és széltől: a test széléig (alapból) vagy a középpontig; koordinátánál mindig a középpont */ to?: DimTo;
   /** koordinátaméretezésnél az origó: elemazonosító (üres: a panel bal alsó sarka) */ origin?: string | null;
   tr?: Tr;
 }
 
-/** Egy elem középpontjának távolsága a panel négy szélétől (mm). */
-export function edgeDist(D: Design, it: DimItem): { left: number; right: number; bottom: number; top: number } {
-  const { w, h } = boardMm(D);
-  return { left: r2(it.x), right: r2(w - it.x), bottom: r2(it.y), top: r2(h - it.y) };
+/** Az elem fél kiterjedése a tengely mentén (mm): a test fele, furatnál a furat sugara, kiemelt pontnál 0. */
+export function halfExt(it: DimItem, axis: 'x' | 'y'): number {
+  return it.feature ? 0 : it.drill ? it.drill / 2 : (axis === 'x' ? it.w : it.h) / 2;
+}
+/** Az elem távolsága a panel négy szélétől (mm): `to = 'body'` a test szélétől (szabad hely), `'center'` a középponttól. */
+export function edgeDist(D: Design, it: DimItem, to: DimTo = 'center'): { left: number; right: number; bottom: number; top: number } {
+  const { w, h } = boardMm(D), hx = to === 'body' ? halfExt(it, 'x') : 0, hy = to === 'body' ? halfExt(it, 'y') : 0;
+  return { left: r2(it.x - hx), right: r2(w - it.x - hx), bottom: r2(it.y - hy), top: r2(h - it.y - hy) };
 }
 
 /** Lineáris méret (mm, y fölfelé): `axis` irányban a..b, a méretvonal a másik tengely `at` helyén; `row` 1: a felirat a vonal túloldalán. */
@@ -130,7 +139,7 @@ interface Geo {
   /** oldalnézetek: a legmagasabb pont (mm), az elölnézet alapvonala és az oldalnézet panelsíkja a rajzon (0: nincs) */ zmax: number; fy: number; sx: number;
   /** mm (y fölfelé) → rajz (y lefelé) */ X(x: number): number; Y(y: number): number;
   items: DimItem[]; shown: DimItem[];
-  mode: DimMode; o: { x: number; y: number; it: DimItem | null };
+  mode: DimMode; to: DimTo; o: { x: number; y: number; it: DimItem | null };
   lins: Lin[]; exts: Ext[]; xs: Ord[]; ys: Ord[];
 }
 
@@ -150,11 +159,18 @@ export function maxHeight(D: Design): { z: number; label: string } {
 }
 
 /** Láncméretek egy tengelyen: a szélek és az elemek (azonos érték egyszer) közti szakaszok. */
-function chain(axis: 'x' | 'y', len: number, shown: DimItem[], at: number): { lins: Lin[]; pts: Array<{ v: number; it: DimItem | null }> } {
-  const key = (v: number) => Math.round(v * 20);
-  const m = new Map<number, { v: number; it: DimItem | null }>();
-  m.set(key(0), { v: 0, it: null }); m.set(key(len), { v: len, it: null });
-  for (const it of shown) { const v = axis === 'x' ? it.x : it.y; if (!m.has(key(v))) m.set(key(v), { v, it }); }
+/** Láncpont: a mért érték, az elem, és ahonnan a segédvonal indul (a másik tengelyen). */
+interface ChainPt { v: number; it: DimItem | null; from: number }
+function chain(axis: 'x' | 'y', len: number, shown: DimItem[], at: number, to: DimTo): { lins: Lin[]; pts: ChainPt[] } {
+  const key = (v: number) => Math.round(v * 20), oth = axis === 'x' ? 'y' : 'x';
+  const m = new Map<number, ChainPt>();
+  m.set(key(0), { v: 0, it: null, from: 0 }); m.set(key(len), { v: len, it: null, from: 0 });
+  // a segédvonal a test alsó (x) / bal (y) széléről indul a méretvonal felé; középpontnál a jel mellől
+  const add = (v: number, it: DimItem) => { if (!m.has(key(v))) m.set(key(v), { v, it, from: it[oth] - (to === 'body' && halfExt(it, oth) ? halfExt(it, oth) : 1.4) }); };
+  for (const it of shown) {
+    const c = it[axis], hlf = to === 'body' ? halfExt(it, axis) : 0;
+    if (hlf) { add(c - hlf, it); add(c + hlf, it); } else add(c, it);
+  }
   const pts = [...m.values()].sort((a, b) => a.v - b.v), lins: Lin[] = [];
   let prevShort = false, row: 0 | 1 = 0;
   for (let i = 1; i < pts.length; i++) {
@@ -168,10 +184,46 @@ function chain(axis: 'x' | 'y', len: number, shown: DimItem[], at: number): { li
   return { lins, pts };
 }
 
+/**
+ * Térközök: minden elem testétől a négy irányban a legközelebbi, vele átfedő sávban lévő elem testéig vagy a panel széléig.
+ * A méretvonal a két test közös sávjának közepén fut (a szélig az elem közepén); egy pár csak egyszer kerül a rajzra.
+ */
+function gaps(shown: DimItem[], bw: number, bh: number): Lin[] {
+  const box = (it: DimItem) => { const hx = halfExt(it, 'x'), hy = halfExt(it, 'y'); return { it, x0: it.x - hx, x1: it.x + hx, y0: it.y - hy, y1: it.y + hy }; };
+  // a kiemelt pont (pl. USB) nem akadály, és csak a hozzá legközelebbi függőleges és vízszintes szélig mér
+  const B = shown.filter(i => !i.feature).map(box), out: Lin[] = [], seen = new Set<string>(), EPS = 0.05;
+  for (const f of shown) if (f.feature) {
+    const l = f.x, r = bw - f.x, b = f.y, t = bh - f.y;
+    if (Math.min(l, r) > EPS) out.push({ axis: 'x', a: l <= r ? 0 : f.x, b: l <= r ? f.x : bw, at: f.y, text: fmtMm(Math.min(l, r)), row: 0, id: f.id, arrows: true });
+    if (Math.min(b, t) > EPS) out.push({ axis: 'y', a: b <= t ? 0 : f.y, b: b <= t ? f.y : bh, at: f.x, text: fmtMm(Math.min(b, t)), row: 0, id: f.id, arrows: true });
+  }
+  for (const a of B) {
+    for (const dir of ['l', 'r', 'b', 't'] as const) {
+      const horiz = dir === 'l' || dir === 'r';
+      // a vele átfedő sávban lévő, az adott irányban levő testek közül a legközelebbi
+      let best: typeof a | null = null, dist = horiz ? (dir === 'l' ? a.x0 : bw - a.x1) : (dir === 'b' ? a.y0 : bh - a.y1);
+      for (const b of B) {
+        if (b === a) continue;
+        const over = horiz ? Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) : Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+        if (over <= EPS) continue;
+        const d = dir === 'l' ? a.x0 - b.x1 : dir === 'r' ? b.x0 - a.x1 : dir === 'b' ? a.y0 - b.y1 : b.y0 - a.y1;
+        if (d >= -EPS && d < dist) { dist = d; best = b; }
+      }
+      if (dist < EPS) continue;
+      const key = best ? [a.it.id, best.it.id].sort().join('|') + (horiz ? 'h' : 'v') : a.it.id + dir;
+      if (seen.has(key)) continue; seen.add(key);
+      const at = best ? (horiz ? (Math.max(a.y0, best.y0) + Math.min(a.y1, best.y1)) / 2 : (Math.max(a.x0, best.x0) + Math.min(a.x1, best.x1)) / 2) : (horiz ? a.it.y : a.it.x);
+      const [lo, hi] = dir === 'l' ? [a.x0 - dist, a.x0] : dir === 'r' ? [a.x1, a.x1 + dist] : dir === 'b' ? [a.y0 - dist, a.y0] : [a.y1, a.y1 + dist];
+      out.push({ axis: horiz ? 'x' : 'y', a: lo, b: hi, at, text: fmtMm(dist), row: 0, id: a.it.id, arrows: true });
+    }
+  }
+  return out;
+}
+
 function geo(D: Design, o: DimOpts, side = true): Geo {
   const { w: bw, h: bh } = boardMm(D), items = dimItems(D), show = o.show ?? null;
   const shown = items.filter(i => (show ? show.has(i.id) : i.def));
-  const mode: DimMode = o.mode && DIM_MODES.includes(o.mode) ? o.mode : 'chain';
+  const mode: DimMode = o.mode && DIM_MODES.includes(o.mode) ? o.mode : 'gap', to: DimTo = o.to === 'center' ? 'center' : 'body';
   const ox = ML, oy = MT;
   const X = (x: number) => r2(ox + x), Y = (y: number) => r2(oy + bh - y);
   const oit = mode === 'ord' && o.origin ? items.find(i => i.id === o.origin) || null : null;
@@ -179,15 +231,18 @@ function geo(D: Design, o: DimOpts, side = true): Geo {
   const lins: Lin[] = [], exts: Ext[] = [];
   let xs: Ord[] = [], ys: Ord[] = [];
   if (mode === 'chain') {
-    const cx = chain('x', bw, shown, -CH), cy = chain('y', bh, shown, -CH);
+    const cx = chain('x', bw, shown, -CH, to), cy = chain('y', bh, shown, -CH, to);
     lins.push(...cx.lins, ...cy.lins);
-    for (const p of cx.pts) exts.push(p.it ? { x1: p.v, y1: p.it.y - 1.4, x2: p.v, y2: -CH - 1, id: p.it.id, dashed: true } : { x1: p.v, y1: -0.8, x2: p.v, y2: -CH - 1 });
-    for (const p of cy.pts) exts.push(p.it ? { x1: p.it.x - 1.4, y1: p.v, x2: -CH - 1, y2: p.v, id: p.it.id, dashed: true } : { x1: -0.8, y1: p.v, x2: -CH - 1, y2: p.v });
+    for (const p of cx.pts) exts.push(p.it ? { x1: p.v, y1: p.from, x2: p.v, y2: -CH - 1, id: p.it.id, dashed: true } : { x1: p.v, y1: -0.8, x2: p.v, y2: -CH - 1 });
+    for (const p of cy.pts) exts.push(p.it ? { x1: p.from, y1: p.v, x2: -CH - 1, y2: p.v, id: p.it.id, dashed: true } : { x1: -0.8, y1: p.v, x2: -CH - 1, y2: p.v });
+  } else if (mode === 'gap') {
+    lins.push(...gaps(shown, bw, bh));
   } else if (mode === 'edge') {
     for (const it of shown) {
-      const e = edgeDist(D, it), toL = e.left <= e.right, toB = e.bottom <= e.top;
-      lins.push({ axis: 'x', a: toL ? 0 : it.x, b: toL ? it.x : bw, at: it.y, text: fmtMm(toL ? e.left : e.right), row: 0, id: it.id, arrows: true });
-      lins.push({ axis: 'y', a: toB ? 0 : it.y, b: toB ? it.y : bh, at: it.x, text: fmtMm(toB ? e.bottom : e.top), row: 0, id: it.id, arrows: true });
+      const e = edgeDist(D, it, to), toL = e.left <= e.right, toB = e.bottom <= e.top;
+      const hx = to === 'body' ? halfExt(it, 'x') : 0, hy = to === 'body' ? halfExt(it, 'y') : 0;
+      if ((toL ? e.left : e.right) > 0.05) lins.push({ axis: 'x', a: toL ? 0 : it.x + hx, b: toL ? it.x - hx : bw, at: it.y, text: fmtMm(toL ? e.left : e.right), row: 0, id: it.id, arrows: true });
+      if ((toB ? e.bottom : e.top) > 0.05) lins.push({ axis: 'y', a: toB ? 0 : it.y + hy, b: toB ? it.y - hy : bh, at: it.x, text: fmtMm(toB ? e.bottom : e.top), row: 0, id: it.id, arrows: true });
     }
   } else {
     // egyedi értékek (azonos koordinátájú elemek egy méretet kapnak); az origó maga a 0
@@ -204,13 +259,14 @@ function geo(D: Design, o: DimOpts, side = true): Geo {
   const zmax = side ? Math.max(0, ...items.filter(i => !i.feature).map(i => i.z)) : 0;
   const fy = side ? r2(MT + bh + MB + VGAP + zmax) : 0, sx = side ? r2(ML + bw + MR + VGAP) : 0;
   const W = side ? r2(sx + LEGS + BOARD_T + zmax + 16) : r2(ML + bw + MR), H = side ? r2(fy + BOARD_T + LEGS + 16) : r2(MT + bh + MB);
-  return { W, H, zmax, fy, sx, bw, bh, ox, oy, X, Y, items, shown, mode, o: org, lins, exts, xs, ys };
+  return { W, H, zmax, fy, sx, bw, bh, ox, oy, X, Y, items, shown, mode, to, o: org, lins, exts, xs, ys };
 }
 
 /** A felirat a rajz alján: a nézetek, a mérés módja. */
 function caption(g: Geo, tr: Tr, title?: string): string {
-  const how = g.mode === 'chain' ? tr('láncméretek: a szélektől és egymástól, a középpontokig')
-    : g.mode === 'edge' ? tr('a legközelebbi széltől a középpontig')
+  const how = g.mode === 'gap' ? tr('térközök: a testek között és a panel széléig')
+    : g.mode === 'chain' ? (g.to === 'body' ? tr('láncméretek: a panel szélétől és egymástól, a testek széléig') : tr('láncméretek: a szélektől és egymástól, a középpontokig'))
+    : g.mode === 'edge' ? (g.to === 'body' ? tr('a legközelebbi széltől a test széléig') : tr('a legközelebbi széltől a középpontig'))
       : g.o.it ? tr('origó: {x} középpontja', { x: g.o.it.label }) : tr('origó: a panel bal alsó sarka');
   return `${title ? title + ' · ' : ''}${g.fy ? tr('Méretrajz: felül-, elöl- és oldalnézet') : tr('Méretrajz, felülnézet')} · mm · ${how}${g.fy ? ' · ' + tr('a magasságok becslések') : ''}`;
 }
@@ -265,12 +321,12 @@ export function dimSvg(D: Design, o: DimOpts & { title?: string; hi?: string | n
       const y = Y(l.at), x1 = X(l.a), x2 = X(l.b);
       line(x1, y, x2, y, st, w);
       if (l.arrows) { arrow(x1, y, -1, 0, st); arrow(x2, y, 1, 0, st); } else { tick(x1, y, st); tick(x2, y, st); }
-      text((x1 + x2) / 2, l.row ? y + size * 0.85 + 0.4 : y - size * 0.85 - 0.2, l.text, size, st, 'middle', 0, l.strong ? 700 : 600, g.mode === 'edge' && !l.strong);
+      text((x1 + x2) / 2, l.row ? y + size * 0.85 + 0.4 : y - size * 0.85 - 0.2, l.text, size, st, 'middle', 0, l.strong ? 700 : 600, (g.mode === 'edge' || g.mode === 'gap') && !l.strong);
     } else {
       const x = X(l.at), y1 = Y(l.a), y2 = Y(l.b);
       line(x, y1, x, y2, st, w);
       if (l.arrows) { arrow(x, y1, 0, 1, st); arrow(x, y2, 0, -1, st); } else { tick(x, y1, st); tick(x, y2, st); }
-      text(l.row ? x + size * 0.85 + 0.4 : x - size * 0.85 - 0.2, (y1 + y2) / 2, l.text, size, st, 'middle', l.row && l.strong ? 90 : -90, l.strong ? 700 : 600, g.mode === 'edge' && !l.strong);
+      text(l.row ? x + size * 0.85 + 0.4 : x - size * 0.85 - 0.2, (y1 + y2) / 2, l.text, size, st, 'middle', l.row && l.strong ? 90 : -90, l.strong ? 700 : 600, (g.mode === 'edge' || g.mode === 'gap') && !l.strong);
     }
   }
   // koordinátaméretek: x a panel alatt, y balra

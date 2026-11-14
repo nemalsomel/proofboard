@@ -6,13 +6,13 @@
 import type { Tr } from '../i18n/i18n';
 import { assembly, bom, boardKindName, marks } from '../engine/manufacture';
 import { sheetSvg } from '../engine/mfgsheet';
-import { dimSvg, type DimMode } from '../engine/dimension';
+import { dimSvg, type DimMode, type DimTo } from '../engine/dimension';
 import type { Design } from '../engine/types';
 
 export interface PrintOpts {
   comp: boolean; cu: boolean; bom: boolean; steps: boolean; title: string; lang: string;
   /** méretrajz (1:1), a méretezett elemekkel (hiányzóként az alapértelmezés) */ dims?: boolean; dimShow?: string[];
-  /** a méretezés módja és (koordinátánál) az origó elem */ dimMode?: DimMode; dimOrigin?: string | null;
+  /** a méretezés módja és (koordinátánál) az origó elem */ dimMode?: DimMode; dimOrigin?: string | null; dimTo?: DimTo;
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]!));
@@ -22,7 +22,7 @@ const PW = 190, PH = 277;
 export function printHtml(D: Design, o: PrintOpts, tr: Tr): string {
   const mk = marks(D), pages: string[] = [];
   const sheet = (side: 'comp' | 'cu' | 'dims') => {
-    const s = side === 'dims' ? dimSvg(D, { show: o.dimShow ? new Set(o.dimShow) : null, mode: o.dimMode, origin: o.dimOrigin, tr, title: o.title }) : sheetSvg(D, { side, tr, mk, title: o.title });
+    const s = side === 'dims' ? dimSvg(D, { show: o.dimShow ? new Set(o.dimShow) : null, mode: o.dimMode, origin: o.dimOrigin, to: o.dimTo, tr, title: o.title }) : sheetSvg(D, { side, tr, mk, title: o.title });
     const land = s.w > PW && s.w <= PH && s.h <= PW;
     const fits = land ? true : s.w <= PW && s.h <= PH;
     // ha nem fér el 1:1-ben, kicsinyítve (és ezt ki is írja)
