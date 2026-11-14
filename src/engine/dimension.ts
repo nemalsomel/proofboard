@@ -1,7 +1,8 @@
 /**
  * Méretrajz (felülnézet): a panel körvonala, az alkatrészek körvonala, és a kívülről fontos elemek
- * (kezelőszervek, csatlakozók, LED-ek, kijelzők, a vezérlőlap USB-je) helye koordinátaméretezéssel.
- * Az origó a panel bal alsó sarka, x jobbra, y fölfelé, milliméterben (ahogy egy házat tervező CAD-program várja).
+ * (kezelőszervek, csatlakozók, LED-ek, kijelzők, a vezérlőlap USB-je) helye – láncméretekkel (a szélektől és
+ * egymástól), a legközelebbi széltől, vagy koordinátákkal egy választott origótól (`DimMode`).
+ * Az elemek helye (`DimItem.x/y`) a panel bal alsó sarkától, x jobbra, y fölfelé, milliméterben.
  * Kívülről fontos: a leírás `meta.front` jelzője (és minden vezérlőlap); a kiemelt pontok a `meta.features`-ből
  * (`[{ name: 'USB', at: [sor, oszlop] }]`, a lábakéval azonos helyi koordinátában, kifejezés is lehet).
  * Valós méret: a leírás `meta.size` ([szélesség a helyi oszlopok mentén, mélység a sorok mentén], mm) – ha nincs,
@@ -95,18 +96,51 @@ function spread(vals: number[], gap: number): number[] {
   return out;
 }
 
+/**
+ * Méretezés módja:
+ *  - `chain` (lánc): a panel szélétől az első elemig, elemtől elemig, az utolsótól a túlsó szélig (alul az x, balra az y);
+ *  - `edge` (széltől): minden elem a hozzá legközelebbi függőleges és vízszintes széltől;
+ *  - `ord` (koordináta): egy közös origótól – a panel bal alsó sarka vagy egy kiválasztott elem középpontja.
+ * Minden méret a középpontig (furatnál a furat közepéig) mér.
+ */
+export type DimMode = 'chain' | 'edge' | 'ord';
+export const DIM_MODES: readonly DimMode[] = ['chain', 'edge', 'ord'];
+export interface DimOpts {
+  show?: ReadonlySet<string> | null;
+  mode?: DimMode;
+  /** koordinátaméretezésnél az origó: elemazonosító (üres: a panel bal alsó sarka) */ origin?: string | null;
+  tr?: Tr;
+}
+
+/** Egy elem középpontjának távolsága a panel négy szélétől (mm). */
+export function edgeDist(D: Design, it: DimItem): { left: number; right: number; bottom: number; top: number } {
+  const { w, h } = boardMm(D);
+  return { left: r2(it.x), right: r2(w - it.x), bottom: r2(it.y), top: r2(h - it.y) };
+}
+
+/** Lineáris méret (mm, y fölfelé): `axis` irányban a..b, a méretvonal a másik tengely `at` helyén; `row` 1: a felirat a vonal túloldalán. */
+interface Lin { axis: 'x' | 'y'; a: number; b: number; at: number; text: string; row: 0 | 1; id?: string; arrows?: boolean; strong?: boolean }
+/** Segédvonal (mm, y fölfelé): a mért ponttól a méretvonalig. */
+interface Ext { x1: number; y1: number; x2: number; y2: number; id?: string; dashed?: boolean }
+/** Koordinátaméret: a pont (`v`) és a felirat helye (`at`, széthúzva). */
+interface Ord { it: DimItem; v: number; at: number }
+
 interface Geo {
   W: number; H: number; bw: number; bh: number; ox: number; oy: number;
   /** oldalnézetek: a legmagasabb pont (mm), az elölnézet alapvonala és az oldalnézet panelsíkja a rajzon (0: nincs) */ zmax: number; fy: number; sx: number;
   /** mm (y fölfelé) → rajz (y lefelé) */ X(x: number): number; Y(y: number): number;
   items: DimItem[]; shown: DimItem[];
-  xs: Array<{ it: DimItem; at: number }>; ys: Array<{ it: DimItem; at: number }>;
+  mode: DimMode; o: { x: number; y: number; it: DimItem | null };
+  lins: Lin[]; exts: Ext[]; xs: Ord[]; ys: Ord[];
 }
 
 const GAP = 3.8, LEG = 4, ML = 28, MB = 28, MT = 14, MR = 14;
-
+/** a lánc-méretvonal távolsága a panel szélétől (mm) */
+const CH = 7;
 /** Elöl- és oldalnézet helye: a felülnézet méretei után ennyi hely (mm). */
 const VGAP = 10;
+/** méretszám betűmérete (mm) és becsült szélessége */
+const TS = 2.1, textW = (s: string) => s.length * TS * 0.62;
 
 /** A legmagasabb alkatrész (mm a panel fölött) és a jelölése. */
 export function maxHeight(D: Design): { z: number; label: string } {
@@ -115,30 +149,88 @@ export function maxHeight(D: Design): { z: number; label: string } {
   return { z, label };
 }
 
-function geo(D: Design, show: ReadonlySet<string> | null, side = true): Geo {
-  const { w: bw, h: bh } = boardMm(D), items = dimItems(D), shown = items.filter(i => (show ? show.has(i.id) : i.def));
+/** Láncméretek egy tengelyen: a szélek és az elemek (azonos érték egyszer) közti szakaszok. */
+function chain(axis: 'x' | 'y', len: number, shown: DimItem[], at: number): { lins: Lin[]; pts: Array<{ v: number; it: DimItem | null }> } {
+  const key = (v: number) => Math.round(v * 20);
+  const m = new Map<number, { v: number; it: DimItem | null }>();
+  m.set(key(0), { v: 0, it: null }); m.set(key(len), { v: len, it: null });
+  for (const it of shown) { const v = axis === 'x' ? it.x : it.y; if (!m.has(key(v))) m.set(key(v), { v, it }); }
+  const pts = [...m.values()].sort((a, b) => a.v - b.v), lins: Lin[] = [];
+  let prevShort = false, row: 0 | 1 = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1].v, b = pts[i].v, text = fmtMm(b - a);
+    if (b - a < 0.05) continue;
+    const short = b - a < textW(text) + 1;
+    row = short && prevShort ? (row ? 0 : 1) : 0;
+    prevShort = short;
+    lins.push({ axis, a, b, at, text, row, id: pts[i].it?.id || pts[i - 1].it?.id });
+  }
+  return { lins, pts };
+}
+
+function geo(D: Design, o: DimOpts, side = true): Geo {
+  const { w: bw, h: bh } = boardMm(D), items = dimItems(D), show = o.show ?? null;
+  const shown = items.filter(i => (show ? show.has(i.id) : i.def));
+  const mode: DimMode = o.mode && DIM_MODES.includes(o.mode) ? o.mode : 'chain';
   const ox = ML, oy = MT;
   const X = (x: number) => r2(ox + x), Y = (y: number) => r2(oy + bh - y);
-  // egyedi értékek (azonos koordinátájú elemek egy méretet kapnak)
-  const ux = [...new Map(shown.map(it => [fmtMm(it.x), it])).values()], uy = [...new Map(shown.map(it => [fmtMm(it.y), it])).values()];
-  const px = spread(ux.map(i => i.x), GAP), py = spread(uy.map(i => i.y), GAP);
+  const oit = mode === 'ord' && o.origin ? items.find(i => i.id === o.origin) || null : null;
+  const org = { x: oit ? oit.x : 0, y: oit ? oit.y : 0, it: oit };
+  const lins: Lin[] = [], exts: Ext[] = [];
+  let xs: Ord[] = [], ys: Ord[] = [];
+  if (mode === 'chain') {
+    const cx = chain('x', bw, shown, -CH), cy = chain('y', bh, shown, -CH);
+    lins.push(...cx.lins, ...cy.lins);
+    for (const p of cx.pts) exts.push(p.it ? { x1: p.v, y1: p.it.y - 1.4, x2: p.v, y2: -CH - 1, id: p.it.id, dashed: true } : { x1: p.v, y1: -0.8, x2: p.v, y2: -CH - 1 });
+    for (const p of cy.pts) exts.push(p.it ? { x1: p.it.x - 1.4, y1: p.v, x2: -CH - 1, y2: p.v, id: p.it.id, dashed: true } : { x1: -0.8, y1: p.v, x2: -CH - 1, y2: p.v });
+  } else if (mode === 'edge') {
+    for (const it of shown) {
+      const e = edgeDist(D, it), toL = e.left <= e.right, toB = e.bottom <= e.top;
+      lins.push({ axis: 'x', a: toL ? 0 : it.x, b: toL ? it.x : bw, at: it.y, text: fmtMm(toL ? e.left : e.right), row: 0, id: it.id, arrows: true });
+      lins.push({ axis: 'y', a: toB ? 0 : it.y, b: toB ? it.y : bh, at: it.x, text: fmtMm(toB ? e.bottom : e.top), row: 0, id: it.id, arrows: true });
+    }
+  } else {
+    // egyedi értékek (azonos koordinátájú elemek egy méretet kapnak); az origó maga a 0
+    const ux = [...new Map(shown.filter(i => i !== oit).map(it => [fmtMm(it.x - org.x), it])).values()].filter(it => fmtMm(it.x - org.x) !== fmtMm(0));
+    const uy = [...new Map(shown.filter(i => i !== oit).map(it => [fmtMm(it.y - org.y), it])).values()].filter(it => fmtMm(it.y - org.y) !== fmtMm(0));
+    const px = spread([org.x, ...ux.map(i => i.x)], GAP), py = spread([org.y, ...uy.map(i => i.y)], GAP);
+    const o0: DimItem = oit || { id: '', label: '0', name: '', x: 0, y: 0, w: 0, h: 0, def: false, z: 0 };
+    xs = [{ it: o0, v: 0, at: px[0] }, ...ux.map((it, k) => ({ it, v: it.x - org.x, at: px[k + 1] }))];
+    ys = [{ it: o0, v: 0, at: py[0] }, ...uy.map((it, k) => ({ it, v: it.y - org.y, at: py[k + 1] }))];
+  }
+  // befoglaló méretek: szélesség fölül, magasság jobbra
+  lins.push({ axis: 'x', a: 0, b: bw, at: bh + 6, text: fmtMm(bw), row: 0, arrows: true, strong: true }, { axis: 'y', a: 0, b: bh, at: bw + 6, text: fmtMm(bh), row: 1, arrows: true, strong: true });
+  exts.push({ x1: 0, y1: bh + 0.8, x2: 0, y2: bh + 7 }, { x1: bw, y1: bh + 0.8, x2: bw, y2: bh + 7 }, { x1: bw + 0.8, y1: 0, x2: bw + 7, y2: 0 }, { x1: bw + 0.8, y1: bh, x2: bw + 7, y2: bh });
   const zmax = side ? Math.max(0, ...items.filter(i => !i.feature).map(i => i.z)) : 0;
   const fy = side ? r2(MT + bh + MB + VGAP + zmax) : 0, sx = side ? r2(ML + bw + MR + VGAP) : 0;
   const W = side ? r2(sx + LEGS + BOARD_T + zmax + 16) : r2(ML + bw + MR), H = side ? r2(fy + BOARD_T + LEGS + 16) : r2(MT + bh + MB);
-  return { W, H, zmax, fy, sx, bw, bh, ox, oy, X, Y, items, shown, xs: ux.map((it, k) => ({ it, at: px[k] })), ys: uy.map((it, k) => ({ it, at: py[k] })) };
+  return { W, H, zmax, fy, sx, bw, bh, ox, oy, X, Y, items, shown, mode, o: org, lins, exts, xs, ys };
+}
+
+/** A felirat a rajz alján: a nézetek, a mérés módja. */
+function caption(g: Geo, tr: Tr, title?: string): string {
+  const how = g.mode === 'chain' ? tr('láncméretek: a szélektől és egymástól, a középpontokig')
+    : g.mode === 'edge' ? tr('a legközelebbi széltől a középpontig')
+      : g.o.it ? tr('origó: {x} középpontja', { x: g.o.it.label }) : tr('origó: a panel bal alsó sarka');
+  return `${title ? title + ' · ' : ''}${g.fy ? tr('Méretrajz: felül-, elöl- és oldalnézet') : tr('Méretrajz, felülnézet')} · mm · ${how}${g.fy ? ' · ' + tr('a magasságok becslések') : ''}`;
 }
 
 /** A méretrajz SVG-ben (mm, 1:1-ben nyomtatható). `show`: a méretezett elemek; hiányzóként az alapértelmezés. */
-export function dimSvg(D: Design, o: { show?: ReadonlySet<string> | null; tr?: Tr; title?: string; hi?: string | null; side?: boolean } = {}): Drawing {
-  const tr = o.tr || fmt, g = geo(D, o.show ?? null, o.side !== false), { X, Y, bw, bh } = g, out: string[] = [];
+export function dimSvg(D: Design, o: DimOpts & { title?: string; hi?: string | null; side?: boolean } = {}): Drawing {
+  const tr = o.tr || fmt, g = geo(D, o, o.side !== false), { X, Y, bw, bh } = g, out: string[] = [];
   const line = (x1: number, y1: number, x2: number, y2: number, st: string, w = 0.18, extra = '') => out.push(`<line x1="${r2(x1)}" y1="${r2(y1)}" x2="${r2(x2)}" y2="${r2(y2)}" stroke="${st}" stroke-width="${w}"${extra}/>`);
-  const text = (x: number, y: number, s: string, size: number, fill: string, anchor = 'middle', rot = 0, weight = 500) =>
+  const text = (x: number, y: number, s: string, size: number, fill: string, anchor = 'middle', rot = 0, weight = 500, bg = false) => {
+    if (bg) { const tw = s.length * size * 0.62 + 0.8, th = size + 0.6; out.push(`<rect x="${r2(rot ? x - th / 2 : x - tw / 2)}" y="${r2(rot ? y - tw / 2 : y - th / 2)}" width="${r2(rot ? th : tw)}" height="${r2(rot ? tw : th)}" fill="#fff" fill-opacity="0.85"/>`); }
     out.push(`<text x="${r2(x)}" y="${r2(y)}" font-size="${size}" fill="${fill}" text-anchor="${anchor}" dominant-baseline="central" font-family="${FONT}" font-weight="${weight}"${rot ? ` transform="rotate(${rot} ${r2(x)} ${r2(y)})"` : ''}>${esc(s)}</text>`);
+  };
   const arrow = (x: number, y: number, dx: number, dy: number, st: string) => {
     const L = 1.6, Wd = 0.55, nx = -dy, ny = dx;
     out.push(`<path d="M${r2(x)} ${r2(y)}L${r2(x - dx * L + nx * Wd)} ${r2(y - dy * L + ny * Wd)}L${r2(x - dx * L - nx * Wd)} ${r2(y - dy * L - ny * Wd)}Z" fill="${st}"/>`);
   };
+  /** ferde vonalka (láncméret vége) */
+  const tick = (x: number, y: number, st: string) => line(x - 0.7, y + 0.7, x + 0.7, y - 0.7, st, 0.3);
   const DIM = '#1c4f7c', PART = '#8a948d', HI = '#e8590c';
+  const col = (id?: string) => (id && o.hi === id ? HI : DIM);
 
   out.push(`<rect x="0" y="0" width="${g.W}" height="${g.H}" fill="#fff"/>`);
   // lyukak (halványan, a tájékozódáshoz)
@@ -161,38 +253,45 @@ export function dimSvg(D: Design, o: { show?: ReadonlySet<string> | null; tr?: T
   out.push(`<rect x="${X(0)}" y="${Y(bh)}" width="${bw}" height="${bh}" fill="none" stroke="#1d231f" stroke-width="0.45"/>`);
   // középpontok
   for (const it of g.shown) {
-    const x = X(it.x), y = Y(it.y), st = o.hi === it.id ? HI : DIM;
+    const x = X(it.x), y = Y(it.y), st = col(it.id);
     if (it.feature) { out.push(`<circle cx="${x}" cy="${y}" r="0.9" fill="none" stroke="${st}" stroke-width="0.3"/>`); text(x + (it.x < 2 ? 1.6 : it.x > bw - 2 ? -1.6 : 0), y + (it.x < 2 || it.x > bw - 2 ? -1.7 : -1.8), it.label, 1.7, st, it.x < 2 ? 'start' : it.x > bw - 2 ? 'end' : 'middle', 0, 600); }
     line(x - 1.2, y, x + 1.2, y, st, 0.2); line(x, y - 1.2, x, y + 1.2, st, 0.2);
   }
-  // koordinátaméretek: x a panel alatt, y balra; origó 0
-  const by = Y(0), bx = X(0);
-  const xb = by + LEG + 2.5, yb = bx - LEG - 2.5;
-  text(bx, xb + 2.4, '0', 2.1, DIM, 'end', -90, 600); line(bx, by + 0.6, bx, xb + 0.6, DIM);
-  text(yb - 2.4, by, '0', 2.1, DIM, 'end', 0, 600); line(bx - 0.6, by, yb - 0.6, by, DIM);
-  for (const { it, at } of g.xs) {
-    const x = X(it.x), ax = X(at), st = o.hi === it.id ? HI : DIM;
-    line(x, Y(it.y) + 1.4, x, by + 1.2, st, 0.13, ' stroke-dasharray="0.6 0.5"');
-    out.push(`<polyline points="${x},${r2(by + 1.2)} ${x},${r2(by + LEG - 1)} ${ax},${r2(xb - 0.4)} ${ax},${r2(xb + 0.6)}" fill="none" stroke="${st}" stroke-width="0.18"/>`);
-    text(ax, xb + 2.4, fmtMm(it.x), 2.1, st, 'end', -90, 600);
+  // segédvonalak, majd a lineáris méretek
+  for (const e of g.exts) line(X(e.x1), Y(e.y1), X(e.x2), Y(e.y2), col(e.id), e.dashed ? 0.13 : 0.15, e.dashed ? ' stroke-dasharray="0.6 0.5"' : '');
+  for (const l of g.lins) {
+    const st = l.strong ? DIM : col(l.id), size = l.strong ? 2.5 : TS, w = l.strong ? 0.2 : 0.18;
+    if (l.axis === 'x') {
+      const y = Y(l.at), x1 = X(l.a), x2 = X(l.b);
+      line(x1, y, x2, y, st, w);
+      if (l.arrows) { arrow(x1, y, -1, 0, st); arrow(x2, y, 1, 0, st); } else { tick(x1, y, st); tick(x2, y, st); }
+      text((x1 + x2) / 2, l.row ? y + size * 0.85 + 0.4 : y - size * 0.85 - 0.2, l.text, size, st, 'middle', 0, l.strong ? 700 : 600, g.mode === 'edge' && !l.strong);
+    } else {
+      const x = X(l.at), y1 = Y(l.a), y2 = Y(l.b);
+      line(x, y1, x, y2, st, w);
+      if (l.arrows) { arrow(x, y1, 0, 1, st); arrow(x, y2, 0, -1, st); } else { tick(x, y1, st); tick(x, y2, st); }
+      text(l.row ? x + size * 0.85 + 0.4 : x - size * 0.85 - 0.2, (y1 + y2) / 2, l.text, size, st, 'middle', l.row && l.strong ? 90 : -90, l.strong ? 700 : 600, g.mode === 'edge' && !l.strong);
+    }
   }
-  for (const { it, at } of g.ys) {
-    const y = Y(it.y), ay = Y(at), st = o.hi === it.id ? HI : DIM;
-    line(X(it.x) - 1.4, y, bx - 1.2, y, st, 0.13, ' stroke-dasharray="0.6 0.5"');
-    out.push(`<polyline points="${r2(bx - 1.2)},${y} ${r2(bx - LEG + 1)},${y} ${r2(yb + 0.4)},${ay} ${r2(yb - 0.6)},${ay}" fill="none" stroke="${st}" stroke-width="0.18"/>`);
-    text(yb - 2.4, ay, fmtMm(it.y), 2.1, st, 'end', 0, 600);
+  // koordinátaméretek: x a panel alatt, y balra
+  if (g.mode === 'ord') {
+    const by = Y(0), bx = X(0), xb = by + LEG + 2.5, yb = bx - LEG - 2.5;
+    if (g.o.it) { const x = X(g.o.x), y = Y(g.o.y); out.push(`<circle cx="${x}" cy="${y}" r="1.6" fill="none" stroke="${DIM}" stroke-width="0.3"/><path d="M${x} ${r2(y - 1.6)}A1.6 1.6 0 0 1 ${r2(x + 1.6)} ${y}L${x} ${y}ZM${x} ${r2(y + 1.6)}A1.6 1.6 0 0 1 ${r2(x - 1.6)} ${y}L${x} ${y}Z" fill="${DIM}"/>`); }
+    for (const { it, v, at } of g.xs) {
+      const x = X(it.x), ax = X(at), st = col(it.id);
+      line(x, it.id ? Y(it.y) + 1.4 : by + 0.6, x, by + 1.2, st, 0.13, it.id ? ' stroke-dasharray="0.6 0.5"' : '');
+      out.push(`<polyline points="${x},${r2(by + 1.2)} ${x},${r2(by + LEG - 1)} ${ax},${r2(xb - 0.4)} ${ax},${r2(xb + 0.6)}" fill="none" stroke="${st}" stroke-width="0.18"/>`);
+      text(ax, xb + 2.4, v === 0 ? '0' : fmtMm(v), TS, st, 'end', -90, 600);
+    }
+    for (const { it, v, at } of g.ys) {
+      const y = Y(it.y), ay = Y(at), st = col(it.id);
+      line(it.id ? X(it.x) - 1.4 : bx - 0.6, y, bx - 1.2, y, st, 0.13, it.id ? ' stroke-dasharray="0.6 0.5"' : '');
+      out.push(`<polyline points="${r2(bx - 1.2)},${y} ${r2(bx - LEG + 1)},${y} ${r2(yb + 0.4)},${ay} ${r2(yb - 0.6)},${ay}" fill="none" stroke="${st}" stroke-width="0.18"/>`);
+      text(yb - 2.4, ay, v === 0 ? '0' : fmtMm(v), TS, st, 'end', 0, 600);
+    }
   }
-  // befoglaló méretek: szélesség fölül, magasság jobbra
-  const ty = Y(bh) - 6, rx = X(bw) + 6;
-  line(X(0), Y(bh) - 0.8, X(0), ty - 1, DIM, 0.15); line(X(bw), Y(bh) - 0.8, X(bw), ty - 1, DIM, 0.15);
-  line(X(0), ty, X(bw), ty, DIM, 0.2); arrow(X(0), ty, -1, 0, DIM); arrow(X(bw), ty, 1, 0, DIM);
-  text(X(bw / 2), ty - 1.8, fmtMm(bw), 2.5, DIM, 'middle', 0, 700);
-  line(X(bw) + 0.8, Y(0), rx + 1, Y(0), DIM, 0.15); line(X(bw) + 0.8, Y(bh), rx + 1, Y(bh), DIM, 0.15);
-  line(rx, Y(0), rx, Y(bh), DIM, 0.2); arrow(rx, Y(0), 0, 1, DIM); arrow(rx, Y(bh), 0, -1, DIM);
-  text(rx + 2, Y(bh / 2), fmtMm(bh), 2.5, DIM, 'middle', 90, 700);
   if (g.fy) sideViews();
-  // felirat
-  const cap = `${o.title ? o.title + ' · ' : ''}${g.fy ? tr('Méretrajz: felül-, elöl- és oldalnézet') : tr('Méretrajz, felülnézet')} · mm · ${tr('origó: a panel bal alsó sarka')}${g.fy ? ' · ' + tr('a magasságok becslések') : ''}`;
+  const cap = caption(g, tr, o.title);
   text(2, g.H - 3, cap, Math.max(1.3, Math.min(2.1, (g.W - 4) / (cap.length * 0.62))), '#333', 'start', 0, 600);
   return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${g.W}mm" height="${g.H}mm" viewBox="0 0 ${g.W} ${g.H}">${out.join('')}</svg>`, w: g.W, h: g.H };
 
@@ -225,7 +324,7 @@ export function dimSvg(D: Design, o: { show?: ReadonlySet<string> | null; tr?: T
     const top = px + BOARD_T;
     for (const it of [...parts].sort((a, b) => a.x - b.x)) out.push(`<rect x="${r2(top)}" y="${r2(Y(it.y + it.h / 2))}" width="${it.z}" height="${it.h}" ${body(g.shown.includes(it), o.hi === it.id)}/>`);
     for (const it of parts) if (it.h >= 3 && it.z >= it.label.length * 1.1 && !hidden(it, it.y, it.z / 2, 'y')) text(top + it.z / 2, Y(it.y), it.label, Math.min(1.6, it.h * 0.45), g.shown.includes(it) ? '#1d231f' : PART, 'middle', 0, 600);
-    const ry = Y(0) + 6;
+    const ry = Y(0) + 6 + (g.mode === 'chain' ? 0 : 0);
     line(px, Y(0) + 0.8, px, ry + 1, DIM, 0.15); line(top + zmax, Y(0) + 0.8, top + zmax, ry + 1, DIM, 0.15);
     line(px, ry, top + zmax, ry, DIM, 0.2); arrow(px, ry, -1, 0, DIM); arrow(top + zmax, ry, 1, 0, DIM);
     text((px + top + zmax) / 2, ry + 2.2, fmtMm(zmax + BOARD_T), 2.3, DIM, 'middle', 0, 700);
@@ -234,16 +333,17 @@ export function dimSvg(D: Design, o: { show?: ReadonlySet<string> | null; tr?: T
 
 /* ---------- DXF (AutoCAD R12, ASCII; mm, origó a bal alsó sarok) ---------- */
 
-/** A méretrajz DXF-ben: rétegek BOARD (körvonal), HOLES (rögzítőfuratok), PARTS (alkatrészek), SIDE (elöl- és oldalnézet), CENTERS (középpontok), DIMS (méretvonalak), TEXT. */
-export function dimDxf(D: Design, o: { show?: ReadonlySet<string> | null; tr?: Tr } = {}): string {
-  const g = geo(D, o.show ?? null), { bw, bh } = g, e: string[] = [];
+/** A méretrajz DXF-ben: rétegek BOARD (körvonal), HOLES (rögzítőfuratok), PARTS (alkatrészek), SIDE (elöl- és oldalnézet), CENTERS (középpontok), DIMS (méretvonalak), TEXT. A méretezés módja a rajzéval egyezik. */
+export function dimDxf(D: Design, o: DimOpts = {}): string {
+  const g = geo(D, o), { bw, bh } = g, e: string[] = [];
   const f = (v: number) => r2(v).toString();
   const ln = (layer: string, x1: number, y1: number, x2: number, y2: number) => e.push('0', 'LINE', '8', layer, '10', f(x1), '20', f(y1), '30', '0', '11', f(x2), '21', f(y2), '31', '0');
   const rect = (layer: string, x0: number, y0: number, x1: number, y1: number) => { ln(layer, x0, y0, x1, y0); ln(layer, x1, y0, x1, y1); ln(layer, x1, y1, x0, y1); ln(layer, x0, y1, x0, y0); };
-  const txt = (layer: string, x: number, y: number, h: number, s: string, rot = 0, right = false) => {
+  /** szöveg; `al`: 0 bal, 1 közép, 2 jobb (vízszintesen), a megadott pont a szöveg alapvonalán */
+  const txt = (layer: string, x: number, y: number, h: number, s: string, rot = 0, al: 0 | 1 | 2 = 0) => {
     e.push('0', 'TEXT', '8', layer, '10', f(x), '20', f(y), '30', '0', '40', f(h), '1', s.replace(/[\r\n]/g, ' '));
     if (rot) e.push('50', String(rot));
-    if (right) e.push('72', '2', '11', f(x), '21', f(y), '31', '0');
+    if (al) e.push('72', String(al), '11', f(x), '21', f(y), '31', '0');
   };
   rect('BOARD', 0, 0, bw, bh);
   const circle = (layer: string, x: number, y: number, r: number) => e.push('0', 'CIRCLE', '8', layer, '10', f(x), '20', f(y), '30', '0', '40', f(r));
@@ -256,16 +356,28 @@ export function dimDxf(D: Design, o: { show?: ReadonlySet<string> | null; tr?: T
   }
   for (const it of g.shown) {
     ln('CENTERS', it.x - 1.2, it.y, it.x + 1.2, it.y); ln('CENTERS', it.x, it.y - 1.2, it.x, it.y + 1.2);
-    if (it.feature) { e.push('0', 'CIRCLE', '8', 'CENTERS', '10', f(it.x), '20', f(it.y), '30', '0', '40', '0.9'); txt('TEXT', it.x + 1, it.y + 1, 1.1, it.label); }
+    if (it.feature) { circle('CENTERS', it.x, it.y, 0.9); txt('TEXT', it.x + 1, it.y + 1, 1.1, it.label); }
   }
-  // koordinátaméretek: az x-ek a panel alatt, az y-ok balra (méretvonal + szöveg, nem DIMENSION elem: minden olvasó érti)
-  const xb = -(LEG + 2.5), yb = -(LEG + 2.5);
-  ln('DIMS', 0, -0.6, 0, xb - 0.6); txt('DIMS', 0.6, xb - 1, 1.5, '0', 90, true);
-  ln('DIMS', -0.6, 0, yb - 0.6, 0); txt('DIMS', yb - 1, -0.6, 1.5, '0', 0, true);
-  for (const { it, at } of g.xs) { ln('DIMS', it.x, it.y - 1.4, it.x, -(LEG - 1)); ln('DIMS', it.x, -(LEG - 1), at, xb + 0.4); ln('DIMS', at, xb + 0.4, at, xb - 0.6); txt('DIMS', at + 0.6, xb - 1, 1.5, fmtMm(it.x), 90, true); }
-  for (const { it, at } of g.ys) { ln('DIMS', it.x - 1.4, it.y, -(LEG - 1), it.y); ln('DIMS', -(LEG - 1), it.y, yb + 0.4, at); ln('DIMS', yb + 0.4, at, yb - 0.6, at); txt('DIMS', yb - 1, at - 0.6, 1.5, fmtMm(it.y), 0, true); }
-  ln('DIMS', 0, bh + 6, bw, bh + 6); ln('DIMS', 0, bh + 0.8, 0, bh + 7); ln('DIMS', bw, bh + 0.8, bw, bh + 7); txt('DIMS', bw / 2 - 3, bh + 7, 1.8, fmtMm(bw));
-  ln('DIMS', bw + 6, 0, bw + 6, bh); ln('DIMS', bw + 0.8, 0, bw + 7, 0); ln('DIMS', bw + 0.8, bh, bw + 7, bh); txt('DIMS', bw + 8, bh / 2 - 3, 1.8, fmtMm(bh), 90);
+  // méretek: vonal + szöveg (nem DIMENSION elem: minden olvasó érti)
+  for (const x of g.exts) ln('DIMS', x.x1, x.y1, x.x2, x.y2);
+  for (const l of g.lins) {
+    const h = l.strong ? 1.8 : 1.5;
+    if (l.axis === 'x') {
+      ln('DIMS', l.a, l.at, l.b, l.at);
+      for (const v of [l.a, l.b]) ln('DIMS', v - 0.5, l.at - 0.5, v + 0.5, l.at + 0.5);
+      txt('DIMS', (l.a + l.b) / 2, l.row ? l.at - 0.6 - h : l.at + 0.6, h, l.text, 0, 1);
+    } else {
+      ln('DIMS', l.at, l.a, l.at, l.b);
+      for (const v of [l.a, l.b]) ln('DIMS', l.at - 0.5, v - 0.5, l.at + 0.5, v + 0.5);
+      txt('DIMS', l.row ? l.at + 0.6 + h : l.at - 0.6, (l.a + l.b) / 2, h, l.text, 90, 1);
+    }
+  }
+  if (g.mode === 'ord') {
+    const xb = -(LEG + 2.5), yb = -(LEG + 2.5);
+    for (const { it, v, at } of g.xs) { ln('DIMS', it.x, it.id ? it.y - 1.4 : -0.6, it.x, -(LEG - 1)); ln('DIMS', it.x, -(LEG - 1), at, xb + 0.4); ln('DIMS', at, xb + 0.4, at, xb - 0.6); txt('DIMS', at + 0.6, xb - 1, 1.5, v === 0 ? '0' : fmtMm(v), 90, 2); }
+    for (const { it, v, at } of g.ys) { ln('DIMS', it.id ? it.x - 1.4 : -0.6, it.y, -(LEG - 1), it.y); ln('DIMS', -(LEG - 1), it.y, yb + 0.4, at); ln('DIMS', yb + 0.4, at, yb - 0.6, at); txt('DIMS', yb - 1, at - 0.6, 1.5, v === 0 ? '0' : fmtMm(v), 0, 2); }
+    if (g.o.it) circle('DIMS', g.o.x, g.o.y, 1.6);
+  }
   // elölnézet a panel alatt (a panel alsó síkja: fy), oldalnézet jobbra (a panel alsó síkja: sx); y fölfelé
   const parts = g.items.filter(i => !i.feature && !i.drill && i.z > 0), zmax = g.zmax;
   const fy = -(MB + VGAP + zmax), sx = bw + MR + VGAP + LEGS;

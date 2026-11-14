@@ -121,12 +121,32 @@ describe('gyártás: méretrajz', () => {
   it('SVG: körvonal-méretek és koordináták; kikapcsolt elem nem méretezett', async () => {
     const { dimItems, dimSvg } = await import('../../src/engine/dimension');
     const D = load('esp32'), sw = dimItems(D).find(i => i.label === 'SW1')!;
-    const all = dimSvg(D).svg;
+    const all = dimSvg(D, { mode: 'ord' }).svg;
     expect(all).toContain('>99.1<');
     expect(all).toContain('>121.9<');
     expect(all).toContain(`>${sw.x.toFixed(1)}<`);
-    const none = dimSvg(D, { show: new Set() }).svg;
+    const none = dimSvg(D, { show: new Set(), mode: 'ord' }).svg;
     expect(none).not.toContain(`>${sw.x.toFixed(1)}<`);
+  });
+
+  it('lánc (alapértelmezés): a szakaszok a széltől széléig összeadódnak; széltől: a közelebbi szél; koordináta választott origóval', async () => {
+    const { dimItems, dimSvg, dimDxf, edgeDist } = await import('../../src/engine/dimension');
+    const { boardMm } = await import('../../src/engine/manufacture');
+    const D = load('esp32'), items = dimItems(D), b = boardMm(D);
+    const svg = dimSvg(D).svg;
+    expect(svg).toContain('a szélektől és egymástól');
+    // az x-lánc (alul) a bal széltől az első elemig és az utolsótól a jobb szélig is mér
+    const xs = items.filter(i => i.def).map(i => i.x), f1 = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
+    expect(svg).toContain(`>${f1(Math.min(...xs))}<`);
+    expect(svg).toContain(`>${f1(b.w - Math.max(...xs))}<`);
+    const sw = items.find(i => i.label === 'SW1')!, e = edgeDist(D, sw);
+    expect(e.left + e.right).toBeCloseTo(b.w, 5);
+    expect(dimSvg(D, { mode: 'edge' }).svg).toContain(`>${Math.min(e.left, e.right).toFixed(1)}<`);
+    const js = items.find(i => i.label === 'JS1')!;
+    const o = dimSvg(D, { mode: 'ord', origin: js.id }).svg;
+    expect(o).toContain('origó: JS1 középpontja');
+    expect(o).toContain(`>${(Math.round((sw.x - js.x) * 10) / 10).toFixed(1)}<`);
+    expect(dimDxf(D, { mode: 'edge' })).toContain('ENTITIES');
   });
 
   it('DXF: R12, mm, rétegek; a panel körvonala 4 vonal', async () => {

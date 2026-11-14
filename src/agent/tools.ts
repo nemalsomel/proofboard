@@ -16,7 +16,7 @@ import { EL_KINDS } from '../core/circuit';
 import { decodeShare, shareCode, shareUrl } from '../core/share';
 import { applyImport, importCode } from '../engine/codeimport';
 import { assembly, bom, boardMm } from '../engine/manufacture';
-import { BOARD_T, dimDxf, dimItems, LEGS, maxHeight } from '../engine/dimension';
+import { BOARD_T, dimDxf, dimItems, edgeDist, LEGS, maxHeight, type DimMode } from '../engine/dimension';
 import { PARTS } from '../parts/builtin';
 import { fmt, t as translate, type Tr } from '../i18n/i18n';
 import { checkAll, type Issue } from '../engine/check';
@@ -660,17 +660,25 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'get_dimensions', mutates: false,
-    description: 'Dimension data of the board for enclosure / front panel design: board outline and the centre position and body size of every on-board part (mm; origin = bottom-left corner of the board, x right, y up, top view), plus feature points such as the controller board USB connector, mounting holes (part type "mhole", M2/M2.5/M3; place them with place_part) and the estimated height of each part above the board. "front" marks items that usually matter from outside (controls, connectors, LEDs, displays, USB, mounting holes). format "dxf" returns an AutoCAD R12 DXF of the drawing (top, front and side view) instead; the user can also download SVG/DXF in the Manufacturing layout, Drawing tab.',
-    input_schema: S.obj({ format: { type: 'string', enum: ['table', 'dxf'], description: 'table (default) or dxf' } }),
+    description: 'Dimension data of the board for enclosure / front panel design: board outline and the centre position and body size of every on-board part (mm; origin = bottom-left corner of the board, x right, y up, top view), plus feature points such as the controller board USB connector, mounting holes (part type "mhole", M2/M2.5/M3; place them with place_part) and the estimated height of each part above the board. "front" marks items that usually matter from outside (controls, connectors, LEDs, displays, USB, mounting holes). Each row also gives the distance of the centre from the left / right / bottom / top edge. format "dxf" returns an AutoCAD R12 DXF of the drawing (top, front and side view) instead, dimensioned as "dims" says: chain (edge to item to item to edge, default), edge (each item from its nearest edges) or ord (coordinates from an origin: bottom-left corner, or the item label given in "origin"); the user can also download SVG/DXF in the Manufacturing layout, Drawing tab.',
+    input_schema: S.obj({
+      format: { type: 'string', enum: ['table', 'dxf'], description: 'table (default) or dxf' },
+      dims: { type: 'string', enum: ['chain', 'edge', 'ord'], description: 'dimensioning style of the DXF (default chain)' },
+      origin: { type: 'string', description: 'ord only: label of the item used as origin (e.g. "SW1"); default the bottom-left corner' },
+    }),
     async run(ctx, i) {
       const D = ctx.D();
-      if (i.format === 'dxf') return ok(dimDxf(D, { tr: en }));
+      if (i.format === 'dxf') {
+        const org = i.origin ? dimItems(D).find(it => it.label === String(i.origin)) : undefined;
+        if (i.origin && !org) return err(`Unknown origin "${String(i.origin)}" (use an on-board part label, or a feature such as "PICO1 USB").`);
+        return ok(dimDxf(D, { tr: en, mode: (i.dims as DimMode) || 'chain', origin: org?.id || null }));
+      }
       const b = boardMm(D), mm = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
-      const rows = dimItems(D).map(it => `- ${it.label} | ${it.feature ? it.feature + ' (feature point)' : en(DEFS[D.parts.find(p => p.id === it.id)!.type].name)} | x ${mm(it.x)} | y ${mm(it.y)}${it.feature ? '' : it.drill ? ` | hole ⌀${mm(it.drill)}, keep ⌀${mm(it.head || 0)} clear` : ` | ${mm(it.w)}×${mm(it.h)} | z ${mm(it.z)}`}${it.def ? ' | front' : ''}`);
+      const rows = dimItems(D).map(it => `- ${it.label} | ${it.feature ? it.feature + ' (feature point)' : en(DEFS[D.parts.find(p => p.id === it.id)!.type].name)} | x ${mm(it.x)} | y ${mm(it.y)} | ${((e: ReturnType<typeof edgeDist>) => `L ${mm(e.left)} R ${mm(e.right)} B ${mm(e.bottom)} T ${mm(e.top)}`)(edgeDist(D, it))}${it.feature ? '' : it.drill ? ` | hole ⌀${mm(it.drill)}, keep ⌀${mm(it.head || 0)} clear` : ` | ${mm(it.w)}×${mm(it.h)} | z ${mm(it.z)}`}${it.def ? ' | front' : ''}`);
       const mx = maxHeight(D);
       return ok([`Board outline: ${mm(b.w)} × ${mm(b.h)} mm (${D.board.cols}×${D.board.rows} holes, 2.54 mm pitch; hole centres 1.27 mm from the edge; board ${BOARD_T} mm thick, legs ~${LEGS} mm below).`,
         mx.z ? `Tallest: ${mx.label}, ${mm(mx.z)} mm above the board (heights are estimates from the part data).` : 'No part heights.',
-        'label | part | x | y | w×h (mm) | z height (mm) | front', ...rows].join('\n'));
+        'label | part | x | y | from edges (left/right/bottom/top) | w×h (mm) | z height (mm) | front', ...rows].join('\n'));
     },
   },
   {

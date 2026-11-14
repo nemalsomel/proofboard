@@ -27,7 +27,7 @@ test('Gyártás (Alt+4): anyaglista, lépések pipálása (megmarad), rézoldal 
   await expect(v.locator('.mf-step.on .mf-st')).toHaveText('A panel előkészítése');
   await v.locator('button[data-step="cuts"]').click();
   await expect(v.locator('.mf-side')).toContainText('Rézoldal');
-  await expect(v.locator('.mf-prev svg')).toContainText('X1');
+  await expect(v.locator('.mf-prev .mf-svg > svg')).toContainText('X1');
   const boxes = v.locator('.mf-step.on input[type=checkbox]');
   await expect(boxes).toHaveCount(3);
   for (let i = 0; i < 3; i++) await boxes.nth(i).check();
@@ -50,7 +50,7 @@ test('Gyártás (Alt+4): anyaglista, lépések pipálása (megmarad), rézoldal 
 
   // Lapok és nyomtatás: új ablak A4-es lapokkal
   await page.locator('#mfgView [data-mtab="sheets"]').click();
-  await expect(page.locator('#mfgView .mf-two svg')).toHaveCount(2);
+  await expect(page.locator('#mfgView .mf-two .mf-svg > svg')).toHaveCount(2);
   await page.locator('#mfgView [data-pr="steps"]').uncheck();
   // alkatrész- és rézoldal, anyaglista, méretrajz
   const [pop] = await Promise.all([page.waitForEvent('popup'), page.keyboard.press('Control+p')]);
@@ -83,16 +83,40 @@ test('Méretrajz: koordináta-táblázat, elemenként kapcsolható méretezés (
   const rows = v.locator('.mf-dtab tbody tr');
   await expect(rows).toHaveCount(6);
   await expect(v.locator('[data-dim-row]').filter({ hasText: 'ESP1 USB' })).toHaveCount(1);
-  // R1 alapból nincs méretezve; bekapcsolva a rajzon is megjelenik a koordinátája
-  const r1 = v.locator('[data-dim-row]').filter({ hasText: 'R1' }), x = (await r1.locator('td.n').first().innerText()).trim();
+  // alapból láncméretezés; a Széltől mód: R1 alapból nincs méretezve, bekapcsolva a rajzon is megjelenik a közelebbi széltől mért távolsága
+  await expect(v.locator('[data-dmode="chain"]')).toHaveAttribute('aria-checked', 'true');
+  await v.locator('[data-dmode="edge"]').click();
+  await expect(v.locator('[data-dmode="edge"]')).toHaveAttribute('aria-checked', 'true');
+  const r1 = v.locator('[data-dim-row]').filter({ hasText: 'R1' }), x = (await r1.locator('td.near').first().innerText()).trim();
   await expect(r1.locator('input')).not.toBeChecked();
-  await expect(v.locator('.mf-prev svg')).not.toContainText(x);
+  await expect(v.locator('.mf-prev .mf-svg > svg')).not.toContainText(x);
   await r1.locator('input').check();
-  await expect(v.locator('.mf-prev svg')).toContainText(x);
+  await expect(v.locator('.mf-prev .mf-svg > svg')).toContainText(x);
   expect(await page.evaluate(() => (window as any).pcb.mfgDims().shown.length)).toBe(6);
   await page.reload(); await ready(page);
   await page.evaluate(() => { const p = (window as any).pcb; if (p.layout() !== 'mfg') p.layout('mfg'); p.mfgTab('dims'); });
   await expect(page.locator('#mfgView [data-dim-row]').filter({ hasText: 'R1' }).locator('input')).toBeChecked();
+  expect(await page.evaluate(() => (window as any).pcb.mfgDims().mode)).toBe('edge');
+  // koordináta mód, origó egy elem: a táblázat x/y oszlopai attól mérnek
+  await page.locator('#mfgView [data-dmode="ord"]').click();
+  await page.locator('#mfgView [data-dorigin]').selectOption({ label: 'SW1' });
+  await expect(page.locator('#mfgView [data-dim-row]').filter({ hasText: 'SW1' }).locator('td.n').first()).toHaveText('0.0');
+  await expect(page.locator('#mfgView .mf-prev .mf-svg > svg')).toContainText('origó: SW1 középpontja');
+  // nagyítás: Ctrl+görgő a rajzon, a gombbal vissza az egészre
+  const svgBox = (await page.locator('#mfgView .mf-prev .mf-svg > svg').boundingBox())!;
+  await page.mouse.move(svgBox.x + svgBox.width / 2, svgBox.y + svgBox.height / 3);
+  await page.keyboard.down('Control'); for (let i = 0; i < 3; i++) await page.mouse.wheel(0, -120); await page.keyboard.up('Control');
+  await expect.poll(() => page.evaluate(() => (window as any).pcb.mfgZoom()[0])).toBeGreaterThan(1.5);
+  const vb0 = await page.locator('#mfgView .mf-prev .mf-svg > svg').getAttribute('viewBox');
+  await page.mouse.move(svgBox.x + svgBox.width / 2, svgBox.y + svgBox.height / 3);
+  await page.mouse.down(); await page.mouse.move(svgBox.x + svgBox.width / 2 + 80, svgBox.y + svgBox.height / 3 + 40, { steps: 4 }); await page.mouse.up();
+  expect(await page.locator('#mfgView .mf-prev .mf-svg > svg').getAttribute('viewBox')).not.toBe(vb0);
+  // kiemeléskor (újrarajzolás) a nagyítás megmarad
+  await page.locator('#mfgView [data-dim-row]').filter({ hasText: 'JS1' }).hover();
+  expect(await page.evaluate(() => (window as any).pcb.mfgZoom()[0])).toBeGreaterThan(1.5);
+  await page.locator('#mfgView .pan-ctl [data-z="fit"]').click();
+  expect(await page.evaluate(() => (window as any).pcb.mfgZoom()[0])).toBe(1);
+  await page.evaluate(() => (window as any).pcb.mfgDims('chain'));
   await page.locator('#mfgView [data-mf="ddef"]').click();
   await expect(page.locator('#mfgView [data-dim-row]').filter({ hasText: 'R1' }).locator('input')).not.toBeChecked();
 
@@ -115,8 +139,8 @@ test('Rögzítőfurat és magasság: a könyvtárból lerakható, a méretrajzon
   await expect(v.locator('[data-dim-row="mh1"]')).toContainText('⌀2.7');
   await expect(v.locator('[data-dim-row="mh1"] input')).toBeChecked();
   await expect(v.locator('.mf-max')).toContainText('JS1');
-  await expect(v.locator('.mf-prev svg')).toContainText('Elölnézet');
-  await expect(v.locator('.mf-prev svg')).toContainText('Oldalnézet');
+  await expect(v.locator('.mf-prev .mf-svg > svg')).toContainText('Elölnézet');
+  await expect(v.locator('.mf-prev .mf-svg > svg')).toContainText('Oldalnézet');
   // a panel előkészítése lépésben a furat
   await v.locator('[data-mtab="asm"]').click();
   await expect(v.locator('.mf-step[data-step="board"] .mf-cnt')).toHaveText('0/2');
