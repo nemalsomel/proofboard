@@ -1,0 +1,384 @@
+[
+ {
+  "group": "Súgó",
+  "name": "Parancspaletta és gyorsbillentyűk",
+  "keys": [
+   "Ctrl+K",
+   "F1"
+  ]
+ },
+ {
+  "group": "Súgó",
+  "name": "Gyorsbillentyűk",
+  "keys": [
+   "?"
+  ]
+ },
+ {
+  "group": "Fájl",
+  "name": "Új terv…",
+  "keys": [
+   "Alt+N"
+  ]
+ },
+ {
+  "group": "Fájl",
+  "name": "Megnyitás…",
+  "keys": [
+   "Ctrl+O"
+  ]
+ },
+ {
+  "group": "Fájl",
+  "name": "Mentés fájlba",
+  "keys": [
+   "Ctrl+S"
+  ]
+ },
+ {
+  "group": "Fájl",
+  "name": "Megosztás linkkel…",
+  "keys": [
+   "Alt+L"
+  ]
+ },
+ {
+  "group": "Fájl",
+  "name": "Gyártási lapok nyomtatása…",
+  "keys": [
+   "Ctrl+P"
+  ]
+ },
+ {
+  "group": "Fájl",
+  "name": "Példák…",
+  "keys": [
+   "Alt+P"
+  ]
+ },
+ {
+  "group": "Fájl",
+  "name": "Panel beállításai…",
+  "keys": [
+   "Alt+B"
+  ]
+ },
+ {
+  "group": "Fájl",
+  "name": "Claude-kapcsolat…",
+  "keys": [
+   "Alt+C"
+  ]
+ },
+ {
+  "group": "Fájl",
+  "name": "JSON export / import…",
+  "keys": [
+   "Alt+J"
+  ]
+ },
+ {
+  "group": "Szerkesztés",
+  "name": "Visszavonás",
+  "keys": [
+   "Ctrl+Z"
+  ]
+ },
+ {
+  "group": "Szerkesztés",
+  "name": "Újra",
+  "keys": [
+   "Ctrl+Y",
+   "Ctrl+Shift+Z"
+  ]
+ },
+ {
+  "group": "Szerkesztés",
+  "name": "Mindent kijelöl",
+  "keys": [
+   "Ctrl+A"
+  ]
+ },
+ {
+  "group": "Szerkesztés",
+  "name": "Kijelölés megszüntetése, lerakás megszakítása",
+  "keys": [
+   "Escape"
+  ]
+ },
+ {
+  "group": "Szerkesztés",
+  "name": "A kijelölt törlése",
+  "keys": [
+   "Delete",
+   "Backspace"
+  ]
+ },
+ {
+  "group": "Szerkesztés",
+  "name": "Duplikálás",
+  "keys": [
+   "D"
+  ]
+ },
+ {
+  "group": "Szerkesztés",
+  "name": "Forgatás",
+  "keys": [
+   "R"
+  ]
+ },
+ {
+  "group": "Szerkesztés",
+  "name": "Tükrözés",
+  "keys": [
+   "M"
+  ]
+ },
+ {
+  "group": "Szerkesztés",
+  "name": "Keresés az alkatrészek között",
+  "keys": [
+   "/"
+  ]
+ },
+ {
+  "group": "Eszközök",
+  "name": "Kijelölés",
+  "keys": [
+   "V"
+  ]
+ },
+ {
+  "group": "Eszközök",
+  "name": "Híd",
+  "keys": [
+   "B"
+  ]
+ },
+ {
+  "group": "Eszközök",
+  "name": "Vezeték",
+  "keys": [
+   "W"
+  ]
+ },
+ {
+  "group": "Eszközök",
+  "name": "Kapcsolat",
+  "keys": [
+   "C"
+  ]
+ },
+ {
+  "group": "Eszközök",
+  "name": "Csíkvágás",
+  "keys": [
+   "K"
+  ]
+ },
+ {
+  "group": "Eszközök",
+  "name": "Jegyzet",
+  "keys": [
+   "J"
+  ]
+ },
+ {
+  "group": "Eszközök",
+  "name": "Törlés",
+  "keys": [
+   "E"
+  ]
+ },
+ {
+  "group": "Eszközök",
+  "name": "Mozgatás",
+  "keys": [
+   "H"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Tervezés",
+  "keys": [
+   "Alt+1"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Program",
+  "keys": [
+   "Alt+2"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Szimuláció",
+  "keys": [
+   "Alt+3"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Gyártás",
+  "keys": [
+   "Alt+4"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Panel nézet",
+  "keys": [
+   "1"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Program nézet",
+  "keys": [
+   "2"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Mindkettő: panel és program",
+  "keys": [
+   "3"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Alkatrészoldal / Rézoldal",
+  "keys": [
+   "F"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Kapcsolati vonalak",
+  "keys": [
+   "N"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Röntgen",
+  "keys": [
+   "X"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Rövid vezeték",
+  "keys": [
+   "Shift+W"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "A nézet elforgatása 90°-kal",
+  "keys": [
+   "T"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Az egész panel, középen",
+  "keys": [
+   "0"
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Nagyítás",
+  "keys": [
+   "+",
+   "="
+  ]
+ },
+ {
+  "group": "Nézet",
+  "name": "Kicsinyítés",
+  "keys": [
+   "-"
+  ]
+ },
+ {
+  "group": "Panelek és fülek",
+  "name": "Bal oldalsáv",
+  "keys": [
+   "["
+  ]
+ },
+ {
+  "group": "Panelek és fülek",
+  "name": "Jobb oldalsáv",
+  "keys": [
+   "]"
+  ]
+ },
+ {
+  "group": "Panelek és fülek",
+  "name": "Alsó panel: Problémák, Napló",
+  "keys": [
+   "P"
+  ]
+ },
+ {
+  "group": "Panelek és fülek",
+  "name": "Kapcsolatok",
+  "keys": [
+   "Shift+2"
+  ]
+ },
+ {
+  "group": "Panelek és fülek",
+  "name": "Szimuláció",
+  "keys": [
+   "Shift+3"
+  ]
+ },
+ {
+  "group": "Panelek és fülek",
+  "name": "Kód",
+  "keys": [
+   "Shift+4"
+  ]
+ },
+ {
+  "group": "Panelek és fülek",
+  "name": "Agent",
+  "keys": [
+   "Shift+5"
+  ]
+ },
+ {
+  "group": "Bekötés",
+  "name": "Útvonalak keresése",
+  "keys": [
+   "U"
+  ]
+ },
+ {
+  "group": "Bekötés",
+  "name": "Tömörítés…",
+  "keys": [
+   "Alt+K"
+  ]
+ },
+ {
+  "group": "Program",
+  "name": "Kód importálása…",
+  "keys": [
+   "Alt+I"
+  ]
+ },
+ {
+  "group": "Szimuláció",
+  "name": "Szimuláció indítása / leállítása",
+  "keys": [
+   "S"
+  ]
+ }
+]

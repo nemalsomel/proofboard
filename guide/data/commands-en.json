@@ -1,0 +1,384 @@
+[
+ {
+  "group": "Help",
+  "name": "Command palette and shortcuts",
+  "keys": [
+   "Ctrl+K",
+   "F1"
+  ]
+ },
+ {
+  "group": "Help",
+  "name": "Keyboard shortcuts",
+  "keys": [
+   "?"
+  ]
+ },
+ {
+  "group": "File",
+  "name": "New design…",
+  "keys": [
+   "Alt+N"
+  ]
+ },
+ {
+  "group": "File",
+  "name": "Open…",
+  "keys": [
+   "Ctrl+O"
+  ]
+ },
+ {
+  "group": "File",
+  "name": "Save to file",
+  "keys": [
+   "Ctrl+S"
+  ]
+ },
+ {
+  "group": "File",
+  "name": "Share as link…",
+  "keys": [
+   "Alt+L"
+  ]
+ },
+ {
+  "group": "File",
+  "name": "Print manufacturing sheets…",
+  "keys": [
+   "Ctrl+P"
+  ]
+ },
+ {
+  "group": "File",
+  "name": "Examples…",
+  "keys": [
+   "Alt+P"
+  ]
+ },
+ {
+  "group": "File",
+  "name": "Board settings…",
+  "keys": [
+   "Alt+B"
+  ]
+ },
+ {
+  "group": "File",
+  "name": "Claude connection…",
+  "keys": [
+   "Alt+C"
+  ]
+ },
+ {
+  "group": "File",
+  "name": "JSON export / import…",
+  "keys": [
+   "Alt+J"
+  ]
+ },
+ {
+  "group": "Edit",
+  "name": "Undo",
+  "keys": [
+   "Ctrl+Z"
+  ]
+ },
+ {
+  "group": "Edit",
+  "name": "Redo",
+  "keys": [
+   "Ctrl+Y",
+   "Ctrl+Shift+Z"
+  ]
+ },
+ {
+  "group": "Edit",
+  "name": "Select all",
+  "keys": [
+   "Ctrl+A"
+  ]
+ },
+ {
+  "group": "Edit",
+  "name": "Clear selection, cancel placing",
+  "keys": [
+   "Escape"
+  ]
+ },
+ {
+  "group": "Edit",
+  "name": "Delete selection",
+  "keys": [
+   "Delete",
+   "Backspace"
+  ]
+ },
+ {
+  "group": "Edit",
+  "name": "Duplicate",
+  "keys": [
+   "D"
+  ]
+ },
+ {
+  "group": "Edit",
+  "name": "Rotate",
+  "keys": [
+   "R"
+  ]
+ },
+ {
+  "group": "Edit",
+  "name": "Mirror",
+  "keys": [
+   "M"
+  ]
+ },
+ {
+  "group": "Edit",
+  "name": "Search parts",
+  "keys": [
+   "/"
+  ]
+ },
+ {
+  "group": "Tools",
+  "name": "Select",
+  "keys": [
+   "V"
+  ]
+ },
+ {
+  "group": "Tools",
+  "name": "Bridge",
+  "keys": [
+   "B"
+  ]
+ },
+ {
+  "group": "Tools",
+  "name": "Wire",
+  "keys": [
+   "W"
+  ]
+ },
+ {
+  "group": "Tools",
+  "name": "Connection",
+  "keys": [
+   "C"
+  ]
+ },
+ {
+  "group": "Tools",
+  "name": "Strip cut",
+  "keys": [
+   "K"
+  ]
+ },
+ {
+  "group": "Tools",
+  "name": "Note",
+  "keys": [
+   "J"
+  ]
+ },
+ {
+  "group": "Tools",
+  "name": "Delete",
+  "keys": [
+   "E"
+  ]
+ },
+ {
+  "group": "Tools",
+  "name": "Pan",
+  "keys": [
+   "H"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Design",
+  "keys": [
+   "Alt+1"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Program",
+  "keys": [
+   "Alt+2"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Simulation",
+  "keys": [
+   "Alt+3"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Manufacturing",
+  "keys": [
+   "Alt+4"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Board view",
+  "keys": [
+   "1"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Program view",
+  "keys": [
+   "2"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Both: board and program",
+  "keys": [
+   "3"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Component side / Copper side",
+  "keys": [
+   "F"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Connection lines",
+  "keys": [
+   "N"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "X-ray",
+  "keys": [
+   "X"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Short wires",
+  "keys": [
+   "Shift+W"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Rotate the view by 90°",
+  "keys": [
+   "T"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Whole board, centred",
+  "keys": [
+   "0"
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Zoom",
+  "keys": [
+   "+",
+   "="
+  ]
+ },
+ {
+  "group": "View",
+  "name": "Zoom out",
+  "keys": [
+   "-"
+  ]
+ },
+ {
+  "group": "Panels and tabs",
+  "name": "Left sidebar",
+  "keys": [
+   "["
+  ]
+ },
+ {
+  "group": "Panels and tabs",
+  "name": "Right sidebar",
+  "keys": [
+   "]"
+  ]
+ },
+ {
+  "group": "Panels and tabs",
+  "name": "Bottom panel: Problems, Log",
+  "keys": [
+   "P"
+  ]
+ },
+ {
+  "group": "Panels and tabs",
+  "name": "Connections",
+  "keys": [
+   "Shift+2"
+  ]
+ },
+ {
+  "group": "Panels and tabs",
+  "name": "Simulation",
+  "keys": [
+   "Shift+3"
+  ]
+ },
+ {
+  "group": "Panels and tabs",
+  "name": "Code",
+  "keys": [
+   "Shift+4"
+  ]
+ },
+ {
+  "group": "Panels and tabs",
+  "name": "Agent",
+  "keys": [
+   "Shift+5"
+  ]
+ },
+ {
+  "group": "Wiring",
+  "name": "Find routes",
+  "keys": [
+   "U"
+  ]
+ },
+ {
+  "group": "Wiring",
+  "name": "Compact…",
+  "keys": [
+   "Alt+K"
+  ]
+ },
+ {
+  "group": "Program",
+  "name": "Import code…",
+  "keys": [
+   "Alt+I"
+  ]
+ },
+ {
+  "group": "Simulation",
+  "name": "Start / stop simulation",
+  "keys": [
+   "S"
+  ]
+ }
+]

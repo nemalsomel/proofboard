@@ -635,7 +635,7 @@ export const EN: Readonly<Record<string, string>> = {
   "Lépésszám": "Steps",
   "Időzítő": "Timer",
   "Késleltetés vagy utánfutás a megadott idővel. Utánfutás: azonnal bekapcsol, és a bemenet megszűnése után még ennyi ideig igaz (lépcsőházi világítás). Bekapcsolási késleltetés: csak akkor kapcsol be, ha a bemenet ennyi ideig folyamatosan igaz. Impulzus: felfutó élre ennyi ideig igaz. Szűrés: mindkét változást csak akkor adja tovább, ha ennyi ideig tart (pergésmentesítés).": "Delay or hold for the given time. Off delay: turns on at once and stays true this long after the input ends (staircase light). On delay: turns on only when the input has been true for this long. Pulse: true for this long on a rising edge. Filter: passes on both changes only if they last this long (debouncing).",
-  "Működés": "Mode",
+  "Működés": "Behavior",
   "Sorozat": "Sequence",
   "Minden felfutó élre (pl. ütemadótól) a minta következő sora kerül az A–D kimenetekre: léptetőmotor tekercsei, futófény, számláló. A „vissza” bemenet (vagy az irány) visszafelé léptet.": "On every rising edge (e.g. from a clock) the next row of the pattern goes to outputs A–D: stepper coils, chaser lights, counter. The “back” input (or the direction) steps backwards.",
   "lépés": "step",
@@ -1873,4 +1873,6 @@ export const EN: Readonly<Record<string, string>> = {
   "{a} a rézoldalon van: a teste alatt forrasztóhíd megy ({n} lyuk)": "{a} is on the copper side: a solder bridge runs under its body ({n} holes)",
   "Rézoldali alkatrészek": "Copper-side parts",
   "Ezek a panel aljára kerülnek. A lábakat úgy hajlítsd, hogy a forrasztás a test mellett elférjen; a test alatt ne legyen híd vagy forrasztás.": "These go underneath the board. Bend the legs so the joints fit beside the body; no bridge or solder joint under the body.",
+  "Lépésenkénti útmutató képekkel, új lapon": "Step-by-step guide with pictures, in a new tab",
+  "Kézikönyv": "Guide",
 };

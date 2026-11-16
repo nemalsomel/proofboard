@@ -5,3 +5,7 @@ test-results/
 playwright-report/
 .DS_Store
 *.log
+guide/index.html
+guide/*/index.html
+guide/hu/*/index.html
+public/guide/search-*.json

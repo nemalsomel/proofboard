@@ -652,11 +652,14 @@ menu.addEventListener('keydown',e=>{const it=[...menu.querySelectorAll<HTMLEleme
   else if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();it[(i+(e.key==='ArrowDown'?1:it.length-1))%it.length].focus();}});
 $('#bExamples').onclick=()=>{renderExamples();openDlg('#dlgEx');};
 /* Névjegy; telepítés alkalmazásként (PWA); új verzió értesítése */
-function aboutUI(){{const a=document.getElementById('aboutPage') as HTMLAnchorElement|null;if(a)a.href=getLang()==='en'?'about/':'about/hu/';}$('#aboutVer').textContent=tr('Verzió: {v} · {d}',{v:__APP_VERSION__,d:__BUILD_DATE__});
+/** A kézikönyv címe a felület nyelve szerint (guide/ angol, guide/hu/ magyar). */
+const guideUrl=()=>getLang()==='en'?'guide/':'guide/hu/';
+function aboutUI(){{const a=document.getElementById('aboutPage') as HTMLAnchorElement|null;if(a)a.href=getLang()==='en'?'about/':'about/hu/';const g=document.getElementById('guidePage') as HTMLAnchorElement|null;if(g)g.href=guideUrl();}$('#aboutVer').textContent=tr('Verzió: {v} · {d}',{v:__APP_VERSION__,d:__BUILD_DATE__});
   $('#aboutOffline').textContent=standalone()?tr('Telepített alkalmazásként fut; internet nélkül is működik.'):offlineReady()?tr('Internet nélkül is működik (a böngésző eltárolta). Telepíthető is önálló alkalmazásként.'):'';
   $('#aboutOffline').hidden=!$('#aboutOffline').textContent;installUI();}
 function installUI(){const c=canInstall();$('#bInstall').hidden=!c;$('#bInstall2').hidden=!c;}
 $('#bAbout').onclick=()=>{aboutUI();openDlg('#dlgAbout');};
+$('#bGuide').onclick=()=>{closeMenu();window.open(guideUrl(),'_blank','noopener');};
 const doInstall=async()=>{const ok=await install();installUI();if(ok)toast(tr('Telepítve: a Proofboard önálló alkalmazásként is elindítható.'));};
 $('#bInstall').onclick=doInstall;$('#bInstall2').onclick=doInstall;
 let updApply: (()=>void)|null=null;
@@ -1188,6 +1191,7 @@ const CMDS: Command[]=[
   btnCmd('bLibExp',N_('Könyvtár exportálása'),G.file,{words:'library export'}),
   btnCmd('bLibImp',N_('Könyvtár importálása…'),G.file,{words:'library import'}),
   btnCmd('bInstall',N_('Telepítés alkalmazásként…'),G.file,{words:'install pwa app'}),
+  btnCmd('bGuide',N_('Kézikönyv'),G.help,{words:'guide manual help docs documentation súgó útmutató dokumentáció'}),
   btnCmd('bAbout',N_('Névjegy…'),G.help,{words:'about version'}),
   {id:'undo',label:N_('Visszavonás'),group:G.edit,keys:['Ctrl+Z'],scope:'global',target:'#bUndo',words:'undo',run:()=>undo(),enabled:()=>!btnEl('bUndo')?.disabled},
   {id:'redo',label:N_('Újra'),group:G.edit,keys:['Ctrl+Y','Ctrl+Shift+Z'],scope:'global',target:'#bRedo',words:'redo',run:()=>redo(),enabled:()=>!btnEl('bRedo')?.disabled},

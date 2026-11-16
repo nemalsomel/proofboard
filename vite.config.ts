@@ -1,7 +1,10 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import { VitePWA } from 'vite-plugin-pwa';
 import pkg from './package.json' with { type: 'json' };
+import { buildGuide } from './scripts/guide-build';
 
 const sha = (process.env.GITHUB_SHA ?? '').slice(0, 7);
 const version = pkg.version + (sha ? '+' + sha : '');
@@ -35,9 +38,9 @@ const pwa = VitePWA({
     globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
     cleanupOutdatedCaches: true,
     // a Claude Desktop-bővítmény letöltése a hálózatról menjen, ne az app oldala jöjjön helyette
-    navigateFallbackDenylist: [/\.mcpb$/, /\/about\//],
+    navigateFallbackDenylist: [/\.mcpb$/, /\/about\//, /\/guide\//],
     // a bemutató oldal (about/) nem része az appnak: nem kerül az offline tárba
-    globIgnores: ['about/**'],
+    globIgnores: ['about/**', 'guide/**'],
     // a betűtípusok a Google Fonts-ról: első használat után offline is megvannak
     runtimeCaching: [
       { urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/, handler: 'StaleWhileRevalidate', options: { cacheName: 'google-fonts-css' } },
@@ -45,6 +48,12 @@ const pwa = VitePWA({
     ],
   },
 });
+
+/** A kézikönyv oldalai (generálva a Markdownból) Vite-bemenetként: név → útvonal. */
+function guideInputs(): Record<string, string> {
+  const root = path.dirname(fileURLToPath(import.meta.url));
+  return Object.fromEntries(buildGuide(root).map(f => ['guide_' + path.relative(path.join(root, 'guide'), f).replace(/[\\/]index\.html$|index\.html$/, '').replace(/[^a-z0-9]+/gi, '_'), f]));
+}
 
 // Normál build: GitHub Pages alá (https://<user>.github.io/proofboard/), PWA-val.
 // `--mode single`: egyetlen önálló HTML-fájl (artifact-előnézethez, offline használatra), service worker nélkül.
@@ -55,7 +64,8 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: mode === 'single' ? 'dist-single' : 'dist', target: 'es2022',
     // a bemutató oldal (magyar és angol) külön statikus lap ugyanabban a kiadásban
-    rollupOptions: mode === 'single' ? undefined : { input: { main: 'index.html', about: 'about/index.html', aboutHu: 'about/hu/index.html' } },
+    // a kézikönyv (guide/) a Markdown-forrásból készül, oldalanként egy bemenet
+    rollupOptions: mode === 'single' ? undefined : { input: { main: 'index.html', about: 'about/index.html', aboutHu: 'about/hu/index.html', ...guideInputs() } },
   },
   test: { include: ['tests/unit/**/*.test.ts'], environment: 'node' },
 }));
