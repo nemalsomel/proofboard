@@ -6,6 +6,7 @@
  *
  * A gazda (`app.ts`) az `ApiHost`-ot adja: a pillanatnyi állapotot és a felület műveleteit.
  */
+import { HELP, helpUrl, type HelpTopic } from './help';
 import type { PartDef, PartInstance } from '../core/schema';
 import { hasErrors, validatePartDef, type Problem } from '../core/validate';
 import type { Cut } from '../engine/board';
@@ -140,6 +141,7 @@ export interface PcbApi {
   /** A szkóp pufferének állapota: a minták száma, az utolsó minta (csatornánként V), fut-e. */ scope(id: string): { n: number; last: Array<number | null> | null; run: boolean } | null;
   /** Egy lyuk közepe a képernyőn (kliens-koordináta, px) – kattintáshoz a tesztekben. */ holeXY(r: number, c: number): { x: number; y: number };
   /** A parancsok (a palettán és a billentyűkhöz): azonosító, név, csoport, billentyűk, elérhető-e, rejtett-e. */ commands(): ApiCommand[];
+  /** A súgó célpontjai: téma → a kézikönyv címe nyelvenként (az app gyökeréhez képest). */ help(): Array<{ topic: string; hu: string; en: string }>;
   /** Parancs végrehajtása azonosító szerint; ha nincs vagy nem elérhető, false. */ run(id: string): boolean;
   readonly version: string;
 }
@@ -312,6 +314,7 @@ export function createApi(H: ApiHost): PcbApi {
     reveal(r, c) { return H.reveal(r, c); },
     shareLink() { return H.shareLink(); },
     commands() { return H.commands(); },
+    help() { return (Object.keys(HELP) as HelpTopic[]).map(topic => ({ topic, hu: helpUrl(topic, 'hu'), en: helpUrl(topic, 'en') })); },
     importCode(code, o) { return H.importCode(code, o); },
     mfg() { return H.mfg(); },
     mfgSheet(side) { return H.mfgSheet(side); },

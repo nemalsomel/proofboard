@@ -12,6 +12,7 @@ import { tableVars, toggleCell, truthTable, TABLE_MAX_VARS } from './logicview';
 import { fmtSI, parseSI } from '../core/expr';
 import { BUS_FNS, hasErrors, validatePartDef, type Problem } from '../core/validate';
 import type { ModelEl, PartDef, Prim } from '../core/schema';
+import { helpBtn } from './help';
 import { icon } from './icons';
 import { History } from './history';
 import { N_, t as tr } from '../i18n/i18n';
@@ -196,7 +197,7 @@ export function openEditor(host: EditorHost, opts: { type?: string; from?: PartD
         </div>
         <div class="pe-parcol">
           <div class="pe-ptabs"><div class="grp seg pe-tabs" role="tablist" aria-label="Szerkesztési mód"><button class="btn" data-tab="pins" role="tab" title="Lábak: hely, név, szerep, csoport, funkció">Lábak</button><button class="btn" data-tab="func" role="tab" title="Működés: villamos modell, digitális logika, vezérlő a szimulációban">Működés</button><button class="btn" data-tab="json" role="tab" title="A leírás teljes JSON-formája">JSON</button></div>
-            <span class="muted small pe-sub" data-ref="sub"></span></div>
+            <span class="muted small pe-sub" data-ref="sub"></span>${helpBtn('editor', tr)}</div>
           <div class="pe-left pe-par" data-ref="left"></div>
         </div>
       </div>

@@ -1125,3 +1125,7 @@ body.picking #cv{cursor:crosshair!important}
 .mtr-life{margin:6px 0 2px}
 .mtr-mah{display:flex;align-items:center;gap:6px;margin-top:4px}.mtr-mah input{width:90px}
 .pp-sub{margin-left:22px}
+/* súgó („?”): a kézikönyv megfelelő részére visz */
+a.hlp{text-decoration:none;color:var(--muted)}
+a.hlp:hover{color:var(--primary)}
+.rtabs .hlp{flex:0 0 34px;border-radius:0;border-left:1px solid var(--line);background:var(--panel2);min-height:0;height:auto}

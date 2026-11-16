@@ -6,6 +6,7 @@
  * Kezelés: csomópont a „+ Csomópont” menüből; él kimenetről bemenetre húzással, vagy érintéssel (kimenet, majd
  * bemenet); csomópont húzása a fejlécénél; üres helyen húzva a vászon mozog, görgővel nagyít.
  */
+import { helpBtn } from './help';
 import { icon } from './icons';
 import { t } from '../i18n/i18n';
 import { setFull } from './fullscreen';
@@ -43,7 +44,7 @@ export function mountProgEditor(root: HTMLElement, host: ProgHost): ProgEditor {
       <span class="pg-sp"></span>
       <button class="btn" data-pg="zout" aria-label="${t('Kicsinyítés')}">−</button><button class="btn" data-pg="zin" aria-label="${t('Nagyítás')}">+</button>
       <button class="btn" data-pg="fit" title="${t('Az egész program látszódjon')}">${t('Mind')}</button>
-      <button class="btn icon" data-pg="full" aria-pressed="false" aria-label="${t('Teljes képernyő')}" title="${t('Teljes képernyő (Esc: vissza)')}">${icon('full')}</button>
+      <button class="btn icon" data-pg="full" aria-pressed="false" aria-label="${t('Teljes képernyő')}" title="${t('Teljes képernyő (Esc: vissza)')}">${icon('full')}</button>${helpBtn('blocks', t)}
       <button class="btn" data-pg="run"></button>
     </div>
     <div class="pg-canvas" tabindex="0" aria-label="${t('Programvászon')}">

@@ -29,6 +29,7 @@ import { applyRotation, fromScreen as vpFrom, toScreen as vpTo } from './ui/view
 import { EventLog } from './ui/log';
 import { favToggled, libPref, libPrefSet, libraryHtml, recentWith } from './ui/library';
 import { EXAMPLES, EX_CATS, type Example, type ExDesign } from './ui/examples';
+import { mountHelp, setHelpResolver, type HelpTopic } from './ui/help';
 import { N_, detectLang, getLang, isLang, setLang, t as tr, translateDom } from './i18n/i18n';
 import { canInstall, install, offlineReady, registerPwa, standalone } from './ui/pwa';
 import { editorHistory, rerenderEditors, formToDef, openEditor, restoreParked, type EditorHost } from './ui/editor';
@@ -654,6 +655,12 @@ $('#bExamples').onclick=()=>{renderExamples();openDlg('#dlgEx');};
 /* Névjegy; telepítés alkalmazásként (PWA); új verzió értesítése */
 /** A kézikönyv címe a felület nyelve szerint (guide/ angol, guide/hu/ magyar). */
 const guideUrl=()=>getLang()==='en'?'guide/':'guide/hu/';
+/** Súgó: a „?” gombok a kézikönyvbe visznek; a helyzetfüggők a kattintáskor az aktív fül szerint. */
+const HELPUI=mountHelp(document,()=>getLang()==='en'?'en':'hu',tr);
+{const on=(sel: string,attr: string)=>(document.querySelector(sel+'.on') as HTMLElement|null)?.dataset[attr]||'';
+setHelpResolver('l',()=>({meters:'meters',props:'props'} as Record<string,HelpTopic>)[on('.ltabs .rtab','ltab')]||'parts');
+setHelpResolver('r',()=>({sim:'sim',code:'code',agent:'agent',props:'props'} as Record<string,HelpTopic>)[on('.right .rtabs .rtab','rtab')]||'links');
+setHelpResolver('b',()=>'problems');}
 function aboutUI(){{const a=document.getElementById('aboutPage') as HTMLAnchorElement|null;if(a)a.href=getLang()==='en'?'about/':'about/hu/';const g=document.getElementById('guidePage') as HTMLAnchorElement|null;if(g)g.href=guideUrl();}$('#aboutVer').textContent=tr('Verzió: {v} · {d}',{v:__APP_VERSION__,d:__BUILD_DATE__});
   $('#aboutOffline').textContent=standalone()?tr('Telepített alkalmazásként fut; internet nélkül is működik.'):offlineReady()?tr('Internet nélkül is működik (a böngésző eltárolta). Telepíthető is önálló alkalmazásként.'):'';
   $('#aboutOffline').hidden=!$('#aboutOffline').textContent;installUI();}
@@ -683,7 +690,7 @@ $$('[data-theme-set]').forEach(b=>b.addEventListener('click',()=>setTheme(b.data
 /* Nyelv: a mentett választás, különben a böngésző nyelve (detectLang); a választás megmarad. */
 const LANGKEY='proofboard.lang';
 function langUI(){const v=getLang();$$('[data-lang-set]').forEach(b=>{const on=b.dataset.langSet===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});}
-function applyLang(l: string,remember?: boolean){if(!isLang(l))return;setLang(l);document.documentElement.lang=l;if(D){ISSUES=checkAll();renderLeft();renderRight();renderLinks();renderExamples();boardUI();boardSelects();simBtn();partTabs();pwUpdate();renderFab();renderLog();if(PE)PE.refresh();if(AGP)AGP.render();if(PC)PC.refresh();rerenderEditors();status();sbUpdate();}translateDom(document.body,l);undoUI();langUI();
+function applyLang(l: string,remember?: boolean){if(!isLang(l))return;setLang(l);document.documentElement.lang=l;if(D){ISSUES=checkAll();renderLeft();renderRight();renderLinks();renderExamples();boardUI();boardSelects();simBtn();partTabs();pwUpdate();renderFab();renderLog();if(PE)PE.refresh();if(AGP)AGP.render();if(PC)PC.refresh();rerenderEditors();status();sbUpdate();}translateDom(document.body,l);undoUI();langUI();HELPUI.sync();
   if(remember){try{localStorage.setItem(LANGKEY,l);}catch(e){}}}
 $$('[data-lang-set]').forEach(b=>b.addEventListener('click',()=>applyLang(b.dataset.langSet!,true)));
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>draw());

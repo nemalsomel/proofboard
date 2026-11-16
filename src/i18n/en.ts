@@ -1875,4 +1875,5 @@ export const EN: Readonly<Record<string, string>> = {
   "Ezek a panel aljára kerülnek. A lábakat úgy hajlítsd, hogy a forrasztás a test mellett elférjen; a test alatt ne legyen híd vagy forrasztás.": "These go underneath the board. Bend the legs so the joints fit beside the body; no bridge or solder joint under the body.",
   "Lépésenkénti útmutató képekkel, új lapon": "Step-by-step guide with pictures, in a new tab",
   "Kézikönyv": "Guide",
+  "Súgó: a kézikönyv erről szóló része (új lapon)": "Help: the guide section about this (new tab)",
 };

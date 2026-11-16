@@ -6,6 +6,7 @@
 import { importCode, type ImportLang, type ImportResult } from '../engine/codeimport';
 import type { Design } from '../engine/types';
 import { esc } from './links';
+import { helpBtn } from './help';
 import { icon } from './icons';
 
 export interface ImportHost {
@@ -17,7 +18,7 @@ export interface ImportDialog { open(code?: string): void; close(): void }
 
 export function mountImportDialog(dlg: HTMLDialogElement, host: ImportHost): ImportDialog {
   const tr = host.tr;
-  dlg.innerHTML = `<header class="dlg-head"><h2 id="dlgImpT"></h2><button class="btn icon ghost" data-close aria-label="" data-x>${icon('close')}</button></header>
+  dlg.innerHTML = `<header class="dlg-head"><h2 id="dlgImpT"></h2>${helpBtn('codeImport', tr)}<button class="btn icon ghost" data-close aria-label="" data-x>${icon('close')}</button></header>
     <div class="dlg-body imp">
       <p class="help imp-intro"></p>
       <div class="imp-bar">

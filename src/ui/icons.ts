@@ -30,6 +30,7 @@ const P: Record<string, string> = {
   check: '<path d="M5 12.5 10 17l9-10"/>',
   warn: '<path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.2v.3"/>',
   error: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.4a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.4v.7M12 16.8v.3"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.3"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13 7 4 4"/>',
   parts: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',

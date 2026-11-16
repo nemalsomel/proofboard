@@ -42,6 +42,7 @@ Loading can be undone (<kbd>Ctrl</kbd>+<kbd>Z</kbd>), so your previous design is
 - **Scroll:** wheel, <kbd>Space</kbd> + drag, or the **Pan** tool (<kbd>H</kbd>).
 - **Touch:** one finger scrolls, dragging a part moves it, two fingers zoom.
 - **Command palette:** <kbd>Ctrl</kbd>+<kbd>K</kbd> or <kbd>F1</kbd>. Type to find commands, parts and examples. Holding <kbd>Ctrl</kbd> shows each visible button's shortcut.
+- **Help:** the **?** button on tab bars, windows and views opens the matching part of this guide in a new tab; the whole guide is under **File › Guide**.
 
 > **Tip:** **Simple mode** (File menu; when it's on, a badge in the header turns it off) hides the advanced parts and shows only errors among the Problems. A good starting point for learning and teaching.
 

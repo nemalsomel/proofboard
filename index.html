@@ -80,6 +80,7 @@
       <button class="rtab" role="tab" data-ltab="props" aria-selected="false" aria-controls="lpProps" hidden>Tulajdonságok</button>
       <button class="rtab on" role="tab" data-ltab="lib" aria-selected="true" aria-controls="lpLib">Alkatrészek</button>
       <button class="rtab" role="tab" data-ltab="meters" aria-selected="false" aria-controls="lpMeters">Műszerek</button>
+      <a class="btn icon ghost hlp" data-help="@l"></a>
     </div>
     <div class="rail" id="railL" role="toolbar" aria-label="Bal oldalsáv (összecsukva)">
       <button class="rail-btn" data-expand="l" title="Kinyitás ( [ )" aria-label="Bal oldalsáv kinyitása">»</button>
@@ -170,6 +171,7 @@
       <section class="fwin cp-win" id="cpWin" aria-labelledby="cpTitle" hidden>
         <header class="fwin-head" id="cpHead">
           <span class="fwin-t" id="cpTitle">Tömörítés</span><span class="sp"></span>
+          <a class="btn icon ghost hlp" data-help="compact"></a>
           <button class="btn icon ghost" id="cpCol" aria-label="Összecsukás címsorra" title="Összecsukás címsorra (dupla kattintás a címsoron is)" data-icon="down"></button>
           <button class="btn icon ghost" id="cpDockBtn" aria-label="Rögzítés a jobb sávba" title="Rögzítés a jobb sávba (a Kapcsolatok fül tetejére)" data-icon="dock"></button>
           <button class="btn icon ghost" data-cp-close aria-label="Bezárás" title="Bezárás (Esc) – a terv nem változik" data-icon="close"></button>
@@ -219,6 +221,7 @@
         <span class="sp"></span>
         <button class="btn ghost bp-act" id="bpRead" hidden>Mind elolvasva</button>
         <button class="btn ghost bp-act" id="bpClear" hidden>Napló törlése</button>
+        <a class="btn icon ghost hlp" data-help="@b"></a>
         <button class="btn icon ghost" id="bpTog" aria-label="Alsó panel kinyitása" aria-expanded="false" title="Problémák és napló (P)" data-icon="down"></button>
       </div>
       <div class="bp-body" id="bpBody">
@@ -245,6 +248,7 @@
       <button class="rtab" role="tab" data-rtab="sim" aria-selected="false" aria-controls="rpSim">Szimuláció</button>
       <button class="rtab" role="tab" data-rtab="code" aria-selected="false" aria-controls="rpCode">Kód</button>
       <button class="rtab" role="tab" data-rtab="agent" aria-selected="false" aria-controls="rpAgent">Agent</button>
+      <a class="btn icon ghost hlp" data-help="@r"></a>
     </div>
     <div class="rail" id="railR" role="toolbar" aria-label="Jobb oldalsáv (összecsukva)">
       <button class="rail-btn" data-expand="r" title="Kinyitás ( ] )" aria-label="Jobb oldalsáv kinyitása">«</button>
@@ -347,7 +351,7 @@
 <dialog class="dlg dlg-imp" id="dlgImp"></dialog>
 <dialog class="dlg pal" id="dlgPal" aria-label="Parancspaletta"></dialog>
 <dialog class="dlg dlg-sm" id="dlgShare" aria-labelledby="dlgShareT">
-  <header class="dlg-head"><h2 id="dlgShareT">Megosztás linkkel</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <header class="dlg-head"><h2 id="dlgShareT">Megosztás linkkel</h2><a class="btn icon ghost hlp" data-help="share"></a><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
   <div class="dlg-body share">
     <p>Aki megnyitja a linket, a terv másolatát kapja a saját böngészőjében (a saját alkatrészekkel és a programmal együtt). A terv a linkben van, nem kerül szerverre.</p>
     <div class="share-row"><input id="shareUrl" readonly aria-label="A terv linkje" spellcheck="false"><button class="btn primary" id="bShareCopy" data-icon="copy">Másolás</button></div>
@@ -366,12 +370,12 @@
 </dialog>
 <div class="toast upd" id="updToast" role="status" aria-live="polite" hidden><span>Új verzió érhető el.</span><button class="btn primary" id="bUpd">Frissítés</button><button class="btn icon ghost" id="bUpdX" data-icon="close" aria-label="Később" title="Később (a következő megnyitáskor frissül)"></button></div>
 <dialog class="dlg dlg-lg" id="dlgEx" aria-labelledby="dlgExT">
-  <header class="dlg-head"><h2 id="dlgExT">Példák</h2><input type="search" id="exSearch" class="ex-search" placeholder="Keresés a példák között" aria-label="Keresés a példák között" autocomplete="off"><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <header class="dlg-head"><h2 id="dlgExT">Példák</h2><input type="search" id="exSearch" class="ex-search" placeholder="Keresés a példák között" aria-label="Keresés a példák között" autocomplete="off"><a class="btn icon ghost hlp" data-help="examples"></a><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
   <div class="dlg-body ex-body"><div id="examples" class="examples"></div></div>
   <footer class="dlg-foot"><span class="help">A betöltés visszavonható (Ctrl+Z).</span></footer>
 </dialog>
 <dialog class="dlg" id="dlgMcp" aria-labelledby="dlgMcpT">
-  <header class="dlg-head"><h2 id="dlgMcpT">Claude-kapcsolat (MCP)</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <header class="dlg-head"><h2 id="dlgMcpT">Claude-kapcsolat (MCP)</h2><a class="btn icon ghost hlp" data-help="mcp"></a><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
   <div class="dlg-body mcp-body">
     <p>A Claude Desktopból vagy a Claude Code-ból is tervezhetsz: a Claude a saját előfizetéseddel dolgozik (API-kulcs nem kell), a változások itt jelennek meg élőben, és visszavonhatók.</p>
     <h3>1. A proofboard-mcp szerver hozzáadása (egyszer)</h3>
@@ -404,7 +408,7 @@
 </dialog>
 
 <dialog class="dlg dlg-sm" id="dlgBoard" aria-labelledby="dlgBoardT">
-  <header class="dlg-head"><h2 id="dlgBoardT">Panel beállításai</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <header class="dlg-head"><h2 id="dlgBoardT">Panel beállításai</h2><a class="btn icon ghost hlp" data-help="boardTypes"></a><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
   <div class="dlg-body">
     <div class="props">
         <div class="row"><label for="bdPreset">Típus</label><select id="bdPreset" style="flex:1"></select></div>
@@ -416,7 +420,7 @@
   </div>
 </dialog>
 <dialog class="dlg dlg-sm" id="dlgNew" aria-labelledby="dlgNewT">
-  <header class="dlg-head"><h2 id="dlgNewT">Új terv</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <header class="dlg-head"><h2 id="dlgNewT">Új terv</h2><a class="btn icon ghost hlp" data-help="boardTypes"></a><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
   <div class="dlg-body">
     <div class="row"><label for="newBoard" class="small muted">Panel</label><select id="newBoard"></select></div>
     <p class="help">A mostani terv visszavonással (Ctrl+Z) visszahozható; a saját könyvtárad nem változik.</p>
@@ -424,7 +428,7 @@
   <footer class="dlg-foot"><button class="btn ghost" data-close>Mégse</button><button class="btn primary" id="bNewOk" data-icon="filePlus">Létrehozás</button></footer>
 </dialog>
 <dialog class="dlg" id="dlgJson" aria-labelledby="dlgJsonT">
-  <header class="dlg-head"><h2 id="dlgJsonT">JSON export / import</h2><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
+  <header class="dlg-head"><h2 id="dlgJsonT">JSON export / import</h2><a class="btn icon ghost hlp" data-help="json"></a><button class="btn icon ghost" data-close data-icon="close" aria-label="Bezárás"></button></header>
   <div class="dlg-body">
     <div class="grp">
       <button class="btn" id="bExport" data-icon="save">Export</button>

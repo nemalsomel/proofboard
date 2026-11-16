@@ -15,6 +15,7 @@ import { assembly, bom, bomCsv, boardKindName, marks, type AsmStep } from '../en
 import { sheetSvg, type Side } from '../engine/mfgsheet';
 import { BOARD_T, DIM_MODES, dimDxf, dimItems, dimSvg, edgeDist, LEGS, maxHeight, shownItems, type DimMode, type DimTo } from '../engine/dimension';
 import type { Design } from '../engine/types';
+import { helpBtn, type HelpTopic } from './help';
 import { icon } from './icons';
 import { esc } from './links';
 import type { PrintOpts } from './mfgprint';
@@ -151,7 +152,7 @@ export function mountMfgView(host: MfgHost): MfgView {
     const D = host.design();
     const tabs: Array<[MfgTab, string]> = [['bom', tr('Anyaglista')], ['asm', tr('Beültetés')], ['dims', tr('Méretrajz')], ['sheets', tr('Lapok')]];
     const head = `<div class="mf-bar"><div class="grp seg" role="tablist" aria-label="${esc(tr('Gyártás'))}">${tabs.map(([k, l]) => `<button class="btn${k === tab ? ' on' : ''}" role="tab" aria-selected="${k === tab}" data-mtab="${k}">${esc(l)}</button>`).join('')}</div>
-      <span class="sp"></span>${tab === 'bom' ? `<button class="btn" data-mf="csv">${icon('download')}${esc(tr('CSV letöltése'))}</button>` : ''}${tab === 'dims' ? `<button class="btn" data-mf="svg">${icon('download')}SVG</button><button class="btn" data-mf="dxf">${icon('download')}DXF</button>` : ''}<button class="btn${tab === 'sheets' ? '' : ' primary'}" data-mf="${tab === 'dims' ? 'dprint' : 'print'}"${tab === 'sheets' ? ' hidden' : ''}>${icon('print')}${esc(tr('Nyomtatás…'))}</button></div>`;
+      <span class="sp"></span>${tab === 'bom' ? `<button class="btn" data-mf="csv">${icon('download')}${esc(tr('CSV letöltése'))}</button>` : ''}${tab === 'dims' ? `<button class="btn" data-mf="svg">${icon('download')}SVG</button><button class="btn" data-mf="dxf">${icon('download')}DXF</button>` : ''}<button class="btn${tab === 'sheets' ? '' : ' primary'}" data-mf="${tab === 'dims' ? 'dprint' : 'print'}"${tab === 'sheets' ? ' hidden' : ''}>${icon('print')}${esc(tr('Nyomtatás…'))}</button>${helpBtn(({ bom: 'bom', asm: 'assembly', dims: 'dims', sheets: 'sheets' } as Record<string, HelpTopic>)[tab] || 'bom', tr)}</div>`;
     let body = '';
     if (!D.parts.length && !D.bridges.length && !D.wires.length) body = `<div class="mf-empty"><p>${esc(tr('Üres a terv: rakj le alkatrészeket a Tervezés elrendezésben, és itt megjelenik az anyaglista, a beültetési sorrend és a nyomtatható lapok.'))}</p></div>`;
     else body = tab === 'bom' ? bomHtml() : tab === 'asm' ? asmHtml(assembly(D, tr)) : tab === 'dims' ? dimsHtml() : sheetsHtml();

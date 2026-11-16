@@ -86,3 +86,30 @@ test('az appból: Fájl › Kézikönyv és a Névjegy a felület nyelvén nyitj
   await page.evaluate(() => (window as unknown as { pcb: { run(id: string): boolean } }).pcb.run('bAbout'));
   await expect(page.locator('#guidePage')).toHaveAttribute('href', 'guide/');
 });
+
+test('súgó: minden „?” cél létező fejezetre és címre mutat; a fülsor gombja az aktív fül szerint', async ({ page }) => {
+  await page.goto('./');
+  await page.waitForFunction(() => !!(window as unknown as { pcb?: unknown }).pcb);
+  const list = await page.evaluate(() => (window as unknown as { pcb: { help(): Array<{ topic: string; hu: string; en: string }> } }).pcb.help());
+  expect(list.length).toBeGreaterThan(25);
+  // a statikus és a kódból épített gombok témái mind ismertek
+  const topics = new Set(list.map(h => h.topic));
+  for (const k of await page.locator('a[data-help]').evaluateAll(as => as.map(a => (a as HTMLElement).dataset.help || ''))) if (!k.startsWith('@')) expect(topics.has(k), k).toBe(true);
+  const p2 = await page.context().newPage();
+  for (const h of list) for (const u of [h.hu, h.en]) {
+    const res = await p2.goto('./' + u);
+    expect(res?.status(), u).toBe(200);
+    const hash = new URL(p2.url()).hash;
+    if (hash) expect(await p2.locator(decodeURIComponent(hash)).count(), u).toBe(1);
+  }
+  await p2.close();
+  // a jobb sáv „?”-e a Szimuláció fülön a szimuláció részre visz, a felület nyelvén
+  await page.locator('[data-rtab="sim"]').click();
+  const btn = page.locator('.right .rtabs a[data-help]');
+  await btn.hover();
+  await expect(btn).toHaveAttribute('href', 'guide/hu/simulation/#gpio-k-es-tap');
+  await expect(btn).toHaveAttribute('target', '_blank');
+  await page.locator('[data-rtab="design"]').click();
+  await btn.hover();
+  await expect(btn).toHaveAttribute('href', 'guide/hu/wiring/#kapcsolatok');
+});

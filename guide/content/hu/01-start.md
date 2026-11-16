@@ -42,6 +42,7 @@ A betöltés visszavonható (<kbd>Ctrl</kbd>+<kbd>Z</kbd>), így a korábbi terv
 - **Görgetés:** görgő, vagy <kbd>Szóköz</kbd> + húzás, vagy a **Mozgatás** eszköz (<kbd>H</kbd>).
 - **Érintéssel:** egy ujjal görgetsz, alkatrészen húzva mozgatod, két ujjal nagyítasz.
 - **Parancspaletta:** <kbd>Ctrl</kbd>+<kbd>K</kbd> vagy <kbd>F1</kbd>. Begépelve megtalálja a parancsokat, az alkatrészeket és a példákat is. A <kbd>Ctrl</kbd> nyomva tartásakor a gombokon megjelenik a gyorsbillentyűjük.
+- **Súgó:** a fülsorok, ablakok és nézetek **?** gombja ennek a kézikönyvnek az arról szóló részét nyitja meg, új lapon; a teljes kézikönyv a **Fájl › Kézikönyv** alatt van.
 
 > **Tipp:** az **Egyszerű mód** (Fájl menü; bekapcsolva a fejlécben jelzés mutatja, arra kattintva kikapcsol) elrejti a haladó részeket, és a Problémák közül csak a hibákat mutatja. Tanuláshoz és tanításhoz jó kiindulás.
 
