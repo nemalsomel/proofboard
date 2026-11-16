@@ -47,6 +47,7 @@ export interface InteractHost {
   readonly cv: HTMLCanvasElement;
   readonly scroll: HTMLElement;
   toHole(ev: ScreenPt): HolePoint;
+  /** mérőpont kijelölése folyik: a kattintott lyukat átveszi (true: kezelte) */ pickHole?(h: HolePoint): boolean;
   boundsOf: BoundsOf;
   inb(r: number, c: number): boolean;
   partFits(p: PartInstance): boolean;
@@ -146,6 +147,7 @@ export function createInteraction(H: InteractHost): Interaction {
   function onDown(ev: ScreenPt, hAt?: HolePoint) {
     const D = H.D(), h = hAt || H.toHole(ev); ui.hover = h;
     if (ui.tool === 'pan') { ui.drag = { kind: 'pan', x: ev.clientX, y: ev.clientY }; cap(ev); return; }
+    if (H.pickHole && H.pickHole(h)) return;
     if (ui.sim) {
       const p = hitPart(D, H.boundsOf, h.rf, h.cf);
       if (!(p && H.hasPress(p))) { if (ui.tool === 'select') { ui.sel = p ? grp([p.id]) : null; H.renderLeft(); H.draw(); } return; }

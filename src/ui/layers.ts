@@ -11,7 +11,7 @@ import type { Netlist } from '../engine/netlist';
 import type { Hole, Note } from '../engine/types';
 import { plugColor } from './drawpart';
 import { fmt } from '../i18n/i18n';
-import type { BoardScene } from './drawboard';
+import type { BoardScene, MeterMarks } from './drawboard';
 
 /** A rétegek rajzolási segédjei (a `drawBoard` adja, a nézethez igazítva). */
 export interface Gfx {
@@ -143,3 +143,27 @@ export function drawLinkSel(S: BoardScene, g: Gfx, A: Netlist): void {
   ctx.restore();
 }
 
+
+/** Mérőműszerek: a feszültségszondák (zászló az értékkel) és a multiméterek csúcsai (piros / fekete, a műszer nevével). */
+export function drawMeters(S: BoardScene, g: Gfx, m: MeterMarks): void {
+  const { ctx, P } = S, { hx, hy, stext } = g;
+  ctx.save();
+  for (const t of m.tips) {
+    const x = hx(t.at[1]), y = hy(t.at[0]);
+    ctx.globalAlpha = t.dim ? 0.45 : 1;
+    ctx.fillStyle = t.color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, P * 0.3, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + P * 0.2, y - P * 0.2); ctx.lineTo(x + P * 0.62, y - P * 0.62); ctx.strokeStyle = t.color; ctx.lineWidth = P * 0.14; ctx.lineCap = 'round'; ctx.stroke();
+    stext(x + P * 0.7, y - P * 0.78, t.label, Math.max(9, P * 0.42), t.color, 'rgba(255,255,255,.9)');
+  }
+  ctx.globalAlpha = 1;
+  for (const p of m.probes) {
+    const x = hx(p.at[1]), y = hy(p.at[0]), txt = p.value ? `${p.label} ${p.value}` : p.label;
+    ctx.fillStyle = '#0b7285'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x, y - P * 0.34); ctx.lineTo(x + P * 0.3, y); ctx.lineTo(x, y + P * 0.34); ctx.lineTo(x - P * 0.3, y); ctx.closePath(); ctx.fill(); ctx.stroke();
+    // a felirat a szonda fölött, a nézet forgatásától függetlenül vízszintesen
+    const fs = Math.max(10, P * 0.5);
+    stext(x, y - P * 0.95, txt, fs, '#0b7285', 'rgba(255,255,255,.95)');
+  }
+  ctx.restore();
+}

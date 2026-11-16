@@ -27,6 +27,7 @@ import { BRIEF_MAX, emptyDesign, normalize } from '../engine/design';
 import { DEFS, hasPress, isMcu, isOff, penv, syncDefs } from '../engine/defs';
 import { placedPins, xf } from '../engine/geometry';
 import { simulateFor } from '../engine/headless';
+import { fmtReading, readingHint, readMeter } from '../engine/measure';
 import { linkStates, linkText } from '../engine/links';
 import { GPIO_MODES } from '../engine/mcu';
 import { analyze, layoutOf, type Netlist } from '../engine/netlist';
@@ -471,6 +472,38 @@ export const TOOLS: ToolDef[] = [
       for (const s of SIM.steppers) L.push(`${s.p.label}: step ${s.pos}, coils ${s.coils || '–'}`);
       if (prog) L.push(`Program after ${t} ms: ` + (prog.errors.size ? 'errors: ' + [...prog.errors.values()].join('; ') : 'ok'));
       return ok(L.join('\n') || 'Nothing to simulate (no powered parts).');
+    },
+  },
+  {
+    name: 'measure', mutates: false,
+    description: 'Measure like a multimeter: "voltage" between two points (to defaults to GND) with the simulation running, "current" flowing into a part through one of its pins (negative: flows out), "resistance" or "continuity" between two points on the unpowered circuit (resistors, motors and coils; semiconductors, capacitors and sources count as open). A point is a pin ("R1.2", "PICO1.GP15") or a hole "row:col". Optionally press buttons and run the program first (like simulate). Use it to debug: "why is the LED dark?" → measure the LED pins.',
+    input_schema: S.obj({
+      kind: { type: 'string', enum: ['voltage', 'current', 'resistance', 'continuity'], description: 'what to measure' },
+      at: S.str('red probe: pin ("R1.2") or hole ("12:5")'),
+      to: S.str('black probe: pin or hole (default GND; not used for current)'),
+      pressed: S.arr(S.str('button label'), 'buttons held down'),
+      time_ms: S.int('program run time in ms before measuring (default 0)'),
+    }, ['kind', 'at']),
+    run(ctx, i) {
+      const D = ctx.D();
+      const pt = (x: unknown): [number, number] | null | 'bad' => {
+        if (x == null || x === '') return null;
+        const sx = String(x).trim(), m = /^(\d+)\s*[:,]\s*(\d+)$/.exec(sx);
+        if (m) return [+m[1], +m[2]];
+        const pq = pinOf(D, sx); if (!pq || isOff(pq.p)) return 'bad';
+        return [pq.q.r, pq.q.c];
+      };
+      const red = pt(i.at), black = pt(i.to);
+      if (red === 'bad' || red == null) return err(`Unknown point "${String(i.at)}": use an on-board pin ("R1.2") or a hole ("row:col").`);
+      if (black === 'bad') return err(`Unknown point "${String(i.to)}".`);
+      const kind = String(i.kind), mode = kind === 'voltage' ? 'V' : kind === 'current' ? 'A' : kind === 'resistance' ? 'R' : 'C';
+      const labels = Array.isArray(i.pressed) ? i.pressed.map(str) : [], pressed = new Set<string>();
+      for (const l of labels) { const p = partOf(D, l); if (!p || !hasPress(p)) return err(`"${l}" is not a button.`); pressed.add(p.id); }
+      const live = mode === 'V' || mode === 'A';
+      const { A, SIM } = live ? simulateFor(D, { pressed, ms: num(i.time_ms) || 0 }) : { A: analyze(D), SIM: null };
+      const r = readMeter(D, A, SIM, { mode, red, black: black || null });
+      const hint = readingHint(r, en);
+      return ok(`${kind}: ${fmtReading(r, en)}${r.pin ? ` (pin ${r.pin})` : ''}${black ? '' : mode !== 'A' ? ' (black probe: GND)' : ''}${hint ? ' — ' + hint : ''}`);
     },
   },
   {

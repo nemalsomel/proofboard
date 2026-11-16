@@ -1073,3 +1073,38 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .mf-org{display:inline-flex;align-items:center;gap:6px}
 .mf-dtab .mf-tbl td.near{color:var(--fg);font-weight:600}
 .mf-dtab .mf-tbl td.n:not(.near){color:var(--muted)}
+
+/* ---------- Mérőműszerek (ui/meters.ts) ---------- */
+.mtr{display:flex;flex-direction:column;gap:var(--sp-2)}
+.mtr-bar{display:flex;gap:var(--sp-2);flex-wrap:wrap}
+.mtr-card{border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);padding:8px 10px 10px;display:flex;flex-direction:column;gap:6px}
+.mtr-head{display:flex;align-items:center;gap:6px;min-height:28px}
+.mtr-head .sp,.mtr-tip .sp,.mtr-away .sp,.mtr-probes .sp{flex:1}
+.mtr-head .btn.icon{padding:3px;min-width:26px}
+.mtr-name{font:600 13px var(--mono)}
+.mtr-disp{background:#1d2a24;color:#d8f5c8;border-radius:8px;padding:8px 12px;text-align:right;font:600 26px/1.15 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:.02em;box-shadow:inset 0 1px 3px rgba(0,0,0,.35)}
+.mtr-card.cont .mtr-disp{background:#164a2c;color:#b9f6ca}
+.mtr-card.neg .mtr-val{color:#ffd8a8}
+.mtr-hint{margin:0;min-height:1em;font-size:11.5px}
+.mtr-modes{align-self:stretch;display:flex}.mtr-modes .btn{flex:1;font-family:var(--mono)}
+.mtr-tips{display:flex;flex-direction:column;gap:4px}
+.mtr-tip{display:flex;align-items:center;gap:6px;font-size:12.5px}
+.mtr-tip code{font:12px var(--mono);color:var(--muted)}
+.mtr-tip .btn{padding:2px 8px;font-size:12px}
+.mtr-dot{width:10px;height:10px;border-radius:50%;flex:none;box-shadow:0 0 0 1.5px #fff,0 0 0 2.5px rgba(0,0,0,.2)}
+.mtr-dot.red{background:#e03131}.mtr-dot.black{background:#212529}
+.mtr-away,.mtr-probes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.mtr-away li,.mtr-probes li{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;font-size:12.5px}
+.mtr-away li:hover,.mtr-probes li:hover{background:var(--accent-soft)}
+.mtr-away .btn,.mtr-probes .btn{padding:2px 6px;font-size:12px}
+.mtr-probes code{font:12px var(--mono);color:var(--muted)}
+.mtr-pdot{width:9px;height:9px;transform:rotate(45deg);background:#0b7285;flex:none}
+.mtr-pv{font:600 12.5px var(--mono);font-variant-numeric:tabular-nums}
+.mtr-legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mtr-scale{display:inline-block;width:90px;height:9px;border-radius:5px;background:linear-gradient(90deg,hsl(215,78%,50%),hsl(120,78%,50%) 40%,hsl(25,78%,50%) 66%,hsl(0,78%,50%))}
+.mtr-win{position:absolute;z-index:14;width:260px;box-shadow:var(--shadow-3,0 8px 28px rgba(0,0,0,.22));border-radius:var(--r-md)}
+.mtr-win .mtr-head{cursor:grab}.mtr-win.dragging{opacity:.85}.mtr-win.dragging .mtr-head{cursor:grabbing}
+.mtr-win.snap{outline:2px dashed var(--accent);outline-offset:3px}
+body.picking #cv{cursor:crosshair!important}
+.mtr-away li,.mtr-probes li{flex-wrap:wrap}.mtr-away .btn,.mtr-probes .btn,.mtr-tip .btn,.mtr-pv{white-space:nowrap}
+.mtr-away li>span.small{flex:1 1 auto;min-width:0}

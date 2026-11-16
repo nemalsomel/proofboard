@@ -48,6 +48,8 @@ export interface SimResult {
   bjts: SimBjt[]; motors: SimMotor[]; servos: SimServo[]; logics: SimLogic[]; steppers: SimStepper[];
   /** PWM-kimenetek a hálózatuk szerint. */
   pwm?: Map<number, PwmPin>;
+  /** Lábáramok: az alkatrészbe a lábán befolyó áram (A), kulcs `alkatrész.láb` (a mérőműszerekhez). */
+  pinI?: Map<string, number>;
 }
 
 /* ---------- állapot a szimulációk között ---------- */
@@ -161,8 +163,10 @@ const SIM_LISTS = ['leds', 'picos', 'gpios', 'bats', 'srcI', 'fets', 'caps', 'bj
 export function mergeSims(runs: ReadonlyArray<{ w: number; o: SimResult }>): SimResult {
   if (runs.length === 1) return runs[0].o;
   const o0 = runs[0].o, out: SimResult = { ...o0, netV: new Map(), floating: new Set() };
+  out.pinI = new Map();
   for (const { w, o } of runs) {
     for (const [k, v] of o.netV) out.netV.set(k, (out.netV.get(k) || 0) + w * v);
+    if (o.pinI) for (const [k, v] of o.pinI) out.pinI.set(k, (out.pinI.get(k) || 0) + w * v);
     for (const k of o.floating) out.floating.add(k);
   }
   for (const name of SIM_LISTS) {
@@ -403,6 +407,36 @@ export function simulate1(D: Design, A: Netlist, high: Set<string> | null): SimR
       const e = els.find(x => x.kind === 'gout' && x.ref === g);
       out.gpios.push({ p: pc.p, q: g.q, mode: g.mode, V: V[g.node] - V[pc.gnd], I: e ? -cur(e) : 0, float: !reach[g.node], powered: pc.reg });
     }
+  }
+  out.pinI = pinCurrents(D, A, idx, els, cur);
+  return out;
+}
+
+/** Az ág tulajdonos alkatrésze (a modell-elem `p`-je, a GPIO-ág lába, a logikai kimenet lába szerint). */
+function ownerOf(ref: unknown): string | null {
+  if (!ref || typeof ref !== 'object') return null;
+  const r = ref as { p?: { id?: string }; q?: { part?: { id?: string } }; pin?: { part?: { id?: string } } };
+  return r.p?.id ?? r.q?.part?.id ?? r.pin?.part?.id ?? null;
+}
+/**
+ * Lábáramok: minden alkatrészre a saját ágainak árama a lábai csomópontjaiban (a lábon befolyó áram, A).
+ * Ha egy alkatrész több lába ugyanazon a hálózaton van (pl. több GND), az áram köztük egyenlően oszlik.
+ */
+function pinCurrents(D: Design, A: Netlist, idx: Map<number | string, number>, els: readonly El[], cur: (e: El) => number): Map<string, number> {
+  const byPart = new Map<string, Map<number, number>>();
+  for (const e of els) {
+    const id = ownerOf(e.ref); if (!id) continue;
+    let m = byPart.get(id); if (!m) byPart.set(id, (m = new Map()));
+    const i = cur(e);
+    if (e.a >= 0) m.set(e.a, (m.get(e.a) || 0) + i);
+    if (e.b >= 0) m.set(e.b, (m.get(e.b) || 0) - i);
+  }
+  const out = new Map<string, number>();
+  for (const p of D.parts) {
+    const bp = A.byPart.get(p.id), m = byPart.get(p.id); if (!bp) continue;
+    const per = new Map<number, string[]>();
+    for (const q of bp.pins) { const k = idx.get(q.net); if (k == null) continue; const l = per.get(k) || []; l.push(q.id); per.set(k, l); }
+    for (const [k, ids] of per) for (const id of ids) out.set(p.id + '.' + id, ((m && m.get(k)) || 0) / ids.length);
   }
   return out;
 }

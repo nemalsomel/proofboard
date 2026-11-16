@@ -5,7 +5,7 @@
  * kapcsolati vonalak, kapcsolatkiemelés) a `ui/layers.ts`-ben.
  */
 import { makePainter, rgba } from './drawpart';
-import { drawLinkSel, drawNotes, drawPlugs, drawRats, type Gfx } from './layers';
+import { drawLinkSel, drawMeters, drawNotes, drawPlugs, drawRats, type Gfx } from './layers';
 import type { LinkState } from '../engine/links';
 import type { Tr } from '../i18n/i18n';
 import { applyRotation } from './viewport';
@@ -54,6 +54,11 @@ export interface BoardScene {
   /** a kapcsolatok állapota (bekötve-e) a kapcsolati vonalakhoz */ linkState: Map<string, LinkState>;
   /** a kapcsolatkiemelés netlistája (szimuláció közben is a nyugalmi) */ linkA?: Netlist;
   /** fordító a vászon feliratához */ tr?: Tr;
+  /** mérőműszerek a panelen: feszültségszondák az értékükkel, a multiméterek csúcsai */ meters?: MeterMarks | null;
+}
+export interface MeterMarks {
+  probes: Array<{ at: readonly [number, number]; label: string; value: string }>;
+  tips: Array<{ at: readonly [number, number]; color: string; label: string; dim: boolean }>;
 }
 
 /**
@@ -245,6 +250,7 @@ export function drawBoard(S: BoardScene): void {
   if (S.tool === 'wire' && S.wireStart) ring(S.wireStart[0], S.wireStart[1], acc);
   drawRats(S, G, A);
   drawLinkSel(S, G, S.linkA || A);
+  if (S.meters) drawMeters(S, G, S.meters);
   if (S.linkStart) {
     const q = S.findPin(S.linkStart);
     if (q) { ring(q.r, q.c, acc, P * 0.55, 3); if (hv) { ctx.setLineDash([4, 4]); ctx.strokeStyle = acc; ctx.lineWidth = 2; line(hx(q.c), hy(q.r), hx(hv.c), hy(hv.r)); ctx.setLineDash([]); } }

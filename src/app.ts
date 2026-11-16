@@ -13,6 +13,9 @@ import { type Command, commandFor, fmtKey } from './ui/commands';
 import { type PalItem, mountPalette } from './ui/palette';
 import { mountImportDialog } from './ui/codeimpdlg';
 import { mountMfgView } from './ui/mfgview';
+import { mountMeters, type MetersView } from './ui/meters';
+import { fmtReading, probeVoltage, readMeter } from './engine/measure';
+import type { ProbeAt } from './engine/types';
 import { printHtml, type PrintOpts } from './ui/mfgprint';
 import { assembly as mfgAssembly, bom as mfgBom, marks as mfgMarks } from './engine/manufacture';
 import { sheetSvg } from './engine/mfgsheet';
@@ -97,6 +100,8 @@ const SIM_TOOLS=new Set(['select','pan']);
 
 /* ---------- Állapot ---------- */
 let D: Design, A0: Netlist, AS: Netlist, SIM: SimResult|null, ISSUES: Issue[]=[];
+/** a mérőműszerek (a felület felépítése után jön létre) */
+let MTR: MetersView|null=null;
 const ui: UiState={stub:false,hoverWire:-1,phase:{},anim:false,tool:'select',view:'comp',zoom:1,sim:false,hover:null,sel:null,placing:null,ghost:{rot:0,mir:false},wireStart:null,drag:null,pressed:{},holdPtr:new Map(),flash:null,wireColor:'#1c7ed6',confirmClear:0,linkStart:null,hideAuto:null,rats:false,xray:false,selLink:null,linkState:new Map()};
 
 /* ---------- Geometria ---------- */
@@ -168,7 +173,7 @@ function centerView(){const sc=$('#scroll');sc.scrollLeft=cv.offsetLeft+cv.offse
 function homeView(){const sc=$('#scroll'),W=cv.offsetWidth,m=Math.max(0,M-36);
   sc.scrollLeft=W<=sc.clientWidth?cv.offsetLeft+W/2-sc.clientWidth/2:cv.offsetLeft+m;sc.scrollTop=cv.offsetTop+m;}
 /** A rajz villogtatás közben a pillanatnyi szimulációt mutatja. */
-function draw(){const keep=SIM;if(ui.sim&&ui.blinkSim)SIM=ui.blinkSim;try{draw0();}finally{SIM=keep;}}
+function draw(){const keep=SIM;if(ui.sim&&ui.blinkSim)SIM=ui.blinkSim;try{draw0();if(MTR)MTR.sync();}finally{SIM=keep;}}
 /** A panel rajza: ui/drawboard.ts; itt csak a pillanatnyi állapot összeállítása. */
 function draw0(){
   if(!D||!A0)return;
@@ -184,7 +189,7 @@ function draw0(){
     stub:!!ui.stub,hoverWire:ui.hoverWire,selLink:ui.selLink||null,rats:!!ui.rats,autoHidden,cutAt,selCut:ct=>IA.isSelCut(ct),
     wireStart:ui.wireStart||null,wireColor:ui.wireColor,linkStart:ui.linkStart||null,progHi:ui.progHi||null,findPin,
     flash:ui.flash||null,box:ui.drag&&ui.drag.kind==='box'?{h0:ui.drag.h0,h1:ui.drag.h1}:null,
-    selNote:ui.sel&&ui.sel.kind==='note'?ui.sel.id:null,linkState:PV?PV.linkState:ui.linkState,linkA:PV?PV.A:A0,tr});
+    selNote:ui.sel&&ui.sel.kind==='note'?ui.sel.id:null,linkState:PV?PV.linkState:ui.linkState,linkA:PV?PV.A:A0,tr,meters:PV||!MTR?null:MTR.marks()});
 }
 /* Rövid vezeték nézet (ui/drawboard.ts rajzolja): a találatvizsgálathoz kell, látszik-e a teljes vonal. */
 const stubOf=(w: Wire)=>stubOfW(w,!!ui.stub);
@@ -227,7 +232,7 @@ function toggleCut(ct: Cut){const D0=D;if((D0.cuts||[]).some(x=>sameCut(x,ct))){
 function addNote(h: HolePoint){pushUndo();const n=OPS.addNote(D,Math.round(h.rf),Math.round(h.cf),tr('Jegyzet')+'\n'+tr('Írd ide a leírást…'),NOTE_COL[0][0]);ui.sel={kind:'note',id:n.id};setTool('select');commit(true);setTimeout(()=>{const t=$('#nText');if(t){t.focus();t.select();}},0);}
 let hintTimer: ReturnType<typeof setTimeout>|undefined;function flashHint(m: string){const s=$('#status');s.textContent=m;clearTimeout(hintTimer);hintTimer=setTimeout(status,1800);}
 /* A panel interakciója (egér, érintés, pásztázás): ui/interact.ts; itt csak a gazda műveletei. */
-const IA=createInteraction({ui,D:()=>D,cv,scroll:$('#scroll'),toHole,boundsOf,inb,partFits,ghostPart,offPinAt,hitPin,hitWire,addBridge,hasPress,isOff,attachPlug,
+const IA=createInteraction({ui,D:()=>D,cv,scroll:$('#scroll'),toHole,pickHole,boundsOf,inb,partFits,ghostPart,offPinAt,hitPin,hitWire,addBridge,hasPress,isOff,attachPlug,
   placed:t=>{useInProject(t);libRecent(t);},nextLabel,cutKind:()=>cutKind(),pushUndo,dropUndo:()=>HIST.drop()??null,restoreSnap,commit,recompute,save,renderLeft,draw,status,setTool,addNote,addLink,removeParts,movedLinks,
   flashMsg,flashHint,P:()=>P,resize,toScreen,hx:c=>hx(c),hy:r=>hy(r),sheetOpen:()=>sheetOpen(),closeSheet:()=>sheet(''),NEXT});
 IA.attach();
@@ -288,7 +293,7 @@ ui.stub=!!uiPref().stub;$('#vStub').classList.toggle('on',ui.stub);
 $('#vStub').onclick=()=>{ui.stub=!ui.stub;$('#vStub').classList.toggle('on',ui.stub);uiPrefSet({stub:ui.stub});draw();};
 /* bal oldali sáv: Szerkesztés (eszközök, kijelölés) / Alkatrészek (könyvtár) */
 /* bal oldali sáv: az alkatrészkönyvtár (a régi Szerkesztés fül tartalma az eszközsávba és a lebegő ablakba költözött) */
-function ltab(name: string){ui.ltab=name==='props'?'props':'lib';
+function ltab(name: string){ui.ltab=name==='props'?'props':name==='meters'?'meters':'lib';
   $$('[data-ltab]').forEach(b=>{const on=b.dataset.ltab===ui.ltab;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));});
   $$('[data-lpane]').forEach(p=>{p.hidden=p.dataset.lpane!==ui.ltab;});
   $$('[data-rail-ltab]').forEach(b=>b.classList.toggle('on',b.dataset.railLtab===ui.ltab));}
@@ -297,6 +302,8 @@ ui.ltab='lib';
 function setSim(on: boolean){if(on&&!ui.sim){LSTATE.clear();STSTATE.clear();if(LAY_S.cur!=='sim'){ui.layBack=LAY_S.cur;applyLayout('sim',true,{work:(ui.work||'board') as Work});}else ui.layBack=null;log(tr('Szimuláció elindítva.'));}
   else if(!on&&ui.sim){if(ui.layBack&&LAY_S.cur==='sim')applyLayout(ui.layBack);ui.layBack=null;log(tr('Szimuláció leállítva.'));}
   ui.sim=on;if(!on){ui.pressed={};ui.holdPtr.clear();}ui.wireStart=null;ui.placing=null;simBtn();
+  // a fülre rögzített (nem rejtett) műszerek a szimuláció alatt is látszanak: a bal sáv a Műszerek fülön nyitva (a beállított elrendezés nem változik)
+  if(on&&!MOB.matches&&(D.meters||[]).some(m=>!m.hidden&&!m.win)){ltab('meters');sideCollapse('l',false,false);}
   progStart(on);
   recompute();if(on&&ui.prog)progTick(0);renderLeft();if(PE&&ui.work!=='board'){progLiveAt=0;PE.live();}}
 /* ---------- Program futtatása: ütemenként kiértékel, és ha a GPIO-beállítások változnak, újraszámol ---------- */
@@ -843,6 +850,16 @@ const MFG=mountMfgView({design:()=>D,tr,title:mfgTitle,
   save(k,done){try{if(done.length)localStorage.setItem(MFGKEY+k,JSON.stringify(done));else localStorage.removeItem(MFGKEY+k);}catch(e){}},
 });
 $('#mfgView').appendChild(MFG.el);
+/* ---------- Mérőműszerek (bal sáv, Műszerek fül; ui/meters.ts, engine/measure.ts) ---------- */
+/** mérőpont kijelölése a panelen: a következő kattintás egy lyukra (Esc: mégse) */
+let PICK: {done: (at: ProbeAt|null)=>void}|null=null;
+function pickEnd(at: ProbeAt|null){const p=PICK;PICK=null;document.body.classList.remove('picking');if(p)p.done(at);draw();}
+function pickHole(h: {r: number; c: number}){if(!PICK)return false;pickEnd(inb(h.r,h.c)?[h.r,h.c]:null);return true;}
+MTR=mountMeters({design:()=>D,tr,live:()=>({A:(ui.sim?AS:A0)!,sim:ui.sim?SIM||null:null}),
+  change:(fn,undo)=>{if(undo!==false)pushUndo();fn(D);if(undo===false){save();draw();}else commit(true);},
+  pick:(msg,done)=>{if(PICK)PICK.done(null);PICK={done};document.body.classList.add('picking');toast(msg);if(MOB.matches)sheet('');},
+  area:$('#carea'),showTab:()=>{ltab('meters');sideCollapse('l',false);},compact:()=>MOB.matches});
+$('#lpMeters').appendChild(MTR.el);
 /** A méretrajzon méretezett elemek (a Gyártás nézetben elemenként kapcsolható, tervenként megmarad). */
 function mfgDimShow(){let over: string[]=[];try{const v=JSON.parse(localStorage.getItem(MFGKEY+'dim:'+(D.id||'local'))||'[]');if(Array.isArray(v))over=v.map(String);}catch(e){}return shownItems(dimItems(D),over);}
 /** A Gyártás nézet a középen (a Gyártás elrendezésben); a panel szerkesztése közben szünetel. */
@@ -1133,6 +1150,9 @@ $('#bMcp').onclick=()=>{closeMenu();MCPP.open();};
   mfg:()=>({bom:mfgBom(D,tr),steps:mfgAssembly(D,tr),marks:mfgMarks(D)}),mfgSheet:side=>sheetSvg(D,{side,tr,title:mfgTitle()}).svg,
   mfgPrintHtml:(o={})=>mfgPrintHtml({comp:true,cu:true,bom:true,steps:true,dims:true,dimShow:[...mfgDimShow()],dimMode:MFG.dimMode().mode,dimOrigin:MFG.dimMode().origin,dimTo:MFG.dimMode().to,...o}),mfgTab:t=>MFG.tab(t==='bom'||t==='asm'||t==='dims'||t==='sheets'?t:undefined),
   mfgDims:(mode,origin,to)=>{if(mode)MFG.dimMode(mode,origin,to);const items=dimItems(D),show=mfgDimShow(),m=MFG.dimMode(),o={show,mode:m.mode,origin:m.origin,to:m.to,tr};return{items,shown:[...show],mode:m.mode,origin:m.origin,to:m.to,svg:dimSvg(D,{...o,title:mfgTitle()}).svg,dxf:dimDxf(D,o)};},mfgZoom:()=>MFG.zoom(),
+  meters:()=>{const A=(ui.sim?AS:A0)!,sim=ui.sim?SIM||null:null;return(D.meters||[]).map(m=>{const r=readMeter(D,A,sim,m);return{id:m.id,name:m.name,mode:m.mode,red:m.red,black:m.black,hidden:!!m.hidden,floating:!!m.win&&!m.hidden&&!MOB.matches,text:fmtReading(r,tr),value:r.value,status:r.status,cont:!!r.cont};});},
+  holeXY:(r,c)=>{const rc=cv.getBoundingClientRect(),cc=cu()?D.board.cols-1-c:c,[x,y]=toScreen(M+(cc+0.5)*P,M+(r+0.5)*P);return{x:rc.left+x,y:rc.top+y};},
+  probes:()=>{const A=(ui.sim?AS:A0)!,sim=ui.sim?SIM||null:null;return(D.probes||[]).map(p=>({id:p.id,at:p.at,v:probeVoltage(D,A,sim,p.at)}));},
   commands:()=>CMDS.map(c=>({id:c.id,label:cmdLabel(c),group:tr(c.group),keys:c.keys||[],enabled:!c.enabled||c.enabled(),hidden:!!c.hidden&&c.hidden()})),
   importCode:(code,o={})=>{const r=importCodeOf(D,code,{lang:o.lang,tr});if(o.apply!==false&&r.program.nodes.length)applyCodeImport(r,o.mode||'replace');return{lang:r.lang,blocks:r.program.nodes.length,summary:r.summary,notes:r.notes};},
   runCommand:id=>{const c=CMDS.find(x=>x.id===id);if(!c||(c.enabled&&!c.enabled())||(c.hidden&&c.hidden()))return false;c.run();return true;},
@@ -1147,7 +1167,7 @@ function btnCmd(id: string,label: string,group: string,o: Partial<Command>={}): 
     hidden:()=>{const b=btnEl(id);return !b||b.hidden||(isSimple()&&!!b.closest('[data-adv]'));},...o};}
 const notSim=()=>!ui.sim;
 const RTABS: Array<[string,string]>=[['props',N_('Tulajdonságok')],['design',N_('Kapcsolatok')],['sim',N_('Szimuláció')],['code',N_('Kód')],['agent',N_('Agent')]];
-function escSel(){ui.placing=null;ui.wireStart=null;ui.sel=null;if(ui.selLink){ui.selLink=null;renderLinks();}renderLeft();draw();status();}
+function escSel(){if(PICK){pickEnd(null);return;}ui.placing=null;ui.wireStart=null;ui.sel=null;if(ui.selLink){ui.selLink=null;renderLinks();}renderLeft();draw();status();}
 function focusLib(){if(sideCollapse('l',false,false)===null){/* még nincs bekötve */}ltab('lib');if(MOB.matches)sheet('left');const i=$('#libSearch');i.focus();i.select();}
 const G={file:N_('Fájl'),edit:N_('Szerkesztés'),tool:N_('Eszközök'),view:N_('Nézet'),pane:N_('Panelek és fülek'),route:N_('Bekötés'),prog:N_('Program'),sim:N_('Szimuláció'),set:N_('Beállítások'),help:N_('Súgó')};
 const CMDS: Command[]=[
@@ -1176,6 +1196,9 @@ const CMDS: Command[]=[
   {id:'rot',label:N_('Forgatás'),group:G.edit,keys:['R'],target:'#pRot,#gRot',words:'rotate',enabled:notSim,run:()=>rotate()},
   {id:'mir',label:N_('Tükrözés'),group:G.edit,keys:['M'],target:'#pMir,#gMir',words:'mirror flip',enabled:notSim,run:()=>mirror()},
   btnCmd('bNewPart',N_('Új alkatrész'),G.edit,{words:'new custom part editor'}),
+  {id:'meterAdd',label:N_('Új multiméter'),group:G.sim,words:'multimeter meter voltage current resistance continuity measure műszer mérés',run:()=>{if(MTR){MTR.addMeter();ltab('meters');sideCollapse('l',false);}}},
+  {id:'probeAdd',label:N_('Új feszültségszonda'),group:G.sim,words:'probe voltage measure szonda mérés',run:()=>{if(MTR)MTR.addProbe();}},
+  {id:'tabMeters',label:N_('Műszerek fül'),group:G.pane,words:'meters instruments tab műszerek',run:()=>{ltab('meters');sideCollapse('l',false);if(MOB.matches)sheet('left');}},
   {id:'libSearch',label:N_('Keresés az alkatrészek között'),group:G.edit,keys:['/'],target:'#libSearch',words:'library search parts find',run:focusLib},
   ...TOOLS.map(([id,l,k]): Command=>({id:'tool.'+id,label:l,group:G.tool,keys:[k],words:'tool',run:()=>setTool(id),
     enabled:()=>!ui.sim||SIM_TOOLS.has(id),hidden:()=>isSimple()&&ADV_TOOLS.has(id),checked:()=>ui.tool===id&&!ui.placing})),

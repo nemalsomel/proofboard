@@ -42,6 +42,24 @@ export interface Design {
   seq: number;
   /** Program (csomópontos adatfolyam), a szimuláció futás közben ebből kapja a GPIO-állapotokat. */
   program?: Program;
+  /** Feszültségszondák: lyukak, amelyeken a szimuláció alatt a feszültség látszik. */
+  probes?: Probe[];
+  /** Mérőműszerek (multiméter): a mérőcsúcsok helye és a mód a terv része. */
+  meters?: Meter[];
+}
+
+/** Mérőpont: egy lyuk (sor, oszlop). */
+export type ProbeAt = [number, number];
+/** Feszültségszonda a panelen. */
+export interface Probe { id: string; at: ProbeAt }
+/** Multiméter módja: feszültség, áram (a piros csúcs alatti lábon), ellenállás, szakadásvizsgálat. */
+export type MeterMode = 'V' | 'A' | 'R' | 'C';
+/** Multiméter: a piros és a fekete csúcs helye (null: nincs letéve; a fekete null-ja a GND), lebegő ablakban vagy a Műszerek fülön. */
+export interface Meter {
+  id: string; name: string; mode: MeterMode;
+  red: ProbeAt | null; black: ProbeAt | null;
+  /** elrejtve: az ablak nem látszik, a csúcsok a panelen maradnak */ hidden?: boolean;
+  /** lebegő ablak helye a vászonterület bal felső sarkától (px); null: a Műszerek fülön */ win?: { x: number; y: number } | null;
 }
 
 /** Elhelyezett láb: panel-koordinátákkal és az alkatrésszel. */

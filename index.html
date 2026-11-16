@@ -78,13 +78,16 @@
     <div class="rtabs ltabs" role="tablist" aria-label="Bal oldali panel">
       <button class="rtab" role="tab" data-ltab="props" aria-selected="false" aria-controls="lpProps" hidden>Tulajdonságok</button>
       <button class="rtab on" role="tab" data-ltab="lib" aria-selected="true" aria-controls="lpLib">Alkatrészek</button>
+      <button class="rtab" role="tab" data-ltab="meters" aria-selected="false" aria-controls="lpMeters">Műszerek</button>
     </div>
     <div class="rail" id="railL" role="toolbar" aria-label="Bal oldalsáv (összecsukva)">
       <button class="rail-btn" data-expand="l" title="Kinyitás ( [ )" aria-label="Bal oldalsáv kinyitása">»</button>
       <button class="rail-btn" data-rail-ltab="props" title="Tulajdonságok" aria-label="Tulajdonságok" data-icon="edit" hidden></button>
       <button class="rail-btn" data-rail-ltab="lib" title="Alkatrészek" aria-label="Alkatrészek" data-icon="parts"></button>
+      <button class="rail-btn" data-rail-ltab="meters" title="Műszerek" aria-label="Műszerek" data-icon="meter"></button>
     </div>
     <div class="rpane" id="lpProps" data-lpane="props" role="tabpanel" hidden></div>
+    <div class="rpane" id="lpMeters" data-lpane="meters" role="tabpanel" hidden></div>
     <div class="rpane" id="lpLib" data-lpane="lib" role="tabpanel">
       <section>
       <div class="lib-search"><input type="search" id="libSearch" placeholder="Keresés: név, láb, funkció (pl. i2c, adc, motor)" aria-label="Alkatrész keresése" autocomplete="off"></div>

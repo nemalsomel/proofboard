@@ -6,7 +6,7 @@ import { PARTS } from '../parts/builtin';
 import type { Cut } from './board';
 import { DEFS, libraryParts, syncDefs } from './defs';
 import { normProgram, signalToProgram } from './program';
-import type { AutoBridge, Bridge, Design, Hole, Link, Note, Wire } from './types';
+import type { AutoBridge, Bridge, Design, Hole, Link, Meter, Note, Probe, ProbeAt, Wire } from './types';
 
 
 /** Jegyzetszínek: [szín, név]. */
@@ -69,6 +69,7 @@ export function normalize(d: unknown): Design {
   if (typeof r.id === 'string' && /^[\w-]{4,64}$/.test(r.id)) o.id = r.id;
   if (typeof r.brief === 'string' && r.brief.trim()) o.brief = r.brief.slice(0, BRIEF_MAX);
   { const pg = normProgram(r.program); if (pg && pg.nodes.length) o.program = pg; }
+  { const pr = normProbes(r.probes, o.board); if (pr.length) o.probes = pr; const mt = normMeters(r.meters, o.board); if (mt.length) o.meters = mt; }
   if (r.signal && typeof r.signal === 'object') {
     const s = r.signal as Raw;
     // a régi Jelsorozat programmá alakul (Sorozat blokk, ütemadóval és kimenetekkel)
@@ -116,4 +117,28 @@ export function mergeCustomParts(mine0: Record<string, PartDef>, inc: Record<str
     renamed.push(def.name);
   }
   return { parts: { ...mine, ...inc }, renamed };
+}
+
+/** Mérőpont beolvasása: [sor, oszlop] a panelen belül, különben null. */
+function normAt(x: unknown, b: { rows: number; cols: number }): ProbeAt | null {
+  if (!Array.isArray(x) || x.length < 2) return null;
+  const r = Math.round(+x[0]), c = Math.round(+x[1]);
+  return isFinite(r) && isFinite(c) && r >= 0 && c >= 0 && r < b.rows && c < b.cols ? [r, c] : null;
+}
+function normProbes(x: unknown, b: { rows: number; cols: number }): Probe[] {
+  if (!Array.isArray(x)) return [];
+  const out: Probe[] = [];
+  for (const [i, p] of x.entries()) { const at = p && normAt((p as Raw).at, b); if (at) out.push({ id: String((p as Raw).id || 'pr' + (i + 1)).slice(0, 40), at }); }
+  return out.slice(0, 64);
+}
+function normMeters(x: unknown, b: { rows: number; cols: number }): Meter[] {
+  if (!Array.isArray(x)) return [];
+  const out: Meter[] = [];
+  for (const [i, m0] of x.entries()) {
+    if (!m0 || typeof m0 !== 'object') continue;
+    const m = m0 as Raw, mode = (['V', 'A', 'R', 'C'] as const).find(k => k === m.mode) || 'V';
+    const w = m.win && typeof m.win === 'object' && isFinite(+m.win.x) && isFinite(+m.win.y) ? { x: Math.round(+m.win.x), y: Math.round(+m.win.y) } : null;
+    out.push({ id: String(m.id || 'm' + (i + 1)).slice(0, 40), name: String(m.name || 'M' + (i + 1)).slice(0, 24), mode, red: normAt(m.red, b), black: normAt(m.black, b), ...(m.hidden ? { hidden: true } : {}), ...(w ? { win: w } : {}) });
+  }
+  return out.slice(0, 16);
 }

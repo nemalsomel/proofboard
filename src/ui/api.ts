@@ -48,6 +48,8 @@ export interface ApiSwap { dropped: string[]; fits: boolean; msg: string }
 export interface ApiExample { id: string; cat: string; title: string }
 
 /** A `window.pcb` felülete. A címke (`label`) az alkatrész neve a tervben (pl. „R1”, „PICO1”). */
+export interface ApiMeter { id: string; name: string; mode: string; red: [number, number] | null; black: [number, number] | null; hidden: boolean; floating: boolean; text: string; value: number | null; status: string; cont: boolean }
+export interface ApiProbe { id: string; at: [number, number]; v: number | null }
 export interface ApiMfg { bom: Bom; steps: AsmStep[]; marks: Marks }
 export interface ApiMfgPrint { comp: boolean; cu: boolean; bom: boolean; steps: boolean; dims: boolean; dimShow: string[]; dimMode: DimMode; dimOrigin: string | null; dimTo: DimTo }
 export interface ApiDims { items: DimItem[]; shown: string[]; mode: DimMode; origin: string | null; to: DimTo; svg: string; dxf: string }
@@ -133,6 +135,9 @@ export interface PcbApi {
   /** A Gyártás nézet füle: 'bom' | 'asm' | 'dims' | 'sheets'. */ mfgTab(t?: string): string;
   /** Méretrajz: az elemek (mm, a bal alsó saroktól), a méretezettek és a méretezés módja (a Gyártás nézet beállítása; `mode` megadásával átállítja: 'gap' | 'chain' | 'edge' | 'ord', `origin`: elem az 'ord'-hoz, `to`: 'body' – a test széléig – vagy 'center'), SVG és DXF. */ mfgDims(mode?: DimMode, origin?: string | null, to?: DimTo): ApiDims;
   /** A Gyártás nézetben látható rajzok nagyítása (1 = az egész rajz). */ mfgZoom(): number[];
+  /** A multiméterek a leolvasásukkal (a terv `meters`-e; V és A csak futó szimulációban). */ meters(): ApiMeter[];
+  /** A feszültségszondák és a feszültségük (futó szimulációban; lebegő pont: null). */ probes(): ApiProbe[];
+  /** Egy lyuk közepe a képernyőn (kliens-koordináta, px) – kattintáshoz a tesztekben. */ holeXY(r: number, c: number): { x: number; y: number };
   /** A parancsok (a palettán és a billentyűkhöz): azonosító, név, csoport, billentyűk, elérhető-e, rejtett-e. */ commands(): ApiCommand[];
   /** Parancs végrehajtása azonosító szerint; ha nincs vagy nem elérhető, false. */ run(id: string): boolean;
   readonly version: string;
@@ -184,7 +189,7 @@ export interface ApiHost {
   shareLink(): Promise<string>;
   commands(): ApiCommand[]; runCommand(id: string): boolean;
   importCode(code: string, o?: ApiImportOpts): ApiImport;
-  mfg(): ApiMfg; mfgSheet(side: 'comp' | 'cu'): string; mfgPrintHtml(o?: Partial<ApiMfgPrint>): string; mfgTab(t?: string): string; mfgDims(mode?: DimMode, origin?: string | null, to?: DimTo): ApiDims; mfgZoom(): number[];
+  mfg(): ApiMfg; mfgSheet(side: 'comp' | 'cu'): string; mfgPrintHtml(o?: Partial<ApiMfgPrint>): string; mfgTab(t?: string): string; mfgDims(mode?: DimMode, origin?: string | null, to?: DimTo): ApiDims; mfgZoom(): number[]; meters(): ApiMeter[]; probes(): ApiProbe[]; holeXY(r: number, c: number): { x: number; y: number };
   readonly version: string;
 }
 
@@ -313,6 +318,9 @@ export function createApi(H: ApiHost): PcbApi {
     mfgTab(t) { return H.mfgTab(t); },
     mfgDims(mode, origin, to) { return H.mfgDims(mode, origin, to); },
     mfgZoom() { return H.mfgZoom(); },
+    meters() { return H.meters(); },
+    probes() { return H.probes(); },
+    holeXY(r, c) { return H.holeXY(r, c); },
     run(id) { return H.runCommand(id); },
     version: H.version,
   };
