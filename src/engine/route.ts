@@ -12,6 +12,7 @@ import { findPin, partGroups } from './links';
 import { fnCaps, fnPenalty, gpioFits, gpioPenalty, hasCap, mcuMux } from './mcu';
 import { layoutOf, type Netlist } from './netlist';
 import { plugAlias } from './plug';
+import { keepout } from './backside';
 import type { AutoBridge, Bridge, Design, Hole, Link, PlacedPin, Wire } from './types';
 
 /** Csíkos panelen (teljes csík) alapból automatikus a vágás. */
@@ -67,6 +68,8 @@ export function route(D: Design, opts: RouteOpts = {}): void {
     D.auto.cuts = suggestCuts(D);
     if (JSON.stringify(D.auto.cuts) !== before) opts = { ...opts, full: true };
   } else D.auto.cuts = [];
+  // rézoldali alkatrész teste alá került automatikus híd: eldobva, a kapcsolata újra bekötődik
+  { const KO0 = keepout(D); if (KO0.size) D.auto.bridges = D.auto.bridges.filter(b => !KO0.has(b[0] + ':' + b[1]) && !KO0.has(b[2] + ':' + b[3])); }
   const LY = layoutOf(D), NC = LY.N;
   const cellOf = (r: number, c: number) => LY.cell(r, c);
   const allPins: PlacedPin[] = [];
@@ -181,6 +184,8 @@ export function route(D: Design, opts: RouteOpts = {}): void {
     return false;
   };
   const geo = (a: number, b: number) => LY.edge(a, b)!.br;
+  // rézoldali alkatrész teste alatt nem mehet híd
+  const KO = keepout(D), blockedBr = (br: readonly number[]) => KO.size > 0 && (KO.has(br[0] + ':' + br[1]) || KO.has(br[2] + ':' + br[3]));
   // ugyanannak a perifériának a már bekötött, azonos buszú (I²C/SPI/UART) lábai: melyik buszszámon vannak
   const busOf = (S: RouteState, I: Info, l: Link): Set<string> | null => {
     const a = metaPin(l.a);
@@ -240,6 +245,7 @@ export function route(D: Design, opts: RouteOpts = {}): void {
       for (const e of LY.adj(cell)) {
         const k = e.dir, n = e.to, rn = S.find(n);
         if (rn === src) continue;
+        if (blockedBr(e.br)) continue;
         const step = 1 + (dir !== 4 && dir !== k ? 0.6 : 0);
         if (S.used[n] || S.sz[rn] > 1) {
           if (pred(rn)) {

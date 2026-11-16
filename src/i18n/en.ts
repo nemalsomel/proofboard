@@ -1864,4 +1864,13 @@ export const EN: Readonly<Record<string, string>> = {
   "A vezérlőlap saját fogyasztása nincs benne (csak amit meghajt: GPIO-k, 3V3).": "The controller board's own consumption is not included (only what it drives: GPIOs, 3V3).",
   "Megállítás": "Stop",
   "Kattints egy lyukra: {m} {k}. csatorna": "Click a hole: {m} channel {k}",
+  "Rézoldalra / alkatrészoldalra (a kijelölt alkatrészek)": "Copper side / component side (selected parts)",
+  "A panel aljára kerül; a teste alatt alapból nem mehet forrasztóhíd és nem lehet más forrasztás (az útvonalkereső kikerüli).": "Mounted underneath the board; by default no solder bridge and no other solder point under its body (the router avoids it).",
+  "Rézoldalra (alulra)": "On the copper side (underneath)",
+  "Csak ha a forrasztás biztosan elfér a test alatt (pl. távtartóval szerelve).": "Only if the solder joints surely fit under the body (e.g. mounted on standoffs).",
+  "Alatta is mehet híd, lehet forrasztás": "Allow bridges and solder points under it",
+  "{a} a rézoldalon van: a teste alatt nem fér el más forrasztás ({b}); tedd máshová, vagy engedélyezd az alatta vezetést": "{a} is on the copper side: other solder joints do not fit under its body ({b}); move them, or allow routing under it",
+  "{a} a rézoldalon van: a teste alatt forrasztóhíd megy ({n} lyuk)": "{a} is on the copper side: a solder bridge runs under its body ({n} holes)",
+  "Rézoldali alkatrészek": "Copper-side parts",
+  "Ezek a panel aljára kerülnek. A lábakat úgy hajlítsd, hogy a forrasztás a test mellett elférjen; a test alatt ne legyen híd vagy forrasztás.": "These go underneath the board. Bend the legs so the joints fit beside the body; no bridge or solder joint under the body.",
 };

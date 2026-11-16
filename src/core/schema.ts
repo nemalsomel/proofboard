@@ -237,6 +237,10 @@ export interface PartInstance {
   fixed?: boolean;
   /** Külső alkatrésznél: a csatlakozó (tüskesor) példány azonosítója, amelybe a kábele be van dugva. */
   plug?: string;
+  /** A panel rézoldalára (alulra) kerül; a teste alatt alapból nincs híd és más forrasztás. */
+  side?: 'cu';
+  /** Rézoldali alkatrésznél: alatta is mehet híd és lehet forrasztás. */
+  under?: boolean;
 }
 
 export interface Rect { r0: number; r1: number; c0: number; c1: number }

@@ -1198,6 +1198,7 @@ const CMDS: Command[]=[
   {id:'rot',label:N_('Forgatás'),group:G.edit,keys:['R'],target:'#pRot,#gRot',words:'rotate',enabled:notSim,run:()=>rotate()},
   {id:'mir',label:N_('Tükrözés'),group:G.edit,keys:['M'],target:'#pMir,#gMir',words:'mirror flip',enabled:notSim,run:()=>mirror()},
   btnCmd('bNewPart',N_('Új alkatrész'),G.edit,{words:'new custom part editor'}),
+  {id:'flipSide',label:N_('Rézoldalra / alkatrészoldalra (a kijelölt alkatrészek)'),group:G.edit,words:'copper side underneath bottom flip mount alulra rézoldal',enabled:()=>!ui.sim&&!!selG()&&D.parts.some(p=>selG()!.parts.has(p.id)&&!isOff(p)),run:()=>{const g=selG();if(!g)return;const ps=D.parts.filter(p=>g.parts.has(p.id)&&!isOff(p));if(!ps.length)return;pushUndo();const on=!ps.every(p=>p.side==='cu');for(const p of ps){if(on)p.side='cu';else{delete p.side;delete p.under;}}commit();}},
   {id:'meterAdd',label:N_('Új multiméter'),group:G.sim,words:'multimeter meter voltage current resistance continuity measure műszer mérés',run:()=>{if(MTR){MTR.addMeter();ltab('meters');sideCollapse('l',false);}}},
   {id:'scopeAdd',label:N_('Új szkóp'),group:G.sim,words:'scope oscilloscope logic analyzer timeline szkóp oszcilloszkóp',run:()=>{if(MTR){MTR.addScope();ltab('meters');sideCollapse('l',false);}}},
   {id:'probeAdd',label:N_('Új feszültségszonda'),group:G.sim,words:'probe voltage measure szonda mérés',run:()=>{if(MTR)MTR.addProbe();}},

@@ -15,6 +15,7 @@ import { gpioMode, pwmCfg, type SimResult } from './simulate';
 import type { Design, Hole, NetPin } from './types';
 import { layoutStats } from './compact';
 import { drillOf, headOf, PITCH } from './manufacture';
+import { keepout } from './backside';
 /** e kitöltés alatt jelez a Problémák a szellős tervre */
 export const SPARSE_FILL = 0.21;
 
@@ -72,6 +73,20 @@ export function checkAll(D: Design, { A0: A, AS, SIM, linkState, tr = fmt }: Che
     else if (me && me.on) {
       const same = A.pins.filter(q => q.on && q.net === me.net && q.part.id !== p.id);
       if (same.length) add('info', tr('{a}: a furat csíkján bekötés is van ({b}); fém csavar ezt a házzal is összeköti – vágd el a csíkot a furat mellett, vagy használj műanyag csavart', { a: p.label, b: same.slice(0, 3).map(pinLabel).join(', ') }), [[p.r, p.c]]);
+    }
+  }
+  // rézoldali alkatrész: a teste alatt nem lehet más forrasztási pont és forrasztóhíd
+  {
+    const KO = keepout(D);
+    if (KO.size) {
+      const pinsUnder = new Map<string, NetPin[]>(), brUnder = new Map<string, Hole[]>();
+      for (const q of A.pins) { if (!q.on) continue; const o = KO.get(q.r + ':' + q.c); if (o && o.id !== q.part.id) { const l = pinsUnder.get(o.id) || []; l.push(q); pinsUnder.set(o.id, l); } }
+      for (const b of [...D.bridges, ...D.auto.bridges]) for (const [r, c] of [[b[0], b[1]], [b[2], b[3]]] as Hole[]) { const o = KO.get(r + ':' + c); if (o) { const l = brUnder.get(o.id) || []; l.push([r, c]); brUnder.set(o.id, l); } }
+      for (const p of D.parts) {
+        const qs = pinsUnder.get(p.id), bs = brUnder.get(p.id);
+        if (qs) add('warn', tr('{a} a rézoldalon van: a teste alatt nem fér el más forrasztás ({b}); tedd máshová, vagy engedélyezd az alatta vezetést', { a: p.label, b: qs.slice(0, 4).map(pinLabel).join(', ') }), qs.map(at).flat());
+        if (bs) add('warn', tr('{a} a rézoldalon van: a teste alatt forrasztóhíd megy ({n} lyuk)', { a: p.label, n: bs.length }), bs.slice(0, 8));
+      }
     }
   }
   // kifúrt (vágott) lyuk: nincs alatta réz

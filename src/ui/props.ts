@@ -129,7 +129,8 @@ export function createPropsPanel(H: PropsHost): PropsPanel {
       <div class="small muted">${esc(tr(d.name))} · ${tr('origó')} <span class="mono">${p.r}:${p.c}</span> · ${p.rot * 90}°${p.mir ? ' · ' + tr('tükrözve') : ''}</div>
       <div class="pr-acts">${ACT('pRot', 'rotate', N_('Forgatás'), 'R')}${ACT('pMir', 'mirror', N_('Tükrözés'), 'M')}${ACT('pDup', 'copy', N_('Duplikálás'), 'D', N_('Új példány ugyanezekkel a beállításokkal'))}${ACT('pDel', 'trash', N_('Törlés'), 'Del', '', ' danger')}</div>
       <label class="check small"><input type="checkbox" id="pXray" ${p.xray ? 'checked' : ''}> ${tr('Röntgen (csak körvonal és lábak)')}</label>
-      <label class="check small" title="${esc(tr('A tömörítés és az agent nem mozdítja; kézzel továbbra is mozgatható.'))}"><input type="checkbox" id="pFixed" ${p.fixed ? 'checked' : ''}> ${icon('lock')} ${tr('Rögzített hely')}</label>${paramsHtml(d.def, penv(p), tr)}
+      <label class="check small" title="${esc(tr('A tömörítés és az agent nem mozdítja; kézzel továbbra is mozgatható.'))}"><input type="checkbox" id="pFixed" ${p.fixed ? 'checked' : ''}> ${icon('lock')} ${tr('Rögzített hely')}</label>
+      ${isOff(p) ? '' : `<label class="check small" title="${esc(tr('A panel aljára kerül; a teste alatt alapból nem mehet forrasztóhíd és nem lehet más forrasztás (az útvonalkereső kikerüli).'))}"><input type="checkbox" id="pSide" ${p.side === 'cu' ? 'checked' : ''}> ${icon('copper')} ${tr('Rézoldalra (alulra)')}</label>${p.side === 'cu' ? `<label class="check small pp-sub" title="${esc(tr('Csak ha a forrasztás biztosan elfér a test alatt (pl. távtartóval szerelve).'))}"><input type="checkbox" id="pUnder" ${p.under ? 'checked' : ''}> ${tr('Alatta is mehet híd, lehet forrasztás')}</label>` : ''}`}${paramsHtml(d.def, penv(p), tr)}
       ${pins}
       <div class="pr-more" id="pMore"></div>`;
     { const e = qq<HTMLInputElement>('#pLabel'); e.addEventListener('change', () => { H.pushUndo(); p.label = e.value.trim() || p.label; H.commit(); }); }
@@ -138,6 +139,10 @@ export function createPropsPanel(H: PropsHost): PropsPanel {
     const more = qq('#pMore');
     qq('#pDup').onclick = () => H.duplicate(p);
     qq<HTMLInputElement>('#pFixed').onchange = e => { H.pushUndo(); if ((e.target as HTMLInputElement).checked) p.fixed = true; else delete p.fixed; H.commit(true); };
+    const ps = q<HTMLInputElement>('#pSide');
+    if (ps) ps.onchange = e => { H.pushUndo(); if ((e.target as HTMLInputElement).checked) p.side = 'cu'; else { delete p.side; delete p.under; } H.commit(); };
+    const pu = q<HTMLInputElement>('#pUnder');
+    if (pu) pu.onchange = e => { H.pushUndo(); if ((e.target as HTMLInputElement).checked) p.under = true; else delete p.under; H.commit(); };
     qq<HTMLInputElement>('#pXray').onchange = e => { H.pushUndo(); if ((e.target as HTMLInputElement).checked) p.xray = true; else delete p.xray; H.commit(true); };
     {
       const own = !H.isBuiltin(p.type);

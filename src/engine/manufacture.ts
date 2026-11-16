@@ -190,7 +190,7 @@ export function assembly(D: Design, tr: Tr = fmt): AsmStep[] {
     items: m.cuts.map(x => ({ key: 'cut:' + x.cut.join(':'), mark: x.n, ref: x.n, text: x.cut[2] ? tr('kifúrt lyuk: {h}', { h: holeName(x.cut[0], x.cut[1]) }) : tr('a {c}. oszlop csíkja a {r1}. és {r2}. sor között', { c: x.cut[1], r1: x.cut[0], r2: x.cut[0] + 1 }) })) });
   if (m.wires.length) steps.push({ id: 'wires', title: tr('Átkötő vezetékek (alkatrészoldal)'), side: 'comp', tip: tr('A hossz a két lyuk távolsága; adj hozzá 2×5 mm-t a lábaknak. A vezeték feküdjön a panelon.'),
     items: m.wires.map(x => ({ key: 'wire:' + x.wire.a.join(':') + '-' + x.wire.b.join(':'), mark: x.n, ref: x.n, text: `${holeName(x.wire.a[0], x.wire.a[1])} → ${holeName(x.wire.b[0], x.wire.b[1])} · ${x.mm} mm` })) });
-  const on = D.parts.filter(p => DEFS[p.type] && !isOff(p));
+  const on = D.parts.filter(p => DEFS[p.type] && !isOff(p) && p.side !== 'cu'), cuParts = D.parts.filter(p => DEFS[p.type] && !isOff(p) && p.side === 'cu' && !drillOf(p));
   for (const g of GROUPS) {
     const ps = on.filter(p => groupOf(p) === g.id).sort((a, b) => partHeight(a) - partHeight(b) || natural(a.label, b.label));
     if (!ps.length) continue;
@@ -199,6 +199,9 @@ export function assembly(D: Design, tr: Tr = fmt): AsmStep[] {
   }
   if (m.chains.length) steps.push({ id: 'bridges', title: tr('Forrasztóhidak (rézoldal)'), side: 'cu', tip: tr('Ónnal kösd össze a szomszédos lyukakat; hosszabb láncnál egy csupasz huzal (vagy levágott láb) a lyukak fölött biztosabb.'),
     items: m.chains.map(x => ({ key: 'chain:' + holeName(x.from[0], x.from[1]), mark: x.n, ref: x.n, text: tr('{a} → {b} · {n} híd', { a: holeName(x.from[0], x.from[1]), b: holeName(x.to[0], x.to[1]), n: x.bridges.length }) + (x.long ? ' · ' + tr('{n} hosszabb, csupasz huzallal', { n: x.long }) : '') })) });
+  // rézoldali alkatrészek a hidak után: a testük alatt nincs híd
+  if (cuParts.length) steps.push({ id: 'parts:cu', title: tr('Rézoldali alkatrészek'), side: 'cu', tip: tr('Ezek a panel aljára kerülnek. A lábakat úgy hajlítsd, hogy a forrasztás a test mellett elférjen; a test alatt ne legyen híd vagy forrasztás.'),
+    items: cuParts.sort((a, b) => partHeight(a) - partHeight(b) || natural(a.label, b.label)).map(p => { const v = partValue(p, tr); return { key: 'part:' + p.id, mark: p.label, ref: p.id, text: `${tr(DEFS[p.type].name)}${v ? ' ' + v : ''} · ${pinText(p, tr)}` }; }) });
   const offs = D.parts.filter(p => DEFS[p.type] && isOff(p));
   if (offs.length) steps.push({ id: 'off', title: tr('Külső alkatrészek, kábelek'), side: null, tip: tr('A kábelt a jelölt csatlakozóba dugd; ügyelj a sorrendre (GND, táp, jel).'),
     items: offs.map(p => { const s = p.plug ? D.parts.find(q => q.id === p.plug) : null; return { key: 'part:' + p.id, mark: p.label, ref: p.id, text: tr(DEFS[p.type].name) + (s ? ' → ' + s.label : '') }; }) });

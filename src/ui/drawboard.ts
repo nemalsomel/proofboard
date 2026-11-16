@@ -5,6 +5,7 @@
  * kapcsolati vonalak, kapcsolatkiemelés) a `ui/layers.ts`-ben.
  */
 import { makePainter, rgba } from './drawpart';
+import { keepoutOf } from '../engine/backside';
 import { drawLinkSel, drawMeters, drawNotes, drawPlugs, drawRats, type Gfx } from './layers';
 import type { LinkState } from '../engine/links';
 import type { Tr } from '../i18n/i18n';
@@ -240,7 +241,19 @@ export function drawBoard(S: BoardScene): void {
   if (C) { drawWires(0.28); drawPlugs(S, G, 0.28); }
   // alkatrészek (ui/drawpart.ts)
   const PNT = makePainter({ ctx, P, M, cols: B.cols, cu: C, angle, xray: S.xray, accent: acc, mono: S.colors.monoFont, design: D, sim: S.simOn ? S.sim : null, pressed: S.pressed, phase: S.phase });
-  for (const p of D.parts) PNT.drawPart(p, C ? 0.32 : 1, S.selPart(p));
+  // rézoldali alkatrész: a rézoldali nézetben teljes, az alkatrészoldaliban halvány; a teste alatti tiltott terület sraffozva
+  for (const p of D.parts) {
+    const back = p.side === 'cu';
+    if (back && !p.under) {
+      const ko = keepoutOf(D, p);
+      if (ko.size) {
+        ctx.save(); ctx.strokeStyle = C ? 'rgba(201,42,42,.55)' : 'rgba(201,42,42,.35)'; ctx.lineWidth = 1;
+        for (const k of ko) { const [r, c] = k.split(':').map(Number), x = hx(c), y = hy(r), d = P * 0.32; ctx.beginPath(); ctx.moveTo(x - d, y + d); ctx.lineTo(x + d, y - d); ctx.stroke(); }
+        ctx.restore();
+      }
+    }
+    PNT.drawPart(p, back ? (C ? 1 : 0.3) : (C ? 0.32 : 1), S.selPart(p));
+  }
   if (!C) { drawWires(1); drawPlugs(S, G, 1); }
   drawNotes(S, G);
   // lerakási előnézet

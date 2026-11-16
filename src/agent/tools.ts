@@ -232,7 +232,7 @@ export function summarize(D: Design, tr: Tr = fmt): string {
     for (const p of D.parts) {
       const ps = placedPins(p), pins = ps.length <= 8 ? ' pins ' + ps.map(q => `${q.name !== q.id && !isMcu(p) ? q.id + '/' + en(q.name) : q.name}@${q.r},${q.c}`).join(' ') : ` ${ps.length} pins`;
       const prm = paramsText(p);
-      L.push(`- ${p.label}: ${typeName(p.type)} [${p.type}] at ${p.r},${p.c} rot ${rotDeg(p)}${p.fixed ? ', FIXED by the user (do not move)' : ''}${isOff(p) ? ', off-board' + (p.plug ? ' (plugged into ' + (D.parts.find(h => h.id === p.plug) || { label: '?' }).label + ')' : '') : ''}${prm ? '; ' + prm : ''};${pins}`);
+      L.push(`- ${p.label}: ${typeName(p.type)} [${p.type}] at ${p.r},${p.c} rot ${rotDeg(p)}${p.fixed ? ', FIXED by the user (do not move)' : ''}${p.side === 'cu' ? ', on the COPPER side (no bridges/solder points under it' + (p.under ? ' – allowed by the user' : '') + ')' : ''}${isOff(p) ? ', off-board' + (p.plug ? ' (plugged into ' + (D.parts.find(h => h.id === p.plug) || { label: '?' }).label + ')' : '') : ''}${prm ? '; ' + prm : ''};${pins}`);
     }
   }
   if (D.links.length) {
@@ -523,6 +523,19 @@ export const TOOLS: ToolDef[] = [
       if (cap) { const bat = s.sources.find(x => x.kind === 'battery'), h = batteryHours(cap, bat ? bat.I : s.I); L.push(h == null ? 'Battery life: no load.' : `Battery life (${cap} mAh, ${bat ? bat.label : 'total current'}): about ${h >= 48 ? (h / 24).toFixed(1) + ' days' : h.toFixed(1) + ' h'} (ideal, without the controller board's own consumption)`); }
       if (!s.sources.length) L.push('No source delivers current (nothing powered?).');
       return ok(L.join('\n'));
+    },
+  },
+  {
+    name: 'set_side', mutates: true,
+    description: 'Mount parts on the copper side (underneath the board) or back on the component side. Under a copper-side part no solder bridge and no other solder point may be placed (the router avoids that area; the check warns), unless allow_under is true (e.g. mounted on standoffs). Use only when the user wants parts underneath.',
+    input_schema: S.obj({ parts: S.arr(S.str('part label'), 'parts to move'), side: { type: 'string', enum: ['component', 'copper'], description: 'mounting side' }, allow_under: S.bool('copper side: allow bridges and solder points under the body (default false)') }, ['parts', 'side']),
+    run(ctx, i) {
+      const D = ctx.D(), labels = Array.isArray(i.parts) ? i.parts.map(str) : [], ps: PartInstance[] = [];
+      for (const l of labels) { const p = partOf(D, l); if (!p) return err(`No part "${l}".`); if (isOff(p)) return err(`${p.label} is an off-board part.`); ps.push(p); }
+      if (!ps.length) return err('No parts given.');
+      for (const p of ps) { if (i.side === 'copper') { p.side = 'cu'; if (i.allow_under) p.under = true; else delete p.under; } else { delete p.side; delete p.under; } }
+      ctx.commit();
+      return ok(`${ps.map(p => p.label).join(', ')}: ${i.side === 'copper' ? `copper side${i.allow_under ? ' (routing under allowed)' : ' (no bridges / solder points under the body)'}` : 'component side'}.`, true);
     },
   },
   {
