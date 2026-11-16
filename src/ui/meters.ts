@@ -5,7 +5,8 @@
  * szondák a terv részei (`Design.meters`, `Design.probes`); a leolvasás az engine-ből (`engine/measure.ts`).
  */
 import type { Tr } from '../i18n/i18n';
-import { fmtReading, probeVoltage, readingHint, readMeter } from '../engine/measure';
+import { batteryHours, fmtReading, netAt, powerSummary, probeVoltage, readingHint, readMeter } from '../engine/measure';
+import { drawScope, MAX_CH, newBuf, pushSample, SCOPE_COLORS, scopeHtml, type ScopeBuf } from './scope';
 import type { Netlist } from '../engine/netlist';
 import type { SimResult } from '../engine/simulate';
 import type { Design, Meter, MeterMode, ProbeAt } from '../engine/types';
@@ -30,7 +31,9 @@ export interface MetersView {
   /** rajzoláskor: ha a műszerek vagy a szondák változtak (szerkesztés, visszavonás, betöltés), újraépít, különben csak az értékek */ sync(): void;
   /** a panelen rajzolandó jelek */ marks(): MeterMarks | null;
   addMeter(): string;
+  addScope(): string;
   addProbe(): void;
+  /** a szkóp mintáinak száma és az utolsó minta (tesztekhez) */ scopeData(id: string): { n: number; last: Array<number | null> | null; run: boolean };
 }
 
 const MODES: MeterMode[] = ['V', 'A', 'R', 'C'];
@@ -51,13 +54,23 @@ export function mountMeters(host: MeterHost): MetersView {
   const modeName = (k: MeterMode) => ({ V: tr('Feszültségmérés'), A: tr('Árammérés'), R: tr('Ellenállásmérés'), C: tr('Szakadásvizsgálat') })[k];
   const modeShort = (k: MeterMode) => ({ V: 'V', A: 'A', R: 'Ω', C: '·))' })[k];
 
+  const isScope = (m: Meter) => m.kind === 'scope';
+  const kindName = (m: Meter) => (isScope(m) ? tr('Szkóp') : modeName(m.mode));
+  /** szkópcsatorna: a PWM-mel hajtott hálózat felirata (a szimuláció ezt átlagként számolja) */
+  function pwmAt(at: ProbeAt): string {
+    const { A, sim } = host.live(); if (!sim || !sim.pwm) return '';
+    const p = sim.pwm.get(netAt(A, at));
+    return p ? tr('PWM {f} Hz, {d}% (átlag)', { f: +p.freq, d: +p.duty }) : '';
+  }
+  const scopeBufs = new Map<string, ScopeBuf>();
+  const buf = (id: string) => { let b = scopeBufs.get(id); if (!b) scopeBufs.set(id, (b = newBuf())); return b; };
+
   function card(m: Meter, inWin: boolean): string {
-    const black = m.mode !== 'A';
+    const black = m.mode !== 'A', head = `<div class="mtr-head"${inWin ? ' data-drag' : ''}><b class="mtr-name">${esc(m.name)}</b><span class="mtr-mode small muted">${esc(kindName(m))}</span><span class="sp"></span>`;
+    if (isScope(m)) return `<div class="mtr-card scope" data-meter="${esc(m.id)}">${head}${headBtns(m, inWin)}</div>${scopeHtml(m, tr, pwmAt)}</div>`;
     return `<div class="mtr-card" data-meter="${esc(m.id)}">
-      <div class="mtr-head"${inWin ? ' data-drag' : ''}><b class="mtr-name">${esc(m.name)}</b><span class="mtr-mode small muted">${esc(modeName(m.mode))}</span><span class="sp"></span>
-        <button class="btn icon" data-act="${inWin ? 'dock' : 'float'}" data-m="${esc(m.id)}" title="${esc(inWin ? tr('Vissza a Műszerek fülre') : tr('Lebegő ablakba'))}" aria-label="${esc(inWin ? tr('Vissza a Műszerek fülre') : tr('Lebegő ablakba'))}"${host.compact() ? ' hidden' : ''}>${icon(inWin ? 'dock' : 'popout')}</button>
-        <button class="btn icon" data-act="hide" data-m="${esc(m.id)}" title="${esc(tr('Elrejtés (a mérőcsúcsok a panelen maradnak)'))}" aria-label="${esc(tr('Elrejtés'))}">${icon('eyeOff')}</button>
-        <button class="btn icon" data-act="del" data-m="${esc(m.id)}" title="${esc(tr('Műszer törlése'))}" aria-label="${esc(tr('Műszer törlése'))}">${icon('trash')}</button></div>
+      ${head}
+        ${headBtns(m, inWin)}</div>
       <div class="mtr-disp" aria-live="polite"><span class="mtr-val">– – –</span></div>
       <p class="mtr-hint small muted"></p>
       <div class="grp seg mtr-modes" role="radiogroup" aria-label="${esc(tr('Mérés módja'))}">${MODES.map(k => `<button class="btn${k === m.mode ? ' on' : ''}" role="radio" aria-checked="${k === m.mode}" data-act="mode" data-m="${esc(m.id)}" data-v="${k}" title="${esc(modeName(k))}">${modeShort(k)}</button>`).join('')}</div>
@@ -68,20 +81,29 @@ export function mountMeters(host: MeterHost): MetersView {
     </div>`;
   }
 
+  function headBtns(m: Meter, inWin: boolean): string {
+    return `<button class="btn icon" data-act="${inWin ? 'dock' : 'float'}" data-m="${esc(m.id)}" title="${esc(inWin ? tr('Vissza a Műszerek fülre') : tr('Lebegő ablakba'))}" aria-label="${esc(inWin ? tr('Vissza a Műszerek fülre') : tr('Lebegő ablakba'))}"${host.compact() ? ' hidden' : ''}>${icon(inWin ? 'dock' : 'popout')}</button>
+        <button class="btn icon" data-act="hide" data-m="${esc(m.id)}" title="${esc(tr('Elrejtés (a mérőcsúcsok a panelen maradnak)'))}" aria-label="${esc(tr('Elrejtés'))}">${icon('eyeOff')}</button>
+        <button class="btn icon" data-act="del" data-m="${esc(m.id)}" title="${esc(tr('Műszer törlése'))}" aria-label="${esc(tr('Műszer törlése'))}">${icon('trash')}</button>`;
+  }
+
   function render() {
     const ms = meters(), ps = probes(), docked = ms.filter(m => !m.hidden && !floating(m)), away = ms.filter(m => m.hidden || floating(m));
-    el.innerHTML = `<div class="mtr-bar"><button class="btn" data-act="add-meter">${icon('plus')}${esc(tr('Multiméter'))}</button><button class="btn" data-act="add-probe">${icon('plus')}${esc(tr('Szonda'))}</button></div>
+    el.innerHTML = `<div class="mtr-bar"><button class="btn" data-act="add-meter">${icon('plus')}${esc(tr('Multiméter'))}</button><button class="btn" data-act="add-scope">${icon('plus')}${esc(tr('Szkóp'))}</button><button class="btn" data-act="add-probe">${icon('plus')}${esc(tr('Szonda'))}</button></div>
       ${ms.length || ps.length ? '' : `<p class="help">${esc(tr('Adj hozzá egy multimétert, és tedd le a mérőcsúcsait a panel lyukaira; vagy tegyél szondákat, amelyek a szimuláció alatt a feszültséget mutatják a panelen.'))}</p>`}
       ${docked.map(m => card(m, false)).join('')}
-      ${away.length ? `<ul class="mtr-away">${away.map(m => `<li><b>${esc(m.name)}</b><span class="small muted">${esc(m.hidden ? tr('elrejtve') : tr('lebegő ablakban'))} · ${esc(modeName(m.mode))}</span><span class="sp"></span>${m.hidden ? `<button class="btn sm" data-act="show" data-m="${esc(m.id)}">${icon('eye')}${esc(tr('Megjelenítés'))}</button>` : `<button class="btn sm ghost" data-act="dock" data-m="${esc(m.id)}">${esc(tr('Vissza ide'))}</button>`}</li>`).join('')}</ul>` : ''}
+      ${away.length ? `<ul class="mtr-away">${away.map(m => `<li><b>${esc(m.name)}</b><span class="small muted">${esc(m.hidden ? tr('elrejtve') : tr('lebegő ablakban'))} · ${esc(kindName(m))}</span><span class="sp"></span>${m.hidden ? `<button class="btn sm" data-act="show" data-m="${esc(m.id)}">${icon('eye')}${esc(tr('Megjelenítés'))}</button>` : `<button class="btn sm ghost" data-act="dock" data-m="${esc(m.id)}">${esc(tr('Vissza ide'))}</button>`}</li>`).join('')}</ul>` : ''}
       ${ps.length ? `<p class="h">${esc(tr('Szondák'))}</p><ul class="mtr-probes">${ps.map((p, i) => `<li data-probe="${esc(p.id)}"><span class="mtr-pdot"></span><b>S${i + 1}</b><code>${esc(hole(p.at))}</code><span class="mtr-pv"></span><span class="sp"></span><button class="btn icon" data-act="probe-move" data-p="${esc(p.id)}" title="${esc(tr('Áthelyezés'))}" aria-label="${esc(tr('Áthelyezés'))}">${icon('move')}</button><button class="btn icon" data-act="probe-del" data-p="${esc(p.id)}" title="${esc(tr('Szonda törlése'))}" aria-label="${esc(tr('Szonda törlése'))}">${icon('trash')}</button></li>`).join('')}</ul>` : ''}
+      <section class="mtr-power"><p class="h">${esc(tr('Áramfelvétel'))}</p><div class="mtr-pw"></div>
+        <label class="mtr-mah small"><span>${esc(tr('Telep kapacitása'))}</span><input type="number" min="0" max="100000" step="10" data-mah value="${host.design().settings.batMah ?? ''}" placeholder="mAh" aria-label="${esc(tr('Telep kapacitása (mAh)'))}"> mAh</label></section>
       <p class="help mtr-legend">${esc(tr('Szimuláció közben a rézcsíkok színe a feszültségüket mutatja:'))} <span class="mtr-scale" aria-hidden="true"></span> <span class="small">0 V → 3,3 V → 5 V</span></p>`;
     // lebegő ablakok
     const want = new Set(ms.filter(floating).map(m => m.id));
     for (const [id, w] of wins) if (!want.has(id)) { w.remove(); wins.delete(id); }
     for (const m of ms) if (floating(m)) {
       let w = wins.get(m.id);
-      if (!w) { w = document.createElement('div'); w.className = 'mtr-win'; w.addEventListener('click', onClick); w.addEventListener('pointerdown', onDrag); host.area.appendChild(w); wins.set(m.id, w); }
+      if (!w) { w = document.createElement('div'); w.className = 'mtr-win'; w.addEventListener('click', onClick); w.addEventListener('change', onChange); w.addEventListener('pointerdown', onDrag); bindCursor(w); host.area.appendChild(w); wins.set(m.id, w); }
+      w.classList.toggle('scope', isScope(m));
       w.innerHTML = card(m, true);
       place(w, m.win!);
     }
@@ -98,6 +120,7 @@ export function mountMeters(host: MeterHost): MetersView {
     const cards = [...el.querySelectorAll<HTMLElement>('[data-meter]'), ...[...wins.values()].map(w => w.querySelector<HTMLElement>('[data-meter]')).filter((x): x is HTMLElement => !!x)];
     for (const c of cards) {
       const m = meters().find(x => x.id === c.dataset.meter); if (!m) continue;
+      if (isScope(m)) { scopeDraw(c, m); continue; }
       const r = readMeter(D, A, sim, m), txt = fmtReading(r, tr), hint = readingHint(r, tr);
       const v = c.querySelector<HTMLElement>('.mtr-val')!, h = c.querySelector<HTMLElement>('.mtr-hint')!;
       if (v.textContent !== txt) v.textContent = txt;
@@ -113,6 +136,58 @@ export function mountMeters(host: MeterHost): MetersView {
       if (li.textContent !== t) li.textContent = t;
       void i;
     });
+    power();
+    loop();
+  }
+
+  /** Áramfelvétel: a források és a legnagyobb fogyasztók, a telep becsült üzemideje. */
+  let pwKey = '';
+  function power() {
+    const box = el.querySelector<HTMLElement>('.mtr-pw'); if (!box) return;
+    const D = host.design(), { A, sim } = host.live();
+    let html: string;
+    if (!sim) html = `<p class="small muted">${esc(tr('Indítsd el a szimulációt az áramfelvétel méréséhez.'))}</p>`;
+    else {
+      const s = powerSummary(D, A, sim), mA = (x: number) => `${(x * 1000).toFixed(x < 0.01 ? 2 : 1)} mA`, mW = (x: number) => `${(x * 1000).toFixed(1)} mW`;
+      const bat = s.sources.find(x => x.kind === 'battery'), h = bat && D.settings.batMah ? batteryHours(D.settings.batMah, bat.I) : null;
+      const life = h == null ? '' : h >= 48 ? tr('kb. {n} nap', { n: (h / 24).toFixed(1) }) : tr('kb. {n} óra', { n: h.toFixed(1) });
+      html = `<table class="tbl mtr-pwt"><tbody>
+        ${s.sources.map(x => `<tr class="src"><td>${esc(x.label)}</td><td class="n">${x.V.toFixed(2)} V</td><td class="n">${mA(x.I)}</td><td class="n">${mW(x.P)}</td></tr>`).join('') || `<tr><td colspan="4" class="muted">${esc(tr('Egyik forrás sem ad áramot.'))}</td></tr>`}
+        ${s.parts.slice(0, 8).map(x => `<tr><td>${esc(x.label)}</td><td></td><td class="n">${mA(x.I)}</td><td class="n">${mW(x.P)}</td></tr>`).join('')}
+      </tbody></table>${life ? `<p class="mtr-life"><b>${esc(tr('Üzemidő:'))}</b> ${esc(life)} <span class="small muted">(${esc(bat!.label)})</span></p>` : ''}
+      <p class="small muted">${esc(tr('A vezérlőlap saját fogyasztása nincs benne (csak amit meghajt: GPIO-k, 3V3).'))}</p>`;
+    }
+    if (html !== pwKey) { pwKey = html; box.innerHTML = html; }
+  }
+
+  /** szkóp: mintavétel valós időben (képkockánként), amíg a szimuláció fut és van látható szkóp */
+  let raf = 0, wasSim = false;
+  function loop() {
+    const { sim } = host.live(), want = !!sim && meters().some(m => isScope(m) && !m.hidden && (m.ch || []).length);
+    if (sim && !wasSim) for (const b of scopeBufs.values()) { b.t = []; b.v = []; b.frame = null; } // új szimuláció: tiszta puffer
+    wasSim = !!sim;
+    if (!want || raf) return;
+    const step = () => {
+      raf = 0;
+      const D = host.design(), { A, sim: S } = host.live(), now = performance.now();
+      if (!S) { update(); return; }
+      for (const m of meters()) if (isScope(m) && !m.hidden) pushSample(buf(m.id), now, (m.ch || []).map(at => probeVoltage(D, A, S, at)));
+      for (const c of allCards()) { const m = meters().find(x => x.id === c.dataset.meter); if (m && isScope(m)) scopeDraw(c, m); }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+  }
+  const allCards = () => [...el.querySelectorAll<HTMLElement>('[data-meter]'), ...[...wins.values()].map(w => w.querySelector<HTMLElement>('[data-meter]')).filter((x): x is HTMLElement => !!x)];
+  function scopeDraw(c: HTMLElement, m: Meter) {
+    const cv = c.querySelector<HTMLCanvasElement>('canvas.sc-cv'); if (!cv) return;
+    const b = buf(m.id), run = c.querySelector<HTMLElement>('[data-act="sc-run"]');
+    if (run) { const t = b.run ? tr('Megállítás') : tr('Futtatás'); if (run.textContent !== t) run.textContent = t; }
+    drawScope(cv, m, b, performance.now(), tr);
+  }
+  /** kurzor a szkóp képén */
+  function bindCursor(root: HTMLElement) {
+    root.addEventListener('pointermove', e => { const cv = (e.target as HTMLElement).closest<HTMLCanvasElement>('canvas.sc-cv'); if (!cv) return; const r = cv.getBoundingClientRect(); buf(cv.dataset.scope!).cursor = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); const c = cv.closest<HTMLElement>('[data-meter]'); const m = meters().find(x => x.id === cv.dataset.scope); if (c && m) scopeDraw(c, m); });
+    root.addEventListener('pointerout', e => { const cv = (e.target as HTMLElement).closest<HTMLCanvasElement>('canvas.sc-cv'); if (!cv) return; buf(cv.dataset.scope!).cursor = null; const c = cv.closest<HTMLElement>('[data-meter]'); const m = meters().find(x => x.id === cv.dataset.scope); if (c && m) scopeDraw(c, m); });
   }
 
   function beep() {
@@ -130,6 +205,7 @@ export function mountMeters(host: MeterHost): MetersView {
     const { A, sim } = host.live(), out: MeterMarks = { probes: [], tips: [] };
     ps.forEach((p, i) => { const v = probeVoltage(D, A, sim, p.at); out.probes.push({ at: p.at, label: 'S' + (i + 1), value: v == null ? '' : v.toFixed(2) + ' V' }); });
     for (const m of ms) {
+      if (isScope(m)) { (m.ch || []).forEach((at, k) => out.tips.push({ at, color: SCOPE_COLORS[k], label: `${m.name}:${k + 1}`, dim: !!m.hidden })); continue; }
       if (m.red) out.tips.push({ at: m.red, color: '#e03131', label: m.name + (m.mode === 'A' ? '' : '+'), dim: !!m.hidden });
       if (m.black && m.mode !== 'A') out.tips.push({ at: m.black, color: '#212529', label: m.name + '−', dim: !!m.hidden });
     }
@@ -143,6 +219,13 @@ export function mountMeters(host: MeterHost): MetersView {
     let n = 1; while (used.has('M' + n)) n++;
     const id = 'm' + Date.now().toString(36) + n;
     host.change(d => { (d.meters ||= []).push({ id, name: 'M' + n, mode: 'V', red: null, black: null }); });
+    return id;
+  }
+  function addScope(): string {
+    const D = host.design(), used = new Set((D.meters || []).map(m => m.name));
+    let n = 1; while (used.has('O' + n)) n++;
+    const id = 's' + Date.now().toString(36) + n;
+    host.change(d => { (d.meters ||= []).push({ kind: 'scope', id, name: 'O' + n, mode: 'V', red: null, black: null, ch: [], span: 2000, trig: 'off' }); });
     return id;
   }
   function addProbe() {
@@ -159,6 +242,15 @@ export function mountMeters(host: MeterHost): MetersView {
     switch (act) {
       case 'add-meter': addMeter(); break;
       case 'add-probe': addProbe(); break;
+      case 'add-scope': addScope(); break;
+      case 'sc-add': case 'sc-move': {
+        const k = +(b.dataset.k || -1), move = act === 'sc-move', n = move ? k + 1 : (m?.ch || []).length + 1;
+        if (!move && n > MAX_CH) break;
+        host.pick(tr('Kattints egy lyukra: {m} {k}. csatorna', { m: m ? m.name : '', k: n }), at => { if (at) mod(id, x => { const ch = x.ch || (x.ch = []); if (move) ch[k] = at; else ch.push(at); }); });
+        break;
+      }
+      case 'sc-del': mod(id, x => { (x.ch || []).splice(+(b.dataset.k || 0), 1); }); break;
+      case 'sc-run': { const B = buf(id); B.run = !B.run; B.stopAt = B.run ? null : performance.now(); if (B.run) B.frame = null; update(); break; }
       case 'mode': mod(id, x => { x.mode = b.dataset.v as MeterMode; }); break;
       case 'pick-red': case 'pick-black': {
         const red = act === 'pick-red';
@@ -180,6 +272,13 @@ export function mountMeters(host: MeterHost): MetersView {
     }
   }
   el.addEventListener('click', onClick);
+  function onChange(e: Event) {
+    const t = e.target as HTMLInputElement | HTMLSelectElement;
+    if (t.dataset.sc) { const id = t.dataset.m!, v = t.value; mod(id, x => { if (t.dataset.sc === 'span') x.span = +v; else x.trig = v as Meter['trig']; }, false); buf(id).frame = null; return; }
+    if (t.matches('[data-mah]')) { const v = +t.value; host.change(D => { if (v > 0) D.settings.batMah = Math.round(v); else delete D.settings.batMah; }, false); }
+  }
+  el.addEventListener('change', onChange);
+  bindCursor(el);
 
   /** lebegő ablak húzása a címsoránál; a bal szélhez engedve a fülre kerül */
   function onDrag(e: PointerEvent) {
@@ -204,5 +303,6 @@ export function mountMeters(host: MeterHost): MetersView {
     const D = host.design(), k = JSON.stringify([D.meters || [], D.probes || [], host.compact()]);
     if (k !== sig) { sig = k; render(); } else update();
   }
-  return { el, render, update, sync, marks, addMeter, addProbe };
+  return { el, render, update, sync, marks, addMeter, addScope, addProbe,
+    scopeData: id => { const b = buf(id); return { n: b.t.length, last: b.v.length ? b.v[b.v.length - 1] : null, run: b.run }; } };
 }

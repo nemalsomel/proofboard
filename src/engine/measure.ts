@@ -119,3 +119,51 @@ export function readingHint(r: Reading, tr: Tr = fmt): string {
     default: return r.mode === 'A' && r.pin ? tr('A(z) {p} lábon befolyó áram (negatív: kifolyik).', { p: r.pin }) : r.mode === 'R' || r.mode === 'C' ? tr('Táp nélküli áramkörön mérve (ellenállások, motorok, tekercsek).') : '';
   }
 }
+
+/* ---------- Áramfelvétel ---------- */
+
+export interface PowerSource { label: string; kind: 'usb' | 'battery'; /** feszültség (V) */ V: number; /** a leadott áram (A; negatív: töltődik) */ I: number; /** teljesítmény (W) */ P: number }
+export interface PowerPart { label: string; type: string; /** a lábain befolyó áramok összege (A) */ I: number; /** a felvett teljesítmény (W): Σ U·I a lábain */ P: number }
+export interface PowerSummary { sources: PowerSource[]; parts: PowerPart[]; /** a források összes árama és teljesítménye */ I: number; P: number }
+
+/**
+ * Áramfelvétel a szimuláció eredményéből: a források (USB, telepek) leadott árama és teljesítménye, és alkatrészenként
+ * a felvett teljesítmény (Σ U·I a lábain, a GND-hez mérve) és áram (a befolyó áramok összege). A sorrend a teljesítmény szerint csökkenő.
+ */
+export function powerSummary(D: Design, A: Netlist, sim: SimResult): PowerSummary {
+  const g = gndNet(A), V0 = g != null ? sim.netV.get(g) || 0 : 0, sources: PowerSource[] = [], parts: PowerPart[] = [];
+  const srcParts = new Set<string>();
+  // USB-ről táplált vezérlőlap: a forrás az USB (5 V), az árama a lap GND-lábain visszafolyó áram (a GPIO-k és a 3V3 terhelése)
+  if (D.settings.usb) for (const m of sim.picos) {
+    if (!m.powered) continue;
+    const bp = A.byPart.get(m.p.id); if (!bp) continue;
+    const I = bp.pins.filter(q => q.role === 'gnd').reduce((t, q) => t + (sim.pinI?.get(m.p.id + '.' + q.id) || 0), 0);
+    srcParts.add(m.p.id);
+    sources.push({ label: m.p.label + ' USB', kind: 'usb', V: 5, I: Math.max(0, I), P: 5 * Math.max(0, I) });
+  }
+  for (const b of sim.bats) {
+    srcParts.add(b.p.id);
+    const bp = A.byPart.get(b.p.id), pins = bp ? bp.pins : [];
+    const vs = pins.map(q => (sim.netV.get(q.net) || 0) - V0), U = vs.length ? Math.max(...vs) - Math.min(...vs) : 0;
+    sources.push({ label: b.p.label, kind: 'battery', V: U, I: -b.I, P: -b.I * U });
+  }
+  for (const p of D.parts) {
+    if (srcParts.has(p.id)) continue;
+    const bp = A.byPart.get(p.id); if (!bp) continue;
+    let I = 0, P = 0;
+    for (const q of bp.pins) {
+      const i = sim.pinI?.get(p.id + '.' + q.id) || 0, u = (sim.netV.get(q.net) || 0) - V0;
+      if (i > 0) I += i;
+      P += u * i;
+    }
+    // a tápot továbbadó alkatrész (vezérlőlap szabályzója) nettó leadó: nem fogyasztó
+    if (P > 1e-7) parts.push({ label: p.label, type: p.type, I, P });
+  }
+  parts.sort((a, b) => b.P - a.P);
+  return { sources, parts, I: sources.reduce((t, s) => t + s.I, 0), P: sources.reduce((t, s) => t + s.P, 0) };
+}
+
+/** Becsült üzemidő (óra) a telep kapacitásából (mAh) és az áramából (A); null, ha nincs fogyasztás. */
+export function batteryHours(mAh: number, I: number): number | null {
+  return I > 1e-6 && mAh > 0 ? mAh / (I * 1000) : null;
+}

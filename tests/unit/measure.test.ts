@@ -66,3 +66,38 @@ describe('mérőműszerek', () => {
     expect(r).toMatch(/330/);
   });
 });
+
+describe('áramfelvétel', () => {
+  it('csíkos példa (akku): a forrás leadott teljesítménye = a fogyasztók felvett teljesítménye', async () => {
+    const { powerSummary, batteryHours } = await import('../../src/engine/measure');
+    const D = load('strip'), { A, SIM } = simulateFor(D), s = powerSummary(D, A, SIM);
+    expect(s.sources).toHaveLength(1);
+    expect(s.sources[0]).toMatchObject({ label: 'BT1', kind: 'battery' });
+    expect(s.sources[0].I).toBeCloseTo(SIM.leds[0].I, 6);
+    expect(s.parts.map(p => p.label).sort()).toEqual(['LED1', 'R1']);
+    expect(s.parts.reduce((t, p) => t + p.P, 0)).toBeCloseTo(s.P, 4);
+    expect(batteryHours(1000, 0.01)).toBe(100);
+    expect(batteryHours(1000, 0)).toBeNull();
+  });
+
+  it('ESP32 USB-ről: a forrás az USB, a LED fogyaszt', async () => {
+    const { powerSummary } = await import('../../src/engine/measure');
+    const D = load('esp32'), { A, SIM } = simulateFor(D), s = powerSummary(D, A, SIM);
+    expect(s.sources.map(x => x.kind)).toContain('usb');
+    expect(s.parts.some(p => p.label === 'LED1')).toBe(true);
+    expect(s.I).toBeGreaterThan(0);
+  });
+});
+
+describe('agent: idővonal szondákkal, áramfelvétel', () => {
+  it('run_program szondákkal program nélkül is; get_power', async () => {
+    const ctx = engineCtx(load('strip'));
+    const t = (await runTool(ctx, 'run_program', { ms: 100, probes: ['R1.1', 'R1.2'] })).text;
+    expect(t.split('\n')[0]).toContain('V(R1.1)');
+    expect(t).toMatch(/\d\.\d\d/);
+    expect((await runTool(ctx, 'run_program', { ms: 100, probes: ['X9.9'] })).text).toMatch(/Unknown probe point/);
+    const p = (await runTool(ctx, 'get_power', { battery_mah: 1000 })).text;
+    expect(p).toMatch(/source BT1 \(battery\)/);
+    expect(p).toMatch(/Battery life/);
+  });
+});

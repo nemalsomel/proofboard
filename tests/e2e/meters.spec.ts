@@ -98,3 +98,42 @@ test('lebegő ablak: leválasztás, húzás, a bal szélhez húzva vissza a fül
   await tab.locator('[data-act="show"]').click();
   await expect(tab.locator('.mtr-card')).toHaveCount(2);
 });
+
+test('szkóp: csatorna letétele, mintavétel a szimuláció alatt (villogó LED), megállítás, indítójel; áramfelvétel és üzemidő', async ({ page }) => {
+  await page.goto('./'); await ready(page);
+  await pcb(page, 'example', 'prog-blink');
+  await page.click('[data-ltab="meters"]');
+  const tab = page.locator('#lpMeters');
+  await tab.locator('[data-act="add-scope"]').click();
+  await expect(tab.locator('.mtr-card.scope')).toHaveCount(1);
+  const [p1] = await pinHoles(page, 'R1');
+  await tab.locator('[data-act="sc-add"]').click();
+  await clickHole(page, p1.r, p1.c);
+  const id = (await pcb<any[]>(page, 'meters'))[0].id as string;
+  await expect.poll(() => pcb<any[]>(page, 'meters').then(m => m[0].ch)).toEqual([[p1.r, p1.c]]);
+  await page.evaluate(() => (window as any).pcb.sim(true));
+  // a villogó LED ellenállásán 0 és ~3,3 V váltakozik
+  await expect.poll(() => pcb<any>(page, 'scope', id).then(s => s.n), { timeout: 5000 }).toBeGreaterThan(30);
+  const seen = new Set<string>();
+  for (let i = 0; i < 30 && seen.size < 2; i++) { const s = await pcb<any>(page, 'scope', id); if (s.last && s.last[0] != null) seen.add(s.last[0] > 1.5 ? 'hi' : 'lo'); await page.waitForTimeout(100); }
+  expect([...seen].sort()).toEqual(['hi', 'lo']);
+  await tab.locator('[data-act="sc-run"]').click();
+  const n0 = (await pcb<any>(page, 'scope', id)).n;
+  await page.waitForTimeout(300);
+  expect((await pcb<any>(page, 'scope', id))).toMatchObject({ run: false, n: n0 });
+  await tab.locator('select[data-sc="trig"]').selectOption('rise');
+  await expect.poll(() => page.evaluate(() => (window as any).pcb.get().meters[0].trig)).toBe('rise');
+  // áramfelvétel: USB-ről a Pico, a LED és az ellenállás fogyaszt
+  await expect(tab.locator('.mtr-pwt')).toContainText('USB');
+  await page.evaluate(() => (window as any).pcb.sim(false));
+  await expect(tab.locator('.mtr-pw')).toContainText('Indítsd el a szimulációt');
+  // akkus terv: a kapacitásból becsült üzemidő (a tervbe mentve)
+  await pcb(page, 'example', 'strip');
+  await page.click('[data-ltab="meters"]');
+  await tab.locator('input[data-mah]').fill('1000');
+  await tab.locator('input[data-mah]').press('Enter');
+  await expect.poll(() => page.evaluate(() => (window as any).pcb.get().settings.batMah)).toBe(1000);
+  await page.evaluate(() => (window as any).pcb.sim(true));
+  await expect(tab.locator('.mtr-life')).toContainText('BT1');
+  await page.evaluate(() => (window as any).pcb.sim(false));
+});

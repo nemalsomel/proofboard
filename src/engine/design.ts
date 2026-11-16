@@ -138,7 +138,10 @@ function normMeters(x: unknown, b: { rows: number; cols: number }): Meter[] {
     if (!m0 || typeof m0 !== 'object') continue;
     const m = m0 as Raw, mode = (['V', 'A', 'R', 'C'] as const).find(k => k === m.mode) || 'V';
     const w = m.win && typeof m.win === 'object' && isFinite(+m.win.x) && isFinite(+m.win.y) ? { x: Math.round(+m.win.x), y: Math.round(+m.win.y) } : null;
-    out.push({ id: String(m.id || 'm' + (i + 1)).slice(0, 40), name: String(m.name || 'M' + (i + 1)).slice(0, 24), mode, red: normAt(m.red, b), black: normAt(m.black, b), ...(m.hidden ? { hidden: true } : {}), ...(w ? { win: w } : {}) });
+    const scope = m.kind === 'scope';
+    out.push({ ...(scope ? { kind: 'scope' as const } : {}), id: String(m.id || 'm' + (i + 1)).slice(0, 40), name: String(m.name || (scope ? 'O' : 'M') + (i + 1)).slice(0, 24), mode, red: normAt(m.red, b), black: normAt(m.black, b),
+      ...(scope ? { ch: (Array.isArray(m.ch) ? (m.ch as unknown[]).map(x => normAt(x, b)).filter((x): x is ProbeAt => !!x) : []).slice(0, 4), span: [500, 1000, 2000, 5000, 10000].includes(+m.span) ? +m.span : 2000, trig: m.trig === 'rise' || m.trig === 'fall' ? m.trig : 'off' } : {}),
+      ...(m.hidden ? { hidden: true } : {}), ...(w ? { win: w } : {}) });
   }
   return out.slice(0, 16);
 }

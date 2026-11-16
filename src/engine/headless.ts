@@ -7,7 +7,8 @@ import { hasPress } from './defs';
 import { analyze, type Netlist } from './netlist';
 import { evalProgram, newRuntime, withProgram, type ProgOut } from './program';
 import { resetSimState, simulate, type SimResult } from './simulate';
-import type { Design } from './types';
+import type { Design, ProbeAt } from './types';
+import { probeVoltage } from './measure';
 
 export interface HeadlessOpts {
   /** lenyomott gombok (alkatrész-azonosító) */ pressed?: Set<string>;
@@ -43,6 +44,7 @@ export interface TraceSample {
   /** a blokkok kimenetei (blokk.kimenet → érték) */ vals: Record<string, boolean | number>;
   /** a program által vezérelt / olvasott GPIO-k (vezérlő.láb → szint vagy PWM-kitöltés %) */ gpio: Record<string, string>;
   /** LED-ek (címke → világít-e) */ leds: Record<string, boolean>;
+  /** a kért mérőpontok feszültsége (V, a GND-hez; lebegő pont: null) */ v?: Array<number | null>;
 }
 export interface TraceResult { samples: TraceSample[]; errors: Map<string, string> }
 
@@ -50,7 +52,7 @@ export interface TraceResult { samples: TraceSample[]; errors: Map<string, strin
  * A program futása idővonalon: gombnyomások időzítve, `every` ms-onként mintavétel (a blokkok kimenetei, a GPIO-k,
  * a LED-ek). A futás logikája azonos a `simulateFor`-éval (ütemenként kiértékelés, majd szimuláció).
  */
-export function traceProgram(D: Design, o: { ms: number; every?: number; tick?: number; presses?: Press[] }): TraceResult {
+export function traceProgram(D: Design, o: { ms: number; every?: number; tick?: number; presses?: Press[]; points?: ProbeAt[] }): TraceResult {
   resetSimState();
   const tick = o.tick || 20, end = Math.max(0, o.ms), every = Math.max(tick, o.every || Math.max(tick, Math.round(end / 20 / tick) * tick || tick));
   const presses = o.presses || [];
@@ -71,7 +73,8 @@ export function traceProgram(D: Design, o: { ms: number; every?: number; tick?: 
       const gpio: Record<string, string> = {};
       const used = new Set(Object.keys(out ? out.gpio : {}));
       for (const g of SIM.gpios) if (used.has(g.p.id + '.' + g.q.id)) gpio[g.p.label + '.' + g.q.name] = g.mode === 'pwm' ? `pwm ${(withProgram(D, out).pwm || {})[g.p.id + '.' + g.q.id]?.duty ?? '?'}%` : g.V >= 2 ? '1' : g.V <= 0.8 ? '0' : '?';
-      samples.push({ t, vals: Object.fromEntries(rt.vals), gpio, leds: Object.fromEntries(SIM.leds.filter(l => l.light).map(l => [l.p.label, l.on && l.I > 1e-4])) });
+      samples.push({ t, vals: Object.fromEntries(rt.vals), gpio, leds: Object.fromEntries(SIM.leds.filter(l => l.light).map(l => [l.p.label, l.on && l.I > 1e-4])),
+        ...(o.points ? { v: o.points.map(at => probeVoltage(D, A, SIM, at)) } : {}) });
     }
     if (t >= end) break;
   }

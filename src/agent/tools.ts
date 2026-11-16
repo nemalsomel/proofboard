@@ -27,7 +27,7 @@ import { BRIEF_MAX, emptyDesign, normalize } from '../engine/design';
 import { DEFS, hasPress, isMcu, isOff, penv, syncDefs } from '../engine/defs';
 import { placedPins, xf } from '../engine/geometry';
 import { simulateFor } from '../engine/headless';
-import { fmtReading, readingHint, readMeter } from '../engine/measure';
+import { batteryHours, fmtReading, powerSummary, readingHint, readMeter } from '../engine/measure';
 import { linkStates, linkText } from '../engine/links';
 import { GPIO_MODES } from '../engine/mcu';
 import { analyze, layoutOf, type Netlist } from '../engine/netlist';
@@ -96,6 +96,13 @@ export function pinOf(D: Design, ref: string): { p: PartInstance; q: PlacedPin; 
   const n = ref.slice(i + 1).trim().toLowerCase(), ps = placedPins(p);
   const q = ps.find(x => x.id.toLowerCase() === n) || ps.find(x => x.name.toLowerCase() === n) || ps.find(x => en(x.name).toLowerCase() === n);
   return q ? { p, q, ref: p.id + '.' + q.id } : null;
+}
+
+/** Mérőpont: láb („R1.2”, a panelen) vagy lyuk („12:5”) → [sor, oszlop]; ismeretlen vagy a panelen kívüli: null. */
+export function pointOf(D: Design, ref: string): [number, number] | null {
+  const m = /^(\d+)\s*[:,]\s*(\d+)$/.exec(ref.trim());
+  if (m) { const r = +m[1], c = +m[2]; return r < D.board.rows && c < D.board.cols ? [r, c] : null; }
+  const pq = pinOf(D, ref); return pq && !isOff(pq.p) ? [pq.q.r, pq.q.c] : null;
 }
 
 /** Belső lábhivatkozás (p3.A) → olvasható („LED1.A”). */
@@ -486,13 +493,7 @@ export const TOOLS: ToolDef[] = [
     }, ['kind', 'at']),
     run(ctx, i) {
       const D = ctx.D();
-      const pt = (x: unknown): [number, number] | null | 'bad' => {
-        if (x == null || x === '') return null;
-        const sx = String(x).trim(), m = /^(\d+)\s*[:,]\s*(\d+)$/.exec(sx);
-        if (m) return [+m[1], +m[2]];
-        const pq = pinOf(D, sx); if (!pq || isOff(pq.p)) return 'bad';
-        return [pq.q.r, pq.q.c];
-      };
+      const pt = (x: unknown): [number, number] | null | 'bad' => (x == null || x === '' ? null : pointOf(D, String(x)) || 'bad');
       const red = pt(i.at), black = pt(i.to);
       if (red === 'bad' || red == null) return err(`Unknown point "${String(i.at)}": use an on-board pin ("R1.2") or a hole ("row:col").`);
       if (black === 'bad') return err(`Unknown point "${String(i.to)}".`);
@@ -504,6 +505,24 @@ export const TOOLS: ToolDef[] = [
       const r = readMeter(D, A, SIM, { mode, red, black: black || null });
       const hint = readingHint(r, en);
       return ok(`${kind}: ${fmtReading(r, en)}${r.pin ? ` (pin ${r.pin})` : ''}${black ? '' : mode !== 'A' ? ' (black probe: GND)' : ''}${hint ? ' — ' + hint : ''}`);
+    },
+  },
+  {
+    name: 'get_power', mutates: false,
+    description: 'Current consumption from the simulation: what each source delivers (USB on the controller board, batteries: voltage, current, power) and what each part draws (current into its pins, power Σ U·I), largest first; optionally the estimated battery life from a capacity. The controller board\'s own consumption is not modelled (only what it drives: GPIOs, 3V3 load). Optionally press buttons and run the program first.',
+    input_schema: S.obj({ battery_mah: S.num('battery capacity in mAh for a life estimate'), pressed: S.arr(S.str('button label'), 'buttons held down'), time_ms: S.int('program run time in ms before measuring (default 0)') }),
+    run(ctx, i) {
+      const D = ctx.D(), labels = Array.isArray(i.pressed) ? i.pressed.map(str) : [], pressed = new Set<string>();
+      for (const l of labels) { const p = partOf(D, l); if (!p || !hasPress(p)) return err(`"${l}" is not a button.`); pressed.add(p.id); }
+      const { A, SIM } = simulateFor(D, { pressed, ms: num(i.time_ms) || 0 }), s = powerSummary(D, A, SIM);
+      const mA = (x: number) => (x * 1000).toFixed(2) + ' mA', mW = (x: number) => (x * 1000).toFixed(1) + ' mW';
+      const L = [`Total: ${mA(s.I)}, ${mW(s.P)}`];
+      for (const x of s.sources) L.push(`source ${x.label} (${x.kind}): ${x.V.toFixed(2)} V, ${mA(x.I)}, ${mW(x.P)}`);
+      for (const x of s.parts) L.push(`- ${x.label}: ${mA(x.I)}, ${mW(x.P)}`);
+      const cap = num(i.battery_mah);
+      if (cap) { const bat = s.sources.find(x => x.kind === 'battery'), h = batteryHours(cap, bat ? bat.I : s.I); L.push(h == null ? 'Battery life: no load.' : `Battery life (${cap} mAh, ${bat ? bat.label : 'total current'}): about ${h >= 48 ? (h / 24).toFixed(1) + ' days' : h.toFixed(1) + ' h'} (ideal, without the controller board's own consumption)`); }
+      if (!s.sources.length) L.push('No source delivers current (nothing powered?).');
+      return ok(L.join('\n'));
     },
   },
   {
@@ -750,7 +769,7 @@ export const TOOLS: ToolDef[] = [
       return ok(`Program ${i.mode === 'append' ? 'extended' : 'replaced'}: blocks ${ids.join(', ')}.\n` + rep.join('\n'), true);
     },
   },
-  ...makeProgTools({ ok, err, en, num, str, partOf, pinOf, pinLabelOf, S }),
+  ...makeProgTools({ ok, err, en, num, str, partOf, pinOf, pinLabelOf, pointOf, S }),
 ];
 
 /** Eszköz futtatása név szerint, hibakezeléssel (a modell hibaüzenetet kap, nem kivételt). */

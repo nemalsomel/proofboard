@@ -19,7 +19,7 @@ export interface Note { id: string; r: number; c: number; w: number; h: number; 
 export interface PwmCfg { duty: number; freq: number }
 /** A régi Jelsorozat beállítása (csak a régi tervek beolvasásához; betöltéskor programmá alakul). */
 export interface SignalCfg { preset: string; custom: string; pins: Array<string | null>; step: number; rate: number; dir: number }
-export interface Settings { usb: boolean; btnMode: 'hold' | 'toggle'; autoRoute: boolean; autoCut?: boolean; vrot?: number }
+export interface Settings { usb: boolean; btnMode: 'hold' | 'toggle'; autoRoute: boolean; autoCut?: boolean; vrot?: number; /** a telep kapacitása (mAh) az üzemidő becsléséhez (Műszerek › Áramfelvétel) */ batMah?: number }
 export interface BoardSize { rows: number; cols: number; sec: number }
 
 export interface Design {
@@ -56,7 +56,9 @@ export interface Probe { id: string; at: ProbeAt }
 export type MeterMode = 'V' | 'A' | 'R' | 'C';
 /** Multiméter: a piros és a fekete csúcs helye (null: nincs letéve; a fekete null-ja a GND), lebegő ablakban vagy a Műszerek fülön. */
 export interface Meter {
+  /** multiméter (alapból) vagy szkóp (idővonal csatornánként) */ kind?: 'dmm' | 'scope';
   id: string; name: string; mode: MeterMode;
+  /** szkóp: a csatornák mérőpontjai (legfeljebb 4), az ablak hossza (ms), az indítójel az 1. csatornán */ ch?: ProbeAt[]; span?: number; trig?: 'off' | 'rise' | 'fall';
   red: ProbeAt | null; black: ProbeAt | null;
   /** elrejtve: az ablak nem látszik, a csúcsok a panelen maradnak */ hidden?: boolean;
   /** lebegő ablak helye a vászonterület bal felső sarkától (px); null: a Műszerek fülön */ win?: { x: number; y: number } | null;

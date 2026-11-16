@@ -18,6 +18,7 @@ export interface ProgToolHelpers {
   partOf(D: Design, label: string): PartInstance | null;
   pinOf(D: Design, ref: string): { p: PartInstance; q: PlacedPin; ref: string } | null;
   pinLabelOf(D: Design, ref: string): string;
+  /** mérőpont: láb („R1.2”) vagy lyuk („12:5”) → [sor, oszlop]; ismeretlen: null */ pointOf(D: Design, ref: string): [number, number] | null;
   S: { str(d: string): JsonSchema; int(d: string): JsonSchema; num(d: string): JsonSchema; bool(d: string): JsonSchema; arr(i: JsonSchema, d: string): JsonSchema; obj(p: Record<string, JsonSchema>, r?: string[]): JsonSchema };
 }
 
@@ -123,19 +124,21 @@ export function makeProgTools(h: ProgToolHelpers): ToolDef[] {
     },
     {
       name: 'run_program', mutates: false,
-      description: 'Run the block program in the simulator for some time, optionally pressing buttons at given times, and return a timeline: block outputs, GPIO levels (or PWM duty) and LEDs at regular sample points. Use it to verify the program (e.g. that an LED blinks at 2 Hz, or toggles on each press).',
-      input_schema: S.obj({ ms: S.int('run time in ms (max 20000)'), presses: pressSchema, sample_ms: S.int('sample interval in ms (default: about 20 samples)') }, ['ms']),
+      description: 'Run the block program (if any) in the simulator for some time, optionally pressing buttons at given times, and return a timeline: block outputs, GPIO levels (or PWM duty), LEDs and – like an oscilloscope – the voltages at the given probe points, at regular sample points. Use it to verify the program (e.g. that an LED blinks at 2 Hz, or toggles on each press) or to watch voltages change over time. Without a program, probes are required.',
+      input_schema: S.obj({ ms: S.int('run time in ms (max 20000)'), presses: pressSchema, sample_ms: S.int('sample interval in ms (default: about 20 samples)'), probes: S.arr(S.str('pin ("R1.2") or hole ("12:5")'), 'voltage probe points (adds V columns, to GND)') }, ['ms']),
       run(ctx, i) {
-        const D = ctx.D(); if (!D.program || !D.program.nodes.length) return err('The program is empty.');
+        const D = ctx.D(), pnames = (Array.isArray(i.probes) ? i.probes : []).map(str), points: Array<[number, number]> = [];
+        for (const n of pnames) { const at = h.pointOf(D, n); if (!at) return err(`Unknown probe point "${n}": use an on-board pin ("R1.2") or a hole ("row:col").`); points.push(at); }
+        if ((!D.program || !D.program.nodes.length) && !points.length) return err('The program is empty (give probes to record voltages anyway).');
         const ms = Math.min(20000, Math.max(0, num(i.ms) ?? 0)), presses: Press[] = [];
         for (const x of (Array.isArray(i.presses) ? i.presses : []) as Array<Record<string, unknown>>) {
           const p = h.partOf(D, str(x.button)); if (!p || !hasPress(p)) return err(`"${str(x.button)}" is not a button.`);
           presses.push({ part: p.id, from: num(x.from_ms) ?? 0, to: x.to_ms == null ? undefined : num(x.to_ms) ?? undefined });
         }
-        const tr = traceProgram(D, { ms, every: num(i.sample_ms) ?? undefined, presses });
+        const tr = traceProgram(D, { ms, every: num(i.sample_ms) ?? undefined, presses, ...(points.length ? { points } : {}) });
         const keys = [...new Set(tr.samples.flatMap(s => Object.keys(s.vals)))], gk = [...new Set(tr.samples.flatMap(s => Object.keys(s.gpio)))], lk = [...new Set(tr.samples.flatMap(s => Object.keys(s.leds)))];
-        const head = ['t(ms)', ...keys, ...gk, ...lk.map(l => l + '(lit)')];
-        const rows = tr.samples.map(s => [String(s.t), ...keys.map(k => fmtVal(s.vals[k])), ...gk.map(k => s.gpio[k] ?? '–'), ...lk.map(k => (s.leds[k] ? '1' : '0'))]);
+        const head = ['t(ms)', ...keys, ...gk, ...lk.map(l => l + '(lit)'), ...pnames.map(n => `V(${n})`)];
+        const rows = tr.samples.map(s => [String(s.t), ...keys.map(k => fmtVal(s.vals[k])), ...gk.map(k => s.gpio[k] ?? '–'), ...lk.map(k => (s.leds[k] ? '1' : '0')), ...(s.v || []).map(v => (v == null ? 'float' : v.toFixed(2)))]);
         const errs = [...tr.errors].map(([id, m]) => `${id}: ${en(m)}`);
         return ok([head.join(' | '), ...rows.map(r => r.join(' | '))].join('\n') + (errs.length ? '\nProblems: ' + errs.join('; ') : ''));
       },

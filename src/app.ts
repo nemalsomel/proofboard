@@ -855,7 +855,7 @@ $('#mfgView').appendChild(MFG.el);
 let PICK: {done: (at: ProbeAt|null)=>void}|null=null;
 function pickEnd(at: ProbeAt|null){const p=PICK;PICK=null;document.body.classList.remove('picking');if(p)p.done(at);draw();}
 function pickHole(h: {r: number; c: number}){if(!PICK)return false;pickEnd(inb(h.r,h.c)?[h.r,h.c]:null);return true;}
-MTR=mountMeters({design:()=>D,tr,live:()=>({A:(ui.sim?AS:A0)!,sim:ui.sim?SIM||null:null}),
+MTR=mountMeters({design:()=>D,tr,live:()=>({A:(ui.sim?AS:A0)!,sim:ui.sim?ui.blinkSim||SIM||null:null}),
   change:(fn,undo)=>{if(undo!==false)pushUndo();fn(D);if(undo===false){save();draw();}else commit(true);},
   pick:(msg,done)=>{if(PICK)PICK.done(null);PICK={done};document.body.classList.add('picking');toast(msg);if(MOB.matches)sheet('');},
   area:$('#carea'),showTab:()=>{ltab('meters');sideCollapse('l',false);},compact:()=>MOB.matches});
@@ -899,7 +899,8 @@ function openShared(){const raw=SHARED;SHARED=null;closeDlg('#dlgShared');if(!ra
   catch(e){toast(tr('Nem sikerült betölteni: {x}',{x:(e as Error).message}),true);}}
 $('#bSharedOpen').onclick=openShared;
 $('#bSharedSave').onclick=()=>{$('#bSaveFile').click();openShared();};
-$('#dlgShared').addEventListener('close',()=>{SHARED=null;});
+// a bezárás eseménye késve is jöhet (pl. ha közben újra megnyílt egy újabb linkkel): csak zárt ablaknál dobja el
+$('#dlgShared').addEventListener('close',()=>{if(!($('#dlgShared') as unknown as HTMLDialogElement).open)SHARED=null;});
 window.addEventListener('hashchange',()=>{void checkShared();});
 /* ---------- Kapcsolatok és útvonalkereső ---------- */
 const findPin=(ref: string)=>findPinOf(D,ref);
@@ -1150,7 +1151,8 @@ $('#bMcp').onclick=()=>{closeMenu();MCPP.open();};
   mfg:()=>({bom:mfgBom(D,tr),steps:mfgAssembly(D,tr),marks:mfgMarks(D)}),mfgSheet:side=>sheetSvg(D,{side,tr,title:mfgTitle()}).svg,
   mfgPrintHtml:(o={})=>mfgPrintHtml({comp:true,cu:true,bom:true,steps:true,dims:true,dimShow:[...mfgDimShow()],dimMode:MFG.dimMode().mode,dimOrigin:MFG.dimMode().origin,dimTo:MFG.dimMode().to,...o}),mfgTab:t=>MFG.tab(t==='bom'||t==='asm'||t==='dims'||t==='sheets'?t:undefined),
   mfgDims:(mode,origin,to)=>{if(mode)MFG.dimMode(mode,origin,to);const items=dimItems(D),show=mfgDimShow(),m=MFG.dimMode(),o={show,mode:m.mode,origin:m.origin,to:m.to,tr};return{items,shown:[...show],mode:m.mode,origin:m.origin,to:m.to,svg:dimSvg(D,{...o,title:mfgTitle()}).svg,dxf:dimDxf(D,o)};},mfgZoom:()=>MFG.zoom(),
-  meters:()=>{const A=(ui.sim?AS:A0)!,sim=ui.sim?SIM||null:null;return(D.meters||[]).map(m=>{const r=readMeter(D,A,sim,m);return{id:m.id,name:m.name,mode:m.mode,red:m.red,black:m.black,hidden:!!m.hidden,floating:!!m.win&&!m.hidden&&!MOB.matches,text:fmtReading(r,tr),value:r.value,status:r.status,cont:!!r.cont};});},
+  meters:()=>{const A=(ui.sim?AS:A0)!,sim=ui.sim?SIM||null:null;return(D.meters||[]).map(m=>{const r=readMeter(D,A,sim,m);return{id:m.id,kind:m.kind||'dmm',ch:m.ch||[],name:m.name,mode:m.mode,red:m.red,black:m.black,hidden:!!m.hidden,floating:!!m.win&&!m.hidden&&!MOB.matches,text:fmtReading(r,tr),value:r.value,status:r.status,cont:!!r.cont};});},
+  scope:id=>MTR?MTR.scopeData(id):null,
   holeXY:(r,c)=>{const rc=cv.getBoundingClientRect(),cc=cu()?D.board.cols-1-c:c,[x,y]=toScreen(M+(cc+0.5)*P,M+(r+0.5)*P);return{x:rc.left+x,y:rc.top+y};},
   probes:()=>{const A=(ui.sim?AS:A0)!,sim=ui.sim?SIM||null:null;return(D.probes||[]).map(p=>({id:p.id,at:p.at,v:probeVoltage(D,A,sim,p.at)}));},
   commands:()=>CMDS.map(c=>({id:c.id,label:cmdLabel(c),group:tr(c.group),keys:c.keys||[],enabled:!c.enabled||c.enabled(),hidden:!!c.hidden&&c.hidden()})),
@@ -1197,6 +1199,7 @@ const CMDS: Command[]=[
   {id:'mir',label:N_('Tükrözés'),group:G.edit,keys:['M'],target:'#pMir,#gMir',words:'mirror flip',enabled:notSim,run:()=>mirror()},
   btnCmd('bNewPart',N_('Új alkatrész'),G.edit,{words:'new custom part editor'}),
   {id:'meterAdd',label:N_('Új multiméter'),group:G.sim,words:'multimeter meter voltage current resistance continuity measure műszer mérés',run:()=>{if(MTR){MTR.addMeter();ltab('meters');sideCollapse('l',false);}}},
+  {id:'scopeAdd',label:N_('Új szkóp'),group:G.sim,words:'scope oscilloscope logic analyzer timeline szkóp oszcilloszkóp',run:()=>{if(MTR){MTR.addScope();ltab('meters');sideCollapse('l',false);}}},
   {id:'probeAdd',label:N_('Új feszültségszonda'),group:G.sim,words:'probe voltage measure szonda mérés',run:()=>{if(MTR)MTR.addProbe();}},
   {id:'tabMeters',label:N_('Műszerek fül'),group:G.pane,words:'meters instruments tab műszerek',run:()=>{ltab('meters');sideCollapse('l',false);if(MOB.matches)sheet('left');}},
   {id:'libSearch',label:N_('Keresés az alkatrészek között'),group:G.edit,keys:['/'],target:'#libSearch',words:'library search parts find',run:focusLib},
